@@ -1,25 +1,14 @@
-# GitHub Actions Workflows
+# GitHub Actions workflow: Build and deploy to GitHub Pages
 
-## Deploy to GitHub Pages (`deploy.yml`)
+What this does
+- Runs on pushes to `main`.
+- Installs dependencies (`npm ci`), runs the production build (`npm run build`), copies `dist/index.html` to `dist/404.html` to support SPA routing, and publishes the `dist/` folder to the `gh-pages` branch using the repository's `GITHUB_TOKEN`.
 
-This workflow automatically builds and deploys the Vite + React application to GitHub Pages.
+Why update root index.html
+- The repository previously had the Vite dev index.html in the repo root, which references `/src/main.tsx` and cannot be served by GitHub Pages. Replacing it with a small redirect page ensures visitors are sent to the built site on `/app-restaurante/` (the project page) while the gh-pages branch provides the compiled site.
 
-### Trigger
-- Runs on every push to the `main` branch
-
-### What it does
-1. Checks out the repository
-2. Sets up Node.js v18
-3. Installs dependencies using `npm ci`
-4. Builds the project using `npm run build`
-5. Copies `index.html` to `404.html` to support SPA (Single Page Application) routing on GitHub Pages
-6. Publishes the `dist` folder to the `gh-pages` branch
-
-### GitHub Pages Configuration
-After the first successful workflow run, the `gh-pages` branch will be created automatically. To serve the site:
-
-1. Go to **Settings** → **Pages** in your repository
-2. Under **Source**, select the `gh-pages` branch
-3. Click **Save**
-
-The site will be available at: `https://<username>.github.io/app-restaurante/`
+Prerequisites / notes
+- vite.config.ts should keep `base: '/app-restaurante/'` for the project page at `https://diegosanchespereira1.github.io/app-restaurante/`.
+- package.json must produce `dist/` with `npm run build` (the repo already has "build": "tsc -b && vite build").
+- After the workflow runs, go to Settings → Pages and confirm the site is using the `gh-pages` branch (root).
+- Copying `index.html -> 404.html` helps when users navigate directly to client-side routes.
