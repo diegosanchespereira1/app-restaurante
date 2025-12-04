@@ -1,10 +1,16 @@
-import { createClient } from '@supabase/supabase-js'
+import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
-if (!supabaseUrl || !supabaseAnonKey) {
-    console.error("Missing Supabase environment variables")
+export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey)
+
+if (!isSupabaseConfigured) {
+    console.warn("Missing Supabase environment variables. Running in demo mode.")
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+// Create a real Supabase client only if credentials are provided
+// Otherwise, we'll handle this in the RestaurantContext with demo data
+export const supabase: SupabaseClient = isSupabaseConfigured
+    ? createClient(supabaseUrl, supabaseAnonKey)
+    : (null as unknown as SupabaseClient) // This will be handled by the context
