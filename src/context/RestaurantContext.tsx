@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
-import { supabase } from '../lib/supabase'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 // Types
 export interface MenuItem {
@@ -52,6 +52,28 @@ export interface Category {
     name: string
 }
 
+// Demo data for when Supabase is not configured
+const demoMenuItems: MenuItem[] = [
+    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "" },
+    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "" },
+    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "" },
+    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "" },
+]
+
+const demoTables: Table[] = [
+    { id: 1, number: "1", status: "Available" },
+    { id: 2, number: "2", status: "Occupied" },
+    { id: 3, number: "3", status: "Available" },
+    { id: 4, number: "4", status: "Reserved" },
+]
+
+const demoCategories: Category[] = [
+    { id: 1, name: "Pizza" },
+    { id: 2, name: "Pasta" },
+    { id: 3, name: "Salads" },
+    { id: 4, name: "Desserts" },
+]
+
 interface RestaurantContextType {
     menuItems: MenuItem[]
     orders: Order[]
@@ -74,6 +96,7 @@ interface RestaurantContextType {
     deleteCategory: (id: number) => Promise<{ success: boolean; error?: string }>
     isLoading: boolean
     error: string | null
+    isDemoMode: boolean
 }
 
 const RestaurantContext = createContext<RestaurantContextType | undefined>(undefined)
@@ -90,6 +113,18 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     const fetchData = async () => {
         setIsLoading(true)
         setError(null)
+
+        // Demo mode: use demo data when Supabase is not configured
+        if (!isSupabaseConfigured) {
+            setMenuItems(demoMenuItems)
+            setTables(demoTables)
+            setCategories(demoCategories)
+            setOrders([])
+            setExpenses([])
+            setIsLoading(false)
+            return
+        }
+
         try {
             // Fetch Menu Items
             console.log("Fetching menu items...")
@@ -160,6 +195,11 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         fetchData()
 
+        // Skip real-time subscriptions in demo mode
+        if (!isSupabaseConfigured) {
+            return
+        }
+
         // Real-time subscriptions
         const channels = supabase
             .channel('custom-all-channel')
@@ -198,6 +238,18 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     const addOrder = async (order: Order) => {
         // Optimistic update
         setOrders((prev) => [order, ...prev])
+
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            // Update Table Status
+            if (order.table) {
+                const table = tables.find(t => t.number === order.table)
+                if (table) {
+                    updateTableStatus(table.id, "Occupied")
+                }
+            }
+            return { success: true }
+        }
 
         // Insert Order
         const { error: orderError } = await supabase.from('orders').insert({
@@ -250,6 +302,12 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         setOrders((prev) =>
             prev.map((order) => (order.id === orderId ? { ...order, status } : order))
         )
+
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return { success: true }
+        }
+
         const { error } = await supabase.from('orders').update({ status }).eq('id', orderId)
         if (error) {
             console.error("Error updating order status:", error)
@@ -260,6 +318,17 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     }
 
     const addTable = async (tableNumber: string) => {
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            const newTable: Table = {
+                id: Date.now(),
+                number: tableNumber,
+                status: 'Available'
+            }
+            setTables(prev => [...prev, newTable])
+            return { success: true }
+        }
+
         const { data, error } = await supabase
             .from('restaurant_tables')
             .insert({ number: tableNumber, status: 'Available' })
@@ -280,6 +349,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         setTables((prev) =>
             prev.map((table) => (table.id === tableId ? { ...table, status } : table))
         )
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return
+        }
         await supabase.from('restaurant_tables').update({ status }).eq('id', tableId)
     }
 
@@ -295,6 +368,27 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 return order
             })
         )
+
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            // Check table status logic
+            const order = orders.find(o => o.id === orderId)
+            if (order && order.table) {
+                const otherActiveOrders = orders.filter(o =>
+                    o.table === order.table &&
+                    o.id !== orderId &&
+                    o.status !== "Closed"
+                )
+
+                if (otherActiveOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+            return { success: true }
+        }
 
         const { error } = await supabase.from('orders').update({
             status: 'Closed',
@@ -341,6 +435,12 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return order
         }))
 
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            updateTableStatus(tableId, "Available")
+            return { success: true }
+        }
+
         // Update DB
         const { data: activeOrders, error: fetchError } = await supabase
             .from('orders')
@@ -374,6 +474,13 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
     // Menu CRUD
     const addMenuItem = async (item: Omit<MenuItem, "id">) => {
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            const newItem: MenuItem = { ...item, id: Date.now() }
+            setMenuItems(prev => [...prev, newItem])
+            return { success: true }
+        }
+
         const { data, error } = await supabase.from('menu_items').insert(item).select()
         if (data) {
             setMenuItems(prev => [...prev, data[0]])
@@ -390,6 +497,11 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         const previousItems = [...menuItems]
         setMenuItems(prev => prev.map(i => i.id === id ? { ...i, ...item } : i))
 
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return { success: true }
+        }
+
         const { error } = await supabase.from('menu_items').update(item).eq('id', id)
 
         if (error) {
@@ -402,6 +514,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
     const deleteMenuItem = async (id: number) => {
         setMenuItems(prev => prev.filter(i => i.id !== id))
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return
+        }
         const { error } = await supabase.from('menu_items').delete().eq('id', id)
         if (error) console.error("Error deleting menu item:", error)
     }
@@ -412,6 +528,11 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         const tempId = Date.now()
         const tempExpense = { ...expense, id: tempId }
         setExpenses(prev => [tempExpense, ...prev])
+
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return { success: true }
+        }
 
         const { data, error } = await supabase.from('expenses').insert(expense).select()
 
@@ -432,12 +553,23 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
     const deleteExpense = async (id: number) => {
         setExpenses(prev => prev.filter(e => e.id !== id))
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return
+        }
         const { error } = await supabase.from('expenses').delete().eq('id', id)
         if (error) console.error("Error deleting expense:", error)
     }
 
     // Categories CRUD
     const addCategory = async (name: string) => {
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            const newCategory: Category = { id: Date.now(), name }
+            setCategories(prev => [...prev, newCategory])
+            return { success: true }
+        }
+
         const { data, error } = await supabase.from('categories').insert({ name }).select()
         if (data) {
             setCategories(prev => [...prev, data[0]])
@@ -457,6 +589,11 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         // Optimistic update
         setCategories(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c))
         setMenuItems(prev => prev.map(i => i.category === oldCategory.name ? { ...i, category: newName } : i))
+
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return { success: true }
+        }
 
         // Update category name in DB
         const { error: catError } = await supabase.from('categories').update({ name: newName }).eq('id', id)
@@ -486,6 +623,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
     const deleteCategory = async (id: number) => {
         setCategories(prev => prev.filter(c => c.id !== id))
+        // Demo mode: just use local state
+        if (!isSupabaseConfigured) {
+            return { success: true }
+        }
         const { error } = await supabase.from('categories').delete().eq('id', id)
         if (error) {
             console.error("Error deleting category:", error)
@@ -517,7 +658,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 updateCategory,
                 deleteCategory,
                 isLoading,
-                error
+                error,
+                isDemoMode: !isSupabaseConfigured
             }}
         >
             {children}
