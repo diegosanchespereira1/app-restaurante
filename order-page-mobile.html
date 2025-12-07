@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Order Screen</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              primary: "#16A34A",
+              "background-light": "#F8FAFC",
+              "background-dark": "#18181B",
+            },
+            fontFamily: {
+              display: ["Inter", "sans-serif"],
+            },
+            borderRadius: {
+              DEFAULT: "0.5rem",
+            },
+          },
+        },
+      };
+    </script>
+<style>
+    body {
+      min-height: max(884px, 100dvh);
+    }
+  </style>
+  </head>
+<body class="bg-background-light dark:bg-background-dark font-display">
+<div class="container mx-auto max-w-lg">
+<div class="flex flex-col min-h-screen">
+<header class="sticky top-0 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-sm z-10 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
+<div class="relative flex items-center justify-center text-center">
+<div class="absolute left-0">
+<div class="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+<svg fill="none" height="24" viewBox="0 0 24 24" width="24" xmlns="http://www.w3.org/2000/svg">
+<path d="M16.8995 7.10023L7.10049 16.8992" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+<path d="M7.10049 7.10023H16.8995V16.8992" stroke="white" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</div>
+</div>
+<h1 class="text-xl font-bold text-slate-800 dark:text-slate-100">Mesa 12</h1>
+</div>
+</header>
+<main class="flex-grow p-4 space-y-6">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500">search</span>
+<input class="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-800 border-none rounded-lg text-slate-700 dark:text-slate-300 placeholder-slate-400 dark:placeholder-slate-500 focus:ring-2 focus:ring-primary" placeholder="Pesquisar por item..." type="text"/>
+</div>
+<div>
+<div class="flex space-x-2 overflow-x-auto pb-2 -mx-4 px-4">
+<button class="px-4 py-2 bg-primary text-white rounded-full text-sm font-medium whitespace-nowrap">Entradas</button>
+<button class="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-medium whitespace-nowrap">Saladas</button>
+<button class="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-medium whitespace-nowrap">Pratos Principais</button>
+<button class="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-medium whitespace-nowrap">Grelhados</button>
+<button class="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-medium whitespace-nowrap">Bebidas</button>
+<button class="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded-full text-sm font-medium whitespace-nowrap">Sopas</button>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<div class="bg-white dark:bg-slate-800 rounded-lg overflow-hidden shadow-sm">
+<img alt="Bife à Portuguesa with a fried egg on top" class="w-full h-28 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-Dy7t8moR4HCFtopCaI9MC3KgU0pwV6NkoQMUQCr3aXxVrGyXbNMc8zcKp-FO2AGIB3cLQeaAZChBs_qIgd0E3bdvaZMo_dZ4j4XuejEETR6DYJEafp2RTBAFCuX0C5A3DiD3FP9yQXGcDg0_AZrhNZl6teFtn6Mp04XWxoRPNbakBGsXWsCRgVSqnNas9DgAj3WpYLfIeJuce29IKfXbEhVVqygvEGLugWHBPd8oLPJuiHAISMRgvhOJvkqmVPnRN6CcQAP5jKgP"/>
+<div class="p-3">
+<h3 class="font-semibold text-slate-800 dark:text-slate-100">Bife à Portuguesa</h3>
+<p class="text-primary font-medium text-sm">15,50 €</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-lg overflow-hidden shadow-sm">
+<img alt="Caesar salad in a white bowl" class="w-full h-28 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDJUNHkfuxc-OM54op6J_gamLQq8qX6nsAcusV7FlU2wFPHmT76aBbpQwI-52qLPAqVDlJcDLmW86FqnxcNfLInM8OUcjWKNeSEfQfE-EHlURv7D2imvHFh4i2vTSjX3jZgtEdOtDC6egnMLS-VAgoSb8OYG7j-ggFs44ljNAAG8Er6pKbJiBMwM2ngHEwaJ8iEosMRpwtKU5uJhz95uXfQSqGxDTAbReCDlGcBtL4DtfKd4KSyPHT6R21_NTNJsHi4_hV6z4AQTBKr"/>
+<div class="p-3">
+<h3 class="font-semibold text-slate-800 dark:text-slate-100">Salada Caesar</h3>
+<p class="text-primary font-medium text-sm">12,00 €</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-lg overflow-hidden shadow-sm">
+<img alt="Seafood rice with shrimp" class="w-full h-28 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDc02uP8AMoW6x2ceUgw4tGA9bjoY-YrBKWb1YBs2Cp9C731PUBs0CzYmCeqWWtiJWTq5YFDsUCgDwMXqmy3foyRfB7pAxvafbYMRPgig2g92k7rZClwtV4TzkGyTE0tWKSSffh6PcKZw4SS-MTdsy9nOxbAva3X65KQboKF2IqXczn4TnaDm3LV95rHqM-iaw7Bqa7pEXxYbKKjFODiZlJKHnPuFbDayEYKIXmAfhvRY1lXF5D1250Y68wgwq8qVkCjZyxr-FB_V8Z"/>
+<div class="p-3">
+<h3 class="font-semibold text-slate-800 dark:text-slate-100">Arroz de Marisco</h3>
+<p class="text-primary font-medium text-sm">18,00 €</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 rounded-lg overflow-hidden shadow-sm">
+<img alt="Codfish dish Bacalhau à Brás" class="w-full h-28 object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmqQ7ofzLZv8RnRbwKMACS3XD9TKvX6BUgtiw9EwL_Eice4BfNfn8TA9HDCPhzP0VocBnTJlIUPJBDbC0dY2ZitWRdAKiK02ZTGb9nj00NOpGvrPFb2LzkbeTJEYDGmWG0ilqzdd8RhkPU-RdFRpM8QQaiHtkqVpmYuokD6WeacNCjVAvU7hi__L3trVFZ0HWzw33ZT_TQjXSrrsvJ5zlmTNGNmzehhQuTTOiej1ORHfFUOyqYfg2SkT7pgllt-zc-TCqTGa63CjoO"/>
+<div class="p-3">
+<h3 class="font-semibold text-slate-800 dark:text-slate-100">Bacalhau à Brás</h3>
+<p class="text-primary font-medium text-sm">16,50 €</p>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<h2 class="text-2xl font-bold text-slate-900 dark:text-slate-50">Pedido</h2>
+<div class="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-semibold text-slate-800 dark:text-slate-100">Bife à Portuguesa</h3>
+<div class="flex items-center space-x-4">
+<button class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">edit</button>
+<button class="material-symbols-outlined text-red-500 text-lg">delete</button>
+</div>
+</div>
+<p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Nota: Mal passado, sem batata</p>
+<div class="flex items-center justify-between mt-3">
+<div class="flex items-center space-x-3">
+<button class="w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-md text-slate-700 dark:text-slate-300">-</button>
+<span class="font-bold text-slate-800 dark:text-slate-100 w-4 text-center">1</span>
+<button class="w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-md text-slate-700 dark:text-slate-300">+</button>
+</div>
+<p class="font-bold text-slate-800 dark:text-slate-100">15,50 €</p>
+</div>
+</div>
+<div class="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-sm">
+<div class="flex items-center justify-between">
+<h3 class="font-semibold text-slate-800 dark:text-slate-100">Salada Caesar</h3>
+<div class="flex items-center space-x-4">
+<button class="material-symbols-outlined text-slate-500 dark:text-slate-400 text-lg">edit</button>
+<button class="material-symbols-outlined text-red-500 text-lg">delete</button>
+</div>
+</div>
+<div class="flex items-center justify-between mt-3">
+<div class="flex items-center space-x-3">
+<button class="w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-md text-slate-700 dark:text-slate-300">-</button>
+<span class="font-bold text-slate-800 dark:text-slate-100 w-4 text-center">2</span>
+<button class="w-7 h-7 flex items-center justify-center bg-slate-100 dark:bg-slate-700 rounded-md text-slate-700 dark:text-slate-300">+</button>
+</div>
+<p class="font-bold text-slate-800 dark:text-slate-100">24,00 €</p>
+</div>
+</div>
+</div>
+</main>
+<footer class="sticky bottom-0 bg-white dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 p-4 space-y-4">
+<div class="space-y-2">
+<div class="flex justify-between text-slate-600 dark:text-slate-400">
+<span>Subtotal</span>
+<span>42,50 €</span>
+</div>
+<div class="flex justify-between text-slate-600 dark:text-slate-400">
+<span>Taxas (23%)</span>
+<span>9,78 €</span>
+</div>
+<div class="flex justify-between text-slate-900 dark:text-slate-50 text-xl font-bold">
+<span>Total</span>
+<span>52,28 €</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4">
+<button class="w-full bg-slate-500 text-white font-semibold py-3 rounded-lg">Guardar Pedido</button>
+<button class="w-full bg-primary text-white font-semibold py-3 rounded-lg">Enviar para Cozinha</button>
+</div>
+</footer>
+</div>
+</div>
+
+</body></html>

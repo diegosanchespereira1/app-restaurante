@@ -3,7 +3,7 @@ import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
-import { Plus, Minus, Search, ShoppingBag } from "lucide-react"
+import { Plus, Minus, Search, ShoppingBag, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
@@ -103,193 +103,206 @@ export function NewOrder() {
     }
 
     return (
-        <div className="h-[calc(100vh-2rem)] flex gap-6">
-            {/* Left Side - Menu Selection */}
-            <div className="flex-1 flex flex-col gap-6 overflow-hidden">
-                <div className="flex items-center justify-between shrink-0">
-                    <div>
-                        <h2 className="text-3xl font-bold tracking-tight">{t("newOrder")}</h2>
-                        <p className="text-muted-foreground">{t("selectItems")}</p>
-                    </div>
-                    <div className="flex gap-2">
-                        <div className="relative w-64">
-                            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input
-                                placeholder={t("searchPlaceholder")}
-                                className="pl-8"
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="flex gap-2 overflow-x-auto pb-2 shrink-0">
-                    {categories.map(category => (
-                        <Button
-                            key={category}
-                            variant={selectedCategory === category ? "default" : "outline"}
-                            onClick={() => setSelectedCategory(category)}
-                            className="capitalize whitespace-nowrap"
-                        >
-                            {category}
-                        </Button>
-                    ))}
-                </div>
-
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 overflow-y-auto pr-2">
-                    {filteredItems.map((item) => (
-                        <Card
-                            key={item.id}
-                            className="cursor-pointer hover:border-primary transition-colors flex flex-col"
-                            onClick={() => handleAddItem(item.id)}
-                        >
-                            <div className="aspect-video relative shrink-0">
-                                <img
-                                    src={item.image}
-                                    alt={item.name}
-                                    className="object-cover w-full h-full rounded-t-lg"
-                                />
-                            </div>
-                            <div className="p-4 flex flex-col flex-1">
-                                <div className="flex justify-between items-start mb-2">
-                                    <h3 className="font-semibold line-clamp-1">{item.name}</h3>
-                                </div>
-                                <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
-                                    {item.description}
-                                </p>
-                                <div className="flex items-center justify-between mt-auto">
-                                    <span className="font-bold">{formatCurrency(item.price)}</span>
-                                    <Button size="sm" variant="secondary">
-                                        <Plus className="h-4 w-4 mr-1" /> {t("addItem")}
-                                    </Button>
-                                </div>
-                            </div>
-                        </Card>
-                    ))}
+        <div className="relative">
+            {/* Mobile Header */}
+            <div className="md:hidden sticky top-0 bg-background/80 backdrop-blur-sm z-10 px-4 py-3 border-b border-border">
+                <div className="flex items-center justify-center">
+                    <Button variant="ghost" size="icon" className="absolute left-0" onClick={() => navigate(-1)}>
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <h1 className="text-xl font-bold">{t("newOrder")}</h1>
                 </div>
             </div>
-
-            {/* Right Side - Order Summary */}
-            <div className="w-96 flex flex-col gap-6 shrink-0">
-                <Card className="flex-1 flex flex-col overflow-hidden">
-                    <CardHeader className="shrink-0">
-                        <CardTitle>{t("orderSummary")}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-1 flex flex-col overflow-hidden">
-                        <div className="space-y-4 mb-6 shrink-0">
-                            <div className="space-y-2">
-                                <Label>{t("orderType")}</Label>
-                                <RadioGroup defaultValue="dine_in" value={orderType} onValueChange={(v) => setOrderType(v as any)} className="flex gap-4">
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="dine_in" id="dine_in" />
-                                        <Label htmlFor="dine_in">{t("dineIn")}</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="takeout" id="takeout" />
-                                        <Label htmlFor="takeout">{t("takeout")}</Label>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <RadioGroupItem value="delivery" id="delivery" />
-                                        <Label htmlFor="delivery">{t("delivery")}</Label>
-                                    </div>
-                                </RadioGroup>
-                            </div>
-
-                            {orderType === "dine_in" && (
-                                <div className="space-y-2">
-                                    <Label>{t("table")}</Label>
-                                    <Select value={selectedTable} onValueChange={setSelectedTable}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder={t("selectTable")} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {tables.map((table) => (
-                                                <SelectItem key={table.id} value={table.number}>
-                                                    {table.number} {table.status === "Occupied" && `(${t("occupiedAbbr")})`}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            )}
-                            <div className="space-y-2">
-                                <Label>{t("customer")}</Label>
+            <div className="flex flex-col md:flex-row gap-6">
+                {/* Left Side - Menu Selection */}
+                <div className="flex-1 flex flex-col gap-6 overflow-hidden">
+                    <div className="flex items-center justify-between shrink-0">
+                        <div>
+                            <h2 className="text-3xl font-bold tracking-tight">{t("newOrder")}</h2>
+                            <p className="text-muted-foreground">{t("selectItems")}</p>
+                        </div>
+                        <div className="flex gap-2">
+                            <div className="relative w-64">
+                                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                                 <Input
-                                    placeholder={t("customerNamePlaceholder")}
-                                    value={customerName}
-                                    onChange={(e) => setCustomerName(e.target.value)}
+                                    placeholder={t("searchPlaceholder")}
+                                    className="pl-8"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
                                 />
                             </div>
                         </div>
+                    </div>
 
-                        <div className="flex-1 overflow-y-auto -mx-6 px-6">
-                            {selectedItems.length === 0 ? (
-                                <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-2">
-                                    <ShoppingBag className="h-8 w-8" />
-                                    <p>{t("noItemsSelected")}</p>
+                    <div className="flex gap-2 overflow-x-auto pb-2 shrink-0">
+                        {categories.map(category => (
+                            <Button
+                                key={category}
+                                variant={selectedCategory === category ? "default" : "outline"}
+                                onClick={() => setSelectedCategory(category)}
+                                className="capitalize whitespace-nowrap"
+                            >
+                                {category}
+                            </Button>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-2">
+                        {filteredItems.map((item) => (
+                            <Card
+                                key={item.id}
+                                className="cursor-pointer hover:border-primary transition-colors flex flex-col"
+                                onClick={() => handleAddItem(item.id)}
+                            >
+                                <div className="h-32 w-full relative shrink-0">
+                                    <img
+                                        src={item.image}
+                                        alt={item.name}
+                                        className="object-cover w-full h-full rounded-t-lg"
+                                    />
                                 </div>
-                            ) : (
-                                <div className="space-y-4">
-                                    {selectedItems.map((item) => {
-                                        const menuItem = menuItems.find(i => i.id === item.id)
-                                        return (
-                                            <div key={item.id} className="flex items-center justify-between gap-4">
-                                                <div className="flex-1">
-                                                    <p className="font-medium">{menuItem?.name}</p>
-                                                    <div className="text-sm text-muted-foreground">
-                                                        {formatCurrency(menuItem?.price || 0)}
+                                <div className="p-3 flex flex-col flex-1">
+                                    <div className="flex justify-between items-start mb-2">
+                                        <h3 className="font-semibold line-clamp-1">{item.name}</h3>
+                                    </div>
+                                    <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
+                                        {item.description}
+                                    </p>
+                                    <div className="mt-auto pt-2 border-t space-y-2">
+                                        <div className="flex justify-center">
+                                            <span className="font-bold text-base">{formatCurrency(item.price)}</span>
+                                        </div>
+                                        <Button size="sm" variant="secondary" className="w-full">
+                                            <Plus className="h-4 w-4 mr-1" /> {t("addItem")}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
+
+                {/* Right Side - Order Summary */}
+                <div className="w-full md:w-[480px] flex flex-col gap-6 shrink-0">
+                    <Card className="flex-1 flex flex-col overflow-hidden">
+                        <CardHeader className="shrink-0">
+                            <CardTitle>{t("orderSummary")}</CardTitle>
+                        </CardHeader>
+                        <CardContent className="flex-1 flex flex-col overflow-hidden">
+                            <div className="space-y-4 mb-6 shrink-0">
+                                <div className="space-y-2">
+                                    <Label>{t("orderType")}</Label>
+                                    <RadioGroup defaultValue="dine_in" value={orderType} onValueChange={(v) => setOrderType(v as any)} className="flex gap-4">
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="dine_in" id="dine_in" />
+                                            <Label htmlFor="dine_in">{t("dineIn")}</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="takeout" id="takeout" />
+                                            <Label htmlFor="takeout">{t("takeout")}</Label>
+                                        </div>
+                                        <div className="flex items-center space-x-2">
+                                            <RadioGroupItem value="delivery" id="delivery" />
+                                            <Label htmlFor="delivery">{t("delivery")}</Label>
+                                        </div>
+                                    </RadioGroup>
+                                </div>
+
+                                {orderType === "dine_in" && (
+                                    <div className="space-y-2">
+                                        <Label>{t("table")}</Label>
+                                        <Select value={selectedTable} onValueChange={setSelectedTable}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder={t("selectTable")} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {tables.map((table) => (
+                                                    <SelectItem key={table.id} value={table.number}>
+                                                        {table.number} {table.status === "Occupied" && `(${t("occupiedAbbr")})`}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                )}
+                                <div className="space-y-2">
+                                    <Label>{t("customer")}</Label>
+                                    <Input
+                                        placeholder={t("customerNamePlaceholder")}
+                                        value={customerName}
+                                        onChange={(e) => setCustomerName(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto -mx-4 px-4">
+                                {selectedItems.length === 0 ? (
+                                    <div className="h-full flex flex-col items-center justify-center text-muted-foreground space-y-2">
+                                        <ShoppingBag className="h-8 w-8" />
+                                        <p>{t("noItemsSelected")}</p>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-4">
+                                        {selectedItems.map((item) => {
+                                            const menuItem = menuItems.find(i => i.id === item.id)
+                                            return (
+                                                <div key={item.id} className="flex items-center justify-between gap-4">
+                                                    <div className="flex-1">
+                                                        <p className="font-medium">{menuItem?.name}</p>
+                                                        <div className="text-sm text-muted-foreground">
+                                                            {formatCurrency(menuItem?.price || 0)}
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8"
+                                                            onClick={() => handleRemoveItem(item.id)}
+                                                        >
+                                                            <Minus className="h-3 w-3" />
+                                                        </Button>
+                                                        <span className="w-4 text-center">{item.quantity}</span>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="icon"
+                                                            className="h-8 w-8"
+                                                            onClick={() => handleAddItem(item.id)}
+                                                        >
+                                                            <Plus className="h-3 w-3" />
+                                                        </Button>
+                                                    </div>
+                                                    <div className="font-medium w-16 text-right">
+                                                        {formatCurrency((menuItem?.price || 0) * item.quantity)}
                                                     </div>
                                                 </div>
-                                                <div className="flex items-center gap-2">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        className="h-8 w-8"
-                                                        onClick={() => handleRemoveItem(item.id)}
-                                                    >
-                                                        <Minus className="h-3 w-3" />
-                                                    </Button>
-                                                    <span className="w-4 text-center">{item.quantity}</span>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="icon"
-                                                        className="h-8 w-8"
-                                                        onClick={() => handleAddItem(item.id)}
-                                                    >
-                                                        <Plus className="h-3 w-3" />
-                                                    </Button>
-                                                </div>
-                                                <div className="font-medium w-16 text-right">
-                                                    {formatCurrency((menuItem?.price || 0) * item.quantity)}
-                                                </div>
-                                            </div>
-                                        )
-                                    })}
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="pt-6 mt-6 border-t shrink-0">
-                            <div className="flex justify-between items-center mb-6">
-                                <span className="text-lg font-semibold">{t("total")}</span>
-                                <span className="text-2xl font-bold">{formatCurrency(calculateTotal())}</span>
+                                            )
+                                        })}
+                                    </div>
+                                )}
                             </div>
-                            <Button className="w-full" size="lg" onClick={handleCreateOrder} disabled={(orderType === "dine_in" && !selectedTable) || selectedItems.length === 0}>
-                                {t("createOrder")}
-                            </Button>
-                            {((orderType === "dine_in" && !selectedTable) || selectedItems.length === 0) && (
-                                <p className="text-sm text-center text-muted-foreground mt-2">
-                                    {orderType === "dine_in" && !selectedTable
-                                        ? t("selectATable")
-                                        : selectedItems.length === 0
-                                            ? t("addItemsToOrder")
-                                            : ""}
-                                </p>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
+
+                            <div className="pt-6 mt-6 border-t shrink-0">
+                                <div className="flex justify-between items-center mb-6">
+                                    <span className="text-lg font-semibold">{t("total")}</span>
+                                    <span className="text-2xl font-bold">{formatCurrency(calculateTotal())}</span>
+                                </div>
+                                <Button className="w-full" size="lg" onClick={handleCreateOrder} disabled={(orderType === "dine_in" && !selectedTable) || selectedItems.length === 0}>
+                                    {t("createOrder")}
+                                </Button>
+                                {((orderType === "dine_in" && !selectedTable) || selectedItems.length === 0) && (
+                                    <p className="text-sm text-center text-muted-foreground mt-2">
+                                        {orderType === "dine_in" && !selectedTable
+                                            ? t("selectATable")
+                                            : selectedItems.length === 0
+                                                ? t("addItemsToOrder")
+                                                : ""}
+                                    </p>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
             </div>
         </div>
     )
