@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { DollarSign, ShoppingBag, Users, Clock } from "lucide-react"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
+import { useSettings } from "../context/SettingsContext"
 import { formatCurrency } from "../lib/utils"
 import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
@@ -11,13 +12,14 @@ export function Dashboard() {
     const navigate = useNavigate()
     const { orders, tables } = useRestaurant()
     const { t } = useLanguage()
+    const { isTablesEnabled } = useSettings()
 
     const totalRevenue = orders
         .filter(o => o.status !== "Closed")
         .reduce((sum, order) => sum + order.total, 0)
 
     const activeOrdersCount = orders.filter(o => o.status !== "Delivered" && o.status !== "Closed").length
-    const availableTablesCount = tables.filter(t => t.status === "Available").length
+    const availableTablesCount = isTablesEnabled ? tables.filter(t => t.status === "Available").length : 0
 
     return (
         <div className="space-y-8">
@@ -31,7 +33,7 @@ export function Dashboard() {
                 </Button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className={`grid gap-4 md:grid-cols-2 ${isTablesEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t("totalRevenue")}</CardTitle>
@@ -50,15 +52,17 @@ export function Dashboard() {
                         <div className="text-2xl font-bold">{activeOrdersCount}</div>
                     </CardContent>
                 </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">{t("availableTables")}</CardTitle>
-                        <Users className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{availableTablesCount}</div>
-                    </CardContent>
-                </Card>
+                {isTablesEnabled && (
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">{t("availableTables")}</CardTitle>
+                            <Users className="h-4 w-4 text-muted-foreground" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="text-2xl font-bold">{availableTablesCount}</div>
+                        </CardContent>
+                    </Card>
+                )}
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t("recentOrders")}</CardTitle>

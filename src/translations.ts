@@ -132,6 +132,9 @@ export const translations = {
         fillAllFields: "Please fill all required fields.",
         paid: "Paid",
         paymentPending: "Pending",
+        enableTables: "Enable Table Management",
+        enableTablesDescription: "Allow management of restaurant tables and table-based orders.",
+        tableManagement: "Table Management",
     },
     pt: {
         appTitle: "RestoManager",
@@ -266,6 +269,9 @@ export const translations = {
         fillAllFields: "Por favor, preencha todos os campos obrigatórios.",
         paid: "Pago",
         paymentPending: "Pendente",
+        enableTables: "Habilitar Gerenciamento de Mesas",
+        enableTablesDescription: "Permitir gerenciamento de mesas do restaurante e pedidos por mesa.",
+        tableManagement: "Gerenciamento de Mesas",
     },
 }
 

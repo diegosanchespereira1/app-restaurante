@@ -7,6 +7,7 @@ import { Plus, Minus, Search, ShoppingBag, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
+import { useSettings } from "../context/SettingsContext"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 
@@ -16,10 +17,11 @@ export function NewOrder() {
     const navigate = useNavigate()
     const { menuItems, tables, addOrder } = useRestaurant()
     const { t } = useLanguage()
+    const { isTablesEnabled } = useSettings()
 
     const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [selectedTable, setSelectedTable] = useState("")
-    const [orderType, setOrderType] = useState<"dine_in" | "takeout" | "delivery">("dine_in")
+    const [orderType, setOrderType] = useState<"dine_in" | "takeout" | "delivery">(isTablesEnabled ? "dine_in" : "takeout")
     const [customerName, setCustomerName] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
@@ -60,7 +62,7 @@ export function NewOrder() {
     }
 
     const handleCreateOrder = async () => {
-        if (orderType === "dine_in" && !selectedTable) return
+        if (orderType === "dine_in" && isTablesEnabled && !selectedTable) return
         if (selectedItems.length === 0) return
 
         const now = new Date()
@@ -73,7 +75,7 @@ export function NewOrder() {
 
         const newOrder = {
             id: `ORD-${Math.floor(Math.random() * 10000)}`,
-            table: orderType === "dine_in" ? selectedTable : undefined,
+            table: orderType === "dine_in" && isTablesEnabled ? selectedTable : undefined,
             orderType,
             customer: customerName || t("guest"),
             status: "Pending" as const,
@@ -192,11 +194,13 @@ export function NewOrder() {
                             <div className="space-y-4 mb-6 shrink-0">
                                 <div className="space-y-2">
                                     <Label>{t("orderType")}</Label>
-                                    <RadioGroup defaultValue="dine_in" value={orderType} onValueChange={(v) => setOrderType(v as any)} className="flex gap-4">
-                                        <div className="flex items-center space-x-2">
-                                            <RadioGroupItem value="dine_in" id="dine_in" />
-                                            <Label htmlFor="dine_in">{t("dineIn")}</Label>
-                                        </div>
+                                    <RadioGroup defaultValue={isTablesEnabled ? "dine_in" : "takeout"} value={orderType} onValueChange={(v) => setOrderType(v as any)} className="flex gap-4">
+                                        {isTablesEnabled && (
+                                            <div className="flex items-center space-x-2">
+                                                <RadioGroupItem value="dine_in" id="dine_in" />
+                                                <Label htmlFor="dine_in">{t("dineIn")}</Label>
+                                            </div>
+                                        )}
                                         <div className="flex items-center space-x-2">
                                             <RadioGroupItem value="takeout" id="takeout" />
                                             <Label htmlFor="takeout">{t("takeout")}</Label>
@@ -208,7 +212,7 @@ export function NewOrder() {
                                     </RadioGroup>
                                 </div>
 
-                                {orderType === "dine_in" && (
+                                {orderType === "dine_in" && isTablesEnabled && (
                                     <div className="space-y-2">
                                         <Label>{t("table")}</Label>
                                         <Select value={selectedTable} onValueChange={setSelectedTable}>
@@ -287,12 +291,12 @@ export function NewOrder() {
                                     <span className="text-lg font-semibold">{t("total")}</span>
                                     <span className="text-2xl font-bold">{formatCurrency(calculateTotal())}</span>
                                 </div>
-                                <Button className="w-full" size="lg" onClick={handleCreateOrder} disabled={(orderType === "dine_in" && !selectedTable) || selectedItems.length === 0}>
+                                <Button className="w-full" size="lg" onClick={handleCreateOrder} disabled={(orderType === "dine_in" && isTablesEnabled && !selectedTable) || selectedItems.length === 0}>
                                     {t("createOrder")}
                                 </Button>
-                                {((orderType === "dine_in" && !selectedTable) || selectedItems.length === 0) && (
+                                {((orderType === "dine_in" && isTablesEnabled && !selectedTable) || selectedItems.length === 0) && (
                                     <p className="text-sm text-center text-muted-foreground mt-2">
-                                        {orderType === "dine_in" && !selectedTable
+                                        {orderType === "dine_in" && isTablesEnabled && !selectedTable
                                             ? t("selectATable")
                                             : selectedItems.length === 0
                                                 ? t("addItemsToOrder")

@@ -12,31 +12,34 @@ import { Finance } from "./pages/Finance"
 
 import { RestaurantProvider } from "./context/RestaurantContext"
 import { LanguageProvider } from "./context/LanguageContext"
+import { SettingsProvider } from "./context/SettingsContext"
 
 import { TableBill } from "./pages/TableBill"
 
 function App() {
   return (
-    <LanguageProvider>
-      <RestaurantProvider>
-        <Router>
-          <Layout>
-            <Routes>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/orders" element={<Orders />} />
-              <Route path="/orders/new" element={<NewOrder />} />
-              <Route path="/orders/:id" element={<OrderDetails />} />
-              <Route path="/finance" element={<Finance />} />
-              <Route path="/tables" element={<Tables />} />
-              <Route path="/tables/:id" element={<TableDetails />} />
-              <Route path="/tables/:id/bill" element={<TableBill />} />
-              <Route path="/menu" element={<Menu />} />
-              <Route path="/settings" element={<Settings />} />
-            </Routes>
-          </Layout>
-        </Router>
-      </RestaurantProvider>
-    </LanguageProvider>
+    <SettingsProvider>
+      <LanguageProvider>
+        <RestaurantProvider>
+          <Router>
+            <Layout>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/orders" element={<Orders />} />
+                <Route path="/orders/new" element={<NewOrder />} />
+                <Route path="/orders/:id" element={<OrderDetails />} />
+                <Route path="/finance" element={<Finance />} />
+                <Route path="/tables" element={<Tables />} />
+                <Route path="/tables/:id" element={<TableDetails />} />
+                <Route path="/tables/:id/bill" element={<TableBill />} />
+                <Route path="/menu" element={<Menu />} />
+                <Route path="/settings" element={<Settings />} />
+              </Routes>
+            </Layout>
+          </Router>
+        </RestaurantProvider>
+      </LanguageProvider>
+    </SettingsProvider>
   )
 }
 

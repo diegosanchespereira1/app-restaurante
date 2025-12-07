@@ -1,5 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Label } from "../components/ui/label"
+import { Switch } from "../components/ui/switch"
 import {
     Select,
     SelectContent,
@@ -8,9 +9,11 @@ import {
     SelectValue,
 } from "../components/ui/select"
 import { useLanguage } from "../context/LanguageContext"
+import { useSettings } from "../context/SettingsContext"
 
 export function Settings() {
     const { language, setLanguage, t } = useLanguage()
+    const { updateSettings, isTablesEnabled } = useSettings()
 
     return (
         <div className="space-y-6">
@@ -37,6 +40,25 @@ export function Settings() {
                                     <SelectItem value="pt">{t("portuguese")}</SelectItem>
                                 </SelectContent>
                             </Select>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>{t("tableManagement")}</CardTitle>
+                        <CardDescription>{t("enableTablesDescription")}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="enable-tables">{t("enableTables")}</Label>
+                            </div>
+                            <Switch
+                                id="enable-tables"
+                                checked={isTablesEnabled}
+                                onCheckedChange={(checked) => updateSettings({ enableTables: checked })}
+                            />
                         </div>
                     </CardContent>
                 </Card>

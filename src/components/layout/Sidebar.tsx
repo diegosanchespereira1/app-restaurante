@@ -2,6 +2,7 @@ import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Me
 import { cn } from "../../lib/utils"
 import { NavLink } from "react-router-dom"
 import { useLanguage } from "../../context/LanguageContext"
+import { useSettings } from "../../context/SettingsContext"
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     onClose?: () => void
@@ -9,11 +10,12 @@ interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
 
 export function Sidebar({ className, onClose }: SidebarProps) {
     const { t } = useLanguage()
+    const { isTablesEnabled } = useSettings()
 
     const links = [
         { href: "/", label: t("dashboard"), icon: LayoutDashboard },
         { href: "/orders", label: t("orders"), icon: ClipboardList },
-        { href: "/tables", label: t("tables"), icon: Armchair },
+        ...(isTablesEnabled ? [{ href: "/tables", label: t("tables"), icon: Armchair }] : []),
         { href: "/menu", label: t("menu"), icon: Menu },
         { href: "/finance", label: t("finance"), icon: DollarSign },
         { href: "/settings", label: t("settings"), icon: Settings },
