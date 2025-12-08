@@ -1,12 +1,9 @@
 import { useState } from "react"
 import { Button } from "../components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { Badge } from "../components/ui/badge"
-import { Plus, Search, Truck, CheckCircle, Clock, ShoppingBag } from "lucide-react"
+import { Search, Truck, CheckCircle, Clock, ShoppingBag } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { Input } from "../components/ui/input"
-import { useLanguage } from "../context/LanguageContext"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
 import { formatCurrency } from "../lib/utils"
@@ -14,7 +11,6 @@ import { formatCurrency } from "../lib/utils"
 export function Orders() {
     const navigate = useNavigate()
     const { orders } = useRestaurant()
-    const { t } = useLanguage()
     const [searchQuery, setSearchQuery] = useState("")
     const [typeFilter, setTypeFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState("all")

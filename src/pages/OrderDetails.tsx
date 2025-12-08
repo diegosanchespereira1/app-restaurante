@@ -73,10 +73,6 @@ export function OrderDetails() {
         }
     }
 
-    const getPaymentStatusColor = (order: any) => {
-        return order.status === "Closed" ? "bg-green-500" : "bg-red-500"
-    }
-
     const getStatusIcon = (status: typeof order.status) => {
         switch (status) {
             case "Ready": 
