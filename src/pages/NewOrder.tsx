@@ -15,7 +15,7 @@ import { formatCurrency } from "../lib/utils"
 
 export function NewOrder() {
     const navigate = useNavigate()
-    const { menuItems, tables, addOrder } = useRestaurant()
+    const { menuItems, tables, addOrder, generateOrderId } = useRestaurant()
     const { t } = useLanguage()
     const { isTablesEnabled } = useSettings()
 
@@ -74,7 +74,7 @@ export function NewOrder() {
         const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`
 
         const newOrder = {
-            id: `ORD-${Math.floor(Math.random() * 10000)}`,
+            id: generateOrderId(),
             table: orderType === "dine_in" && isTablesEnabled ? selectedTable : undefined,
             orderType,
             customer: customerName || t("guest"),

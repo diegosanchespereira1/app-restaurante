@@ -94,6 +94,7 @@ interface RestaurantContextType {
     addCategory: (name: string) => Promise<{ success: boolean; error?: string }>
     updateCategory: (id: number, newName: string) => Promise<{ success: boolean; error?: string }>
     deleteCategory: (id: number) => Promise<{ success: boolean; error?: string }>
+    generateOrderId: () => string
     isLoading: boolean
     error: string | null
     isDemoMode: boolean
@@ -107,6 +108,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     const [tables, setTables] = useState<Table[]>([])
     const [expenses, setExpenses] = useState<Expense[]>([])
     const [categories, setCategories] = useState<Category[]>([])
+    const [nextOrderNumber, setNextOrderNumber] = useState(1)
     const [isLoading, setIsLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
 
@@ -635,6 +637,12 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
+    const generateOrderId = () => {
+        const orderNumber = nextOrderNumber.toString().padStart(2, '0')
+        setNextOrderNumber(prev => prev + 1)
+        return orderNumber
+    }
+
     return (
         <RestaurantContext.Provider
             value={{
@@ -657,6 +665,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 addCategory,
                 updateCategory,
                 deleteCategory,
+                generateOrderId,
                 isLoading,
                 error,
                 isDemoMode: !isSupabaseConfigured
