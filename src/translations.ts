@@ -135,6 +135,26 @@ export const translations = {
         enableTables: "Enable Table Management",
         enableTablesDescription: "Allow management of restaurant tables and table-based orders.",
         tableManagement: "Table Management",
+        salesAnalysis: "Sales Analysis",
+        salesByProduct: "View sales data by product with filters",
+        timePeriod: "Time Period",
+        allTime: "All Time",
+        today: "Today",
+        thisWeek: "This Week",
+        thisMonth: "This Month",
+        thisYear: "This Year",
+        category: "Category",
+        allCategories: "All Categories",
+        chartType: "Chart Type",
+        barChart: "Bar Chart",
+        pieChart: "Pie Chart",
+        totalItems: "Total Items Sold",
+        uniqueProducts: "Unique Products",
+        avgOrderValue: "Avg Revenue per Item",
+        productSales: "Product Sales",
+        categoryDistribution: "Category Distribution",
+        topProducts: "Top Products",
+        noSalesData: "No sales data available for the selected period",
     },
     pt: {
         appTitle: "RestoManager",
@@ -272,8 +292,34 @@ export const translations = {
         enableTables: "Habilitar Gerenciamento de Mesas",
         enableTablesDescription: "Permitir gerenciamento de mesas do restaurante e pedidos por mesa.",
         tableManagement: "Gerenciamento de Mesas",
+        salesAnalysis: "Análise de Vendas",
+        salesByProduct: "Visualize dados de vendas por produto com filtros",
+        timePeriod: "Período de Tempo",
+        allTime: "Todo o Tempo",
+        today: "Hoje",
+        thisWeek: "Esta Semana",
+        thisMonth: "Este Mês",
+        thisYear: "Este Ano",
+        category: "Categoria",
+        allCategories: "Todas as Categorias",
+        chartType: "Tipo de Gráfico",
+        barChart: "Gráfico de Barras",
+        pieChart: "Gráfico de Pizza",
+        totalItems: "Total de Itens Vendidos",
+        uniqueProducts: "Produtos Únicos",
+        avgOrderValue: "Média de Receita por Item",
+        productSales: "Vendas por Produto",
+        categoryDistribution: "Distribuição por Categoria",
+        topProducts: "Principais Produtos",
+        noSalesData: "Nenhum dado de vendas disponível para o período selecionado",
     },
 }
 
 export type Language = "en" | "pt"
 export type TranslationKey = keyof typeof translations.en
+
+// Extended translation keys for additional features
+export type ExtendedTranslationKey = TranslationKey | 
+    "salesAnalysis" | "salesByProduct" | "timePeriod" | "allTime" | "today" | "thisWeek" | "thisMonth" | "thisYear" |
+    "category" | "allCategories" | "chartType" | "barChart" | "pieChart" | "totalItems" | "uniqueProducts" |
+    "avgOrderValue" | "productSales" | "categoryDistribution" | "topProducts" | "noSalesData"

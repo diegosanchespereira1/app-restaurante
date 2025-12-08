@@ -1,10 +1,10 @@
 import { createContext, useContext, useState, type ReactNode } from "react"
-import { translations, type Language, type TranslationKey } from "../translations"
+import { translations, type Language, type ExtendedTranslationKey } from "../translations"
 
 interface LanguageContextType {
     language: Language
     setLanguage: (lang: Language) => void
-    t: (key: TranslationKey) => string
+    t: (key: ExtendedTranslationKey) => string
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
@@ -12,7 +12,7 @@ const LanguageContext = createContext<LanguageContextType | undefined>(undefined
 export function LanguageProvider({ children }: { children: ReactNode }) {
     const [language, setLanguage] = useState<Language>("pt")
 
-    const t = (key: TranslationKey) => {
+    const t = (key: ExtendedTranslationKey) => {
         return translations[language][key] || key
     }
 

@@ -1,4 +1,4 @@
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Menu, DollarSign } from "lucide-react"
+import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Menu, DollarSign, TrendingUp } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { NavLink } from "react-router-dom"
 import { useLanguage } from "../../context/LanguageContext"
@@ -17,6 +17,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
         { href: "/orders", label: t("orders"), icon: ClipboardList },
         ...(isTablesEnabled ? [{ href: "/tables", label: t("tables"), icon: Armchair }] : []),
         { href: "/menu", label: t("menu"), icon: Menu },
+        { href: "/sales", label: t("salesAnalysis"), icon: TrendingUp },
         { href: "/finance", label: t("finance"), icon: DollarSign },
         { href: "/settings", label: t("settings"), icon: Settings },
     ]

@@ -9,6 +9,7 @@ import { TableDetails } from "./pages/TableDetails"
 import { Menu } from "./pages/Menu"
 import { Settings } from "./pages/Settings"
 import { Finance } from "./pages/Finance"
+import { SalesChart } from "./pages/SalesChart"
 
 import { RestaurantProvider } from "./context/RestaurantContext"
 import { LanguageProvider } from "./context/LanguageContext"
@@ -29,6 +30,7 @@ function App() {
                 <Route path="/orders/new" element={<NewOrder />} />
                 <Route path="/orders/:id" element={<OrderDetails />} />
                 <Route path="/finance" element={<Finance />} />
+                <Route path="/sales" element={<SalesChart />} />
                 <Route path="/tables" element={<Tables />} />
                 <Route path="/tables/:id" element={<TableDetails />} />
                 <Route path="/tables/:id/bill" element={<TableBill />} />
