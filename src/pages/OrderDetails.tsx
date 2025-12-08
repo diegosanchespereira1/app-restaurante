@@ -1,9 +1,7 @@
 import { useState } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
-import { Badge } from "../components/ui/badge"
-import { ArrowLeft, CreditCard, QrCode, Ticket, Clock, Printer, Wallet, Truck, CheckCircle, DollarSign, AlertCircle } from "lucide-react"
+import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer } from "lucide-react"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import {
@@ -64,263 +62,297 @@ export function OrderDetails() {
         window.print()
     }
 
+    const getStatusColor = (status: typeof order.status) => {
+        switch (status) {
+            case "Pending": return "bg-yellow-500"
+            case "Preparing": return "bg-yellow-500"
+            case "Ready": return "bg-green-500"
+            case "Delivered": return "bg-blue-500"
+            case "Closed": return "bg-gray-500"
+            default: return "bg-gray-500"
+        }
+    }
+
+    const getPaymentStatusColor = (order: any) => {
+        return order.status === "Closed" ? "bg-green-500" : "bg-red-500"
+    }
+
+    const getStatusIcon = (status: typeof order.status) => {
+        switch (status) {
+            case "Ready": 
+            case "Delivered": 
+            case "Closed": return <CheckCircle className="h-6 w-6 text-white" />
+            default: return <Clock className="h-6 w-6 text-white" />
+        }
+    }
+
     return (
-        <>
-            <div className="space-y-8">
-                <div className="flex items-center justify-between print:hidden">
+        <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+            {/* BEGIN: MainHeader */}
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+                {/* Header Left: Title and Metadata */}
+                <div>
                     <div className="flex items-center gap-4">
-                        <Button variant="ghost" size="icon" onClick={() => navigate("/orders")}>
-                            <ArrowLeft className="h-6 w-6" />
-                        </Button>
-                        <div>
-                            <div className="flex items-center gap-4">
-                                <h2 className="text-3xl font-bold tracking-tight">{t("orderId")}: {order.id}</h2>
-                                <div className="flex gap-2">
-                                    <Badge
-                                        variant={
-                                            order.status === "Delivered" ? "success" :
-                                                order.status === "Ready" ? "default" :
-                                                    order.status === "Closed" ? "secondary" : "destructive"
-                                        }
-                                        className="flex items-center gap-1"
-                                    >
-                                        {order.status === "Delivered" && <Truck className="h-3 w-3" />}
-                                        {order.status === "Ready" && <CheckCircle className="h-3 w-3" />}
-                                        {(order.status === "Pending" || order.status === "Preparing") && <Clock className="h-3 w-3" />}
-                                        {order.status === "Closed" && <CheckCircle className="h-3 w-3" />}
-                                        {t(order.status.toLowerCase() as any) || order.status}
-                                    </Badge>
-                                    <Badge
-                                        variant={order.status === "Closed" ? "success" : "destructive"}
-                                        className="flex items-center gap-1"
-                                    >
-                                        {order.status === "Closed" ? <DollarSign className="h-3 w-3" /> : <AlertCircle className="h-3 w-3" />}
-                                        {order.status === "Closed" ? t("paid") : t("paymentPending")}
-                                    </Badge>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-2 text-muted-foreground mt-1">
-                                <Clock className="h-4 w-4" />
-                                <span>{order.time}</span>
-                                <span>•</span>
-                                <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
-                            </div>
-                        </div>
+                        {/* Back arrow icon */}
+                        <button 
+                            className="text-gray-500 hover:text-gray-800 text-2xl" 
+                            onClick={() => navigate("/orders")}
+                        >
+                            ←
+                        </button>
+                        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 font-extrabold">
+                            {t("orderId")}: {order.id}
+                        </h1>
                     </div>
-                    <div className="flex gap-2">
-                        <Button variant="outline" onClick={handlePrint}>
-                            <Printer className="mr-2 h-4 w-4" />
-                            {t("printReceipt")}
-                        </Button>
-                        {order.status !== "Closed" && (
-                            <>
-                                {order.status !== "Delivered" && (
-                                    <Button onClick={handleStatusUpdate}>
-                                        {t("updateStatus")} ({t(getNextStatus(order.status)?.toLowerCase() as any) || getNextStatus(order.status)})
-                                    </Button>
-                                )}
-                                <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-                                    <DialogTrigger asChild>
-                                        <Button variant="default">
-                                            <CreditCard className="mr-2 h-4 w-4" />
-                                            {t("payNow")}
-                                        </Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>{t("confirmPayment")}</DialogTitle>
-                                            <DialogDescription>
-                                                {t("selectPaymentMethod")} {formatCurrency(order.total * 1.1)}.
-                                            </DialogDescription>
-                                        </DialogHeader>
-                                        <div className="grid gap-4 py-4">
-                                            <RadioGroup
-                                                value={paymentMethod}
-                                                onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
-                                                className="grid grid-cols-2 gap-4"
-                                            >
-                                                <div>
-                                                    <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="cash"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                    >
-                                                        <Wallet className="mb-3 h-6 w-6" />
-                                                        {t("cash")}
-                                                    </Label>
-                                                </div>
-                                                <div>
-                                                    <RadioGroupItem value="Card" id="card" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="card"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                    >
-                                                        <CreditCard className="mb-3 h-6 w-6" />
-                                                        {t("card")}
-                                                    </Label>
-                                                </div>
-                                                <div>
-                                                    <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="voucher"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                    >
-                                                        <Ticket className="mb-3 h-6 w-6" />
-                                                        {t("voucher")}
-                                                    </Label>
-                                                </div>
-                                                <div>
-                                                    <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="pix"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                    >
-                                                        <QrCode className="mb-3 h-6 w-6" />
-                                                        {t("pix")}
-                                                    </Label>
-                                                </div>
-                                            </RadioGroup>
-                                        </div>
-                                        <DialogFooter>
-                                            <Button onClick={handlePayment}>{t("confirmPayment")}</Button>
-                                        </DialogFooter>
-                                    </DialogContent>
-                                </Dialog>
-                            </>
-                        )}
+                    <div className="flex items-center gap-4 text-sm text-gray-600 mt-2 ml-10">
+                        <div className="flex items-center gap-1.5">
+                            <Clock className="h-4 w-4" />
+                            <span>{order.time}</span>
+                        </div>
+                        <span>•</span>
+                        <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
+                        <span>•</span>
+                        <span>{t("customer")}: {order.customer}</span>
                     </div>
                 </div>
-
-                <div className="grid gap-6 md:grid-cols-3 print:hidden">
-                    <div className="md:col-span-2 space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>{t("items")}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-4">
-                                    {order.items.map((item) => (
-                                        <div key={item.id} className="flex items-center justify-between border-b pb-4 last:border-0 last:pb-0">
-                                            <div className="flex items-center gap-4">
-                                                <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center font-bold">
-                                                    {item.quantity}
-                                                </div>
-                                                <div>
-                                                    <div className="font-medium">{item.name}</div>
-                                                    <div className="text-sm text-muted-foreground">{formatCurrency(item.price)}</div>
-                                                </div>
+                {/* Header Right: Action Buttons */}
+                <div className="flex items-center gap-2 mt-4 md:mt-0 w-full md:w-auto">
+                    <Button 
+                        variant="outline" 
+                        onClick={handlePrint}
+                        className="flex-1 md:flex-none flex items-center justify-center gap-2 hover:bg-gray-200 text-gray-700 border-gray-200 bg-gray-100"
+                    >
+                        <Printer className="h-5 w-5" />
+                        {t("printReceipt")}
+                    </Button>
+                    {order.status !== "Closed" && (
+                        <>
+                            {order.status !== "Delivered" && (
+                                <Button 
+                                    onClick={handleStatusUpdate}
+                                    className="flex-1 md:flex-none bg-orange-500 hover:bg-opacity-90 text-white"
+                                >
+                                    {t("updateStatus")} ({t(getNextStatus(order.status)?.toLowerCase() as any) || getNextStatus(order.status)})
+                                </Button>
+                            )}
+                            <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
+                                <DialogTrigger asChild>
+                                    <Button className="flex-1 md:flex-none bg-orange-600 hover:bg-orange-700 text-white">
+                                        {t("payNow")}
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>{t("confirmPayment")}</DialogTitle>
+                                        <DialogDescription>
+                                            {t("selectPaymentMethod")} {formatCurrency(order.total * 1.1)}.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="grid gap-4 py-4">
+                                        <RadioGroup
+                                            value={paymentMethod}
+                                            onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
+                                            className="grid grid-cols-2 gap-4"
+                                        >
+                                            <div>
+                                                <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="cash"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <Wallet className="mb-3 h-6 w-6" />
+                                                    {t("cash")}
+                                                </Label>
                                             </div>
-                                            <div className="font-bold">{formatCurrency(item.price * item.quantity)}</div>
-                                        </div>
-                                    ))}
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                                            <div>
+                                                <RadioGroupItem value="Card" id="card" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="card"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <CreditCard className="mb-3 h-6 w-6" />
+                                                    {t("card")}
+                                                </Label>
+                                            </div>
+                                            <div>
+                                                <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="voucher"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <Ticket className="mb-3 h-6 w-6" />
+                                                    {t("voucher")}
+                                                </Label>
+                                            </div>
+                                            <div>
+                                                <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="pix"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <QrCode className="mb-3 h-6 w-6" />
+                                                    {t("pix")}
+                                                </Label>
+                                            </div>
+                                        </RadioGroup>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button onClick={handlePayment}>{t("confirmPayment")}</Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        </>
+                    )}
+                </div>
+            </header>
+            {/* END: MainHeader */}
 
-                    <div className="space-y-6">
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>{t("orderSummary")}</CardTitle>
-                            </CardHeader>
-                            <CardContent className="space-y-4">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">{t("subtotal")}</span>
-                                    <span>{formatCurrency(order.total)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-muted-foreground">{t("tax")} (10%)</span>
-                                    <span>{formatCurrency(order.total * 0.1)}</span>
-                                </div>
-                                <div className="border-t pt-4 flex justify-between font-bold text-lg">
-                                    <span>{t("total")}</span>
-                                    <span>{formatCurrency(order.total * 1.1)}</span>
-                                </div>
-                            </CardContent>
-                        </Card>
+            {/* BEGIN: MainContent */}
+            <main className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column: Summary Cards */}
+                <div className="lg:col-span-1 flex flex-col space-y-6">
+                    {/* Total Value Card - PROMINENT */}
+                    <section className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
+                        <h2 className="text-base font-medium text-gray-700 mb-1">{t("total")}</h2>
+                        <p className="text-4xl font-bold text-gray-900">{formatCurrency(order.total)}</p>
+                    </section>
 
-                        <Card>
-                            <CardHeader>
-                                <CardTitle>{t("notes")}</CardTitle>
-                            </CardHeader>
-                            <CardContent>
-                                <div className="space-y-2">
-                                    <textarea
-                                        className="w-full min-h-[100px] rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                                        placeholder={t("typeNote")}
-                                        value={note}
-                                        onChange={(e) => setNote(e.target.value)}
-                                    />
-                                    <Button className="w-full" variant="outline">
-                                        {t("addNote")}
+                    {/* Order Status Card */}
+                    <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+                        <h3 className="text-base font-medium text-gray-700 mb-3">{t("status")} {t("orderType")}</h3>
+                        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold text-base text-white ${getStatusColor(order.status)}`}>
+                            {getStatusIcon(order.status)}
+                            <span>{t(order.status.toLowerCase() as any) || order.status}</span>
+                        </div>
+                    </section>
+
+                    {/* Order Summary Card */}
+                    <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+                        <h3 className="text-base font-medium text-gray-700 mb-4">{t("orderSummary")}</h3>
+                        <div className="space-y-2 text-sm text-gray-600 mb-4">
+                            <div className="flex justify-between">
+                                <span>{t("subtotal")}</span>
+                                <span>{formatCurrency(order.total)}</span>
+                            </div>
+                            <div className="flex justify-between font-bold">
+                                <span>{t("total")}:</span>
+                                <span>{formatCurrency(order.total)}</span>
+                            </div>
+                        </div>
+                        {order.status !== "Closed" && (
+                            <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
+                                <DialogTrigger asChild>
+                                    <Button className="w-full bg-orange-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 text-base hover:bg-orange-700 transition-colors">
+                                        <CreditCard className="h-5 w-5" />
+                                        <span>{t("payNow")}</span>
                                     </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    </div>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>{t("confirmPayment")}</DialogTitle>
+                                        <DialogDescription>
+                                            {t("selectPaymentMethod")} {formatCurrency(order.total)}.
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="grid gap-4 py-4">
+                                        <RadioGroup
+                                            value={paymentMethod}
+                                            onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
+                                            className="grid grid-cols-2 gap-4"
+                                        >
+                                            <div>
+                                                <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="cash"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <Wallet className="mb-3 h-6 w-6" />
+                                                    {t("cash")}
+                                                </Label>
+                                            </div>
+                                            <div>
+                                                <RadioGroupItem value="Card" id="card" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="card"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <CreditCard className="mb-3 h-6 w-6" />
+                                                    {t("card")}
+                                                </Label>
+                                            </div>
+                                            <div>
+                                                <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="voucher"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <Ticket className="mb-3 h-6 w-6" />
+                                                    {t("voucher")}
+                                                </Label>
+                                            </div>
+                                            <div>
+                                                <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
+                                                <Label
+                                                    htmlFor="pix"
+                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                >
+                                                    <QrCode className="mb-3 h-6 w-6" />
+                                                    {t("pix")}
+                                                </Label>
+                                            </div>
+                                        </RadioGroup>
+                                    </div>
+                                    <DialogFooter>
+                                        <Button onClick={handlePayment}>{t("confirmPayment")}</Button>
+                                    </DialogFooter>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+                    </section>
+
+                    {/* Observations Card */}
+                    <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+                        <h3 className="text-base font-medium text-gray-700 mb-3">{t("notes")}</h3>
+                        <textarea 
+                            className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 transition text-sm" 
+                            placeholder={t("typeNote")} 
+                            rows={4}
+                            value={note}
+                            onChange={(e) => setNote(e.target.value)}
+                        />
+                        <Button 
+                            className="w-full mt-3 text-sm font-medium rounded-lg border border-gray-300 hover:bg-gray-100 transition-colors bg-white text-gray-700" 
+                            disabled={!note.trim()}
+                        >
+                            {t("addNote")}
+                        </Button>
+                    </section>
                 </div>
 
-                {/* Printable Receipt Layout */}
-                <div className="hidden print:block p-8 max-w-[80mm] mx-auto">
-                    <div className="text-center mb-6">
-                        <h1 className="text-xl font-bold mb-2">{t("appTitle")}</h1>
-                        <p className="text-sm text-muted-foreground">
-                            {t("orderId")}: {order.id}<br />
-                            {order.time}
-                        </p>
+                {/* Right Column: Order Items */}
+                <section className="lg:col-span-2">
+                    <div className="bg-white p-6 rounded-xl shadow-md h-full border border-gray-100">
+                        <h2 className="text-xl font-semibold text-gray-900 mb-5">{t("items")}</h2>
+                        <ul className="space-y-6">
+                            {order.items.map((item, index) => (
+                                <li key={item.id} className="flex items-center pb-4 border-b border-gray-200 last:border-b-0">
+                                    <div className="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-600 mr-4">
+                                        {index + 1}
+                                    </div>
+                                    <div className="flex-grow">
+                                        <p className="font-medium text-gray-900">{item.name}</p>
+                                        <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
+                                    </div>
+                                    <p className="text-gray-900 text-sm font-medium">
+                                        {item.quantity}x {formatCurrency(item.price * item.quantity)}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
                     </div>
-
-                    <div className="border-b border-dashed pb-4 mb-4">
-                        <div className="flex justify-between text-sm mb-1">
-                            <span>{order.table ? t("table") : t("type")}:</span>
-                            <span className="font-medium capitalize">{order.table || (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span>{t("customer")}:</span>
-                            <span className="font-medium">{order.customer}</span>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2 mb-6">
-                        {order.items.map((item) => (
-                            <div key={item.id} className="flex justify-between text-sm">
-                                <span>{item.quantity}x {item.name}</span>
-                                <span>{formatCurrency(item.price * item.quantity)}</span>
-                            </div>
-                        ))}
-                    </div>
-
-                    <div className="border-t border-dashed pt-4 space-y-1">
-                        <div className="flex justify-between text-sm">
-                            <span>{t("subtotal")}</span>
-                            <span>{formatCurrency(order.total)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span>{t("tax")} (10%)</span>
-                            <span>{formatCurrency(order.total * 0.1)}</span>
-                        </div>
-                        <div className="flex justify-between font-bold text-lg mt-2">
-                            <span>{t("total")}</span>
-                            <span>{formatCurrency(order.total * 1.1)}</span>
-                        </div>
-                        {order.paymentMethod && (
-                            <div className="flex justify-between text-sm mt-2 pt-2 border-t border-dashed">
-                                <span>{t("paymentMethod")}:</span>
-                                <span className="font-medium">{t(order.paymentMethod.toLowerCase() as any) || order.paymentMethod}</span>
-                            </div>
-                        )}
-                        {order.closedAt && (
-                            <div className="text-center text-xs text-muted-foreground mt-4">
-                                {t("closed")}: {new Date(order.closedAt).toLocaleString()}
-                            </div>
-                        )}
-                    </div>
-
-                    <div className="text-center mt-8 text-sm text-muted-foreground">
-                        Thank you for dining with us!
-                    </div>
-                </div>
-            </div>
-        </>
+                </section>
+            </main>
+            {/* END: MainContent */}
+        </div>
     )
 }

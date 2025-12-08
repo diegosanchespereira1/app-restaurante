@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+
+<html lang="pt-br"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Pedidos</title>
+<!-- Tailwind CSS v3 CDN with plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Custom Tailwind Configuration -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              orange: '#FF6600',
+            },
+            status: {
+              'red-bg': '#FEE2E2',
+              'red-text': '#DC2626',
+              'green-bg': '#D1FAE5',
+              'green-text': '#059669',
+            },
+            'button-active-bg': '#E0F2FE',
+            'button-active-border': '#3B82F6',
+          }
+        }
+      }
+    }
+  </script>
+<!-- Global Styles -->
+<style data-purpose="global-styles">
+    body {
+      background-color: #f7f8fa;
+    }
+  </style>
+<!-- SVG Icons as CSS Masks -->
+<style data-purpose="icon-styles">
+    .icon {
+      display: inline-block;
+      width: 1.25em;
+      height: 1.25em;
+      background-color: currentColor;
+      -webkit-mask-size: contain;
+      mask-size: contain;
+      -webkit-mask-repeat: no-repeat;
+      mask-repeat: no-repeat;
+      -webkit-mask-position: center;
+      mask-position: center;
+    }
+    .icon-search { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z' /%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z' /%3E%3C/svg%3E"); }
+    .icon-delivery { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath d='M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25z' /%3E%3Cpath d='M13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z' /%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z'/%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25z'/%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6z'/%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z'/%3E%3C/svg%3E"); }
+    .icon-bag { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.658-.463 1.243-1.117 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.117 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z' /%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.658-.463 1.243-1.117 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.117 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z' /%3E%3C/svg%3E"); }
+    .icon-clock { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z' /%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z' /%3E%3C/svg%3E"); }
+    .icon-check { -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' /%3E%3C/svg%3E"); mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke-width='1.5' stroke='currentColor'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' d='M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' /%3E%3C/svg%3E"); }
+  </style>
+</head>
+<body class="font-sans">
+<div class="container mx-auto p-8" data-purpose="main-container">
+<!-- BEGIN: PageHeader -->
+<header class="flex justify-between items-center mb-8">
+<!-- Page Title and Subtitle -->
+<div>
+<h1 class="text-4xl font-bold text-gray-800">Pedidos</h1>
+<p class="text-gray-500 mt-1">Gerenciar pedidos desta mesa</p>
+</div>
+<!-- Action Button -->
+<button class="bg-brand-orange text-white font-bold py-2 px-6 rounded-lg flex items-center shadow-sm hover:bg-orange-600 transition-colors">
+<span class="text-2xl font-light mr-2">+</span>
+        Novo Pedido
+      </button>
+</header>
+<!-- END: PageHeader -->
+<!-- BEGIN: FilterControls -->
+<section class="flex items-center space-x-4 mb-8" data-purpose="filters">
+<!-- Search Input -->
+<div class="relative flex-grow">
+<span class="absolute inset-y-0 left-0 flex items-center pl-3">
+<svg class="bi bi-search w-5 h-5 text-gray-400" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001c.03.04.062.078.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1.007 1.007 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"></path></svg>
+</span>
+<input class="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition" placeholder="Buscar por nome ou código..." type="text"/>
+</div>
+<!-- Type Filter Dropdown -->
+<div class="w-64 relative">
+<select class="w-full py-3 px-4 border border-gray-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 transition appearance-none">
+<option>Tipo de Pedido</option>
+<option>Delivery</option>
+<option>Retirada</option>
+</select>
+<div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-700"><svg class="bi bi-chevron-down" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z" fill-rule="evenodd"></path></svg></div></div>
+<!-- Filter Buttons -->
+<div class="flex items-center border border-gray-300 rounded-lg p-1 bg-white">
+<button class="flex items-center gap-2 px-4 py-2 rounded-md text-gray-600 font-medium hover:bg-gray-100 transition-colors text-blue-600 bg-button-active-bg border border-button-active-border">
+<svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg>
+          Delivery
+        </button>
+<button class="flex items-center gap-2 px-4 py-2 rounded-md text-gray-600 font-medium hover:bg-gray-100 transition-colors">
+<svg class="bi bi-bag w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M8 1a2.5 2.5 0 0 1 2.5 2.5V4h-5v-.5A2.5 2.5 0 0 1 8 1zm3.5 3v-.5a3.5 3.5 0 1 0-7 0V4H1v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4h-3.5zM2 5h12v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5z"></path></svg>
+          Retirada
+        </button>
+</div>
+</section>
+<!-- END: FilterControls -->
+<!-- BEGIN: OrdersGrid -->
+<main class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+<!-- Order Card 1 -->
+<article class="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)]" data-purpose="order-card">
+<div class="flex justify-between items-start mb-4 mb-6">
+<h2 class="text-2xl font-bold text-gray-800">Diego</h2>
+<span class="flex items-center gap-2 text-sm font-medium bg-status-red-bg text-status-red-text px-3 py-1 rounded-full">
+<svg class="bi bi-clock w-4 h-4" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"></path><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"></path></svg>
+            Pendente
+          </span>
+</div>
+<div class="space-y-3 text-gray-600">
+<div class="flex justify-between items-center"><span>ID:</span><span class="font-mono">ORD-9457</span></div>
+<div class="flex justify-between items-center"><span>Tipo:</span><span class="flex items-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.658-.463 1.243-1.117 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.117 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg> Retirada</span></div>
+<div class="flex justify-between items-center"><span>Itens:</span><span>2</span></div>
+<div class="flex justify-between items-center"><span>Hora:</span><span class="font-mono">20:22</span></div>
+</div>
+<div class="border-t pt-4 flex justify-between items-center">
+<span class="text-lg font-bold text-gray-800">Total:</span>
+<span class="text-2xl font-bold text-gray-900">R$ 29,00</span>
+</div>
+</article>
+<!-- Order Card 2 -->
+<article class="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)]" data-purpose="order-card">
+<div class="flex justify-between items-start mb-4 mb-6">
+<h2 class="text-2xl font-bold text-gray-800">Convidado</h2>
+<span class="flex items-center gap-2 text-sm font-medium bg-status-red-bg text-status-red-text px-3 py-1 rounded-full">
+<svg class="bi bi-clock w-4 h-4" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"></path><path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"></path></svg>
+            Pendente
+          </span>
+</div>
+<div class="space-y-3 text-gray-600">
+<div class="flex justify-between items-center"><span>ID:</span><span class="font-mono">ORD-155</span></div>
+<div class="flex justify-between items-center"><span>Tipo:</span><span class="flex items-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.658-.463 1.243-1.117 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.117 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg> Retirada</span></div>
+<div class="flex justify-between items-center"><span>Itens:</span><span>1</span></div>
+<div class="flex justify-between items-center"><span>Hora:</span><span class="font-mono">11:31:42</span></div>
+</div>
+<div class="border-t pt-4 flex justify-between items-center">
+<span class="text-lg font-bold text-gray-800">Total:</span>
+<span class="text-2xl font-bold text-gray-900">R$ 46,00</span>
+</div>
+</article>
+<!-- Order Card 3 -->
+<article class="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)]" data-purpose="order-card">
+<div class="flex justify-between items-start mb-4 mb-6">
+<h2 class="text-2xl font-bold text-gray-800">Diego</h2>
+<span class="flex items-center gap-2 text-sm font-medium bg-status-red-bg text-status-red-text px-3 py-1 rounded-full">
+<svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg>
+            Pendente
+          </span>
+</div>
+<div class="space-y-3 text-gray-600">
+<div class="flex justify-between items-center"><span>ID:</span><span class="font-mono">ORD-2906</span></div>
+<div class="flex justify-between items-center"><span>Tipo:</span><span class="flex items-center gap-2"><svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg> Delivery</span></div>
+<div class="flex justify-between items-center"><span>Itens:</span><span>1</span></div>
+<div class="flex justify-between items-center"><span>Hora:</span><span class="font-mono">16:03:41</span></div>
+</div>
+<div class="border-t pt-4 flex justify-between items-center">
+<span class="text-lg font-bold text-gray-800">Total:</span>
+<span class="text-2xl font-bold text-gray-900">R$ 15,00</span>
+</div>
+</article>
+<!-- Order Card 4 -->
+<article class="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)]" data-purpose="order-card">
+<div class="flex justify-between items-start mb-4 mb-6">
+<h2 class="text-2xl font-bold text-gray-800">Convidado</h2>
+<span class="flex items-center gap-2 text-sm font-medium bg-status-green-bg text-status-green-text px-3 py-1 rounded-full">
+<svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg>
+            Pronto
+          </span>
+</div>
+<div class="space-y-3 text-gray-600">
+<div class="flex justify-between items-center"><span>ID:</span><span class="font-mono">ORD-9338</span></div>
+<div class="flex justify-between items-center"><span>Tipo:</span><span class="flex items-center gap-2"><svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg> Delivery</span></div>
+<div class="flex justify-between items-center"><span>Itens:</span><span>1</span></div>
+<div class="flex justify-between items-center"><span>Hora:</span><span class="font-mono">23:46:40</span></div>
+</div>
+<div class="border-t pt-4 flex justify-between items-center">
+<span class="text-lg font-bold text-gray-800">Total:</span>
+<span class="text-2xl font-bold text-gray-900">R$ 15,00</span>
+</div>
+</article>
+<!-- Order Card 5 -->
+<article class="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)]" data-purpose="order-card">
+<div class="flex justify-between items-start mb-4 mb-6">
+<h2 class="text-2xl font-bold text-gray-800">Convidado</h2>
+<span class="flex items-center gap-2 text-sm font-medium bg-status-green-bg text-status-green-text px-3 py-1 rounded-full">
+<svg class="bi bi-check-circle-fill w-4 h-4" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M16 8A8 8 0 1 1 0 8a8 8 0 0 1 16 0zm-3.97-3.03a.75.75 0 0 0-1.08.022L7.477 9.417 5.384 7.323a.75.75 0 0 0-1.06 1.06L6.97 11.03a.75.75 0 0 0 1.079-.02l3.992-4.99a.75.75 0 0 0-.01-1.05z"></path></svg>
+            Entregue
+          </span>
+</div>
+<div class="space-y-3 text-gray-600">
+<div class="flex justify-between items-center"><span>ID:</span><span class="font-mono">ORD-8421</span></div>
+<div class="flex justify-between items-center"><span>Tipo:</span><span class="flex items-center gap-2"><svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M15.75 10.5V6a3.75 3.75 0 10-7.5 0v4.5m11.356-1.993l1.263 12c.07.658-.463 1.243-1.117 1.243H4.25a1.125 1.125 0 01-1.12-1.243l1.264-12A1.125 1.125 0 015.513 7.5h12.974c.576 0 1.059.435 1.117 1.007zM8.625 10.5a.375.375 0 11-.75 0 .375.375 0 01.75 0zm7.5 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" stroke-linecap="round" stroke-linejoin="round"></path></svg> Retirada</span></div>
+<div class="flex justify-between items-center"><span>Itens:</span><span>1</span></div>
+<div class="flex justify-between items-center"><span>Hora:</span><span class="font-mono">23:55:16</span></div>
+</div>
+<div class="border-t pt-4 flex justify-between items-center">
+<span class="text-lg font-bold text-gray-800">Total:</span>
+<span class="text-2xl font-bold text-gray-900">R$ 14,00</span>
+</div>
+</article>
+<!-- Order Card 6 -->
+<article class="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)]" data-purpose="order-card">
+<div class="flex justify-between items-start mb-4 mb-6">
+<h2 class="text-2xl font-bold text-gray-800">Carla</h2>
+<span class="flex items-center gap-2 text-sm font-medium bg-status-red-bg text-status-red-text px-3 py-1 rounded-full">
+<svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg>
+            Pendente
+          </span>
+</div>
+<div class="space-y-3 text-gray-600">
+<div class="flex justify-between items-center"><span>ID:</span><span class="font-mono">ORD-6510</span></div>
+<div class="flex justify-between items-center"><span>Tipo:</span><span class="flex items-center gap-2"><svg class="bi bi-truck w-5 h-5" fill="currentColor" height="16" viewbox="0 0 16 16" width="16" xmlns="http://www.w3.org/2000/svg"><path d="M0 3.5A1.5 1.5 0 0 1 1.5 2h9A1.5 1.5 0 0 1 12 3.5V5h1.02a1.5 1.5 0 0 1 1.17.563l1.481 1.85a1.5 1.5 0 0 1 .329.938V10.5a1.5 1.5 0 0 1-1.5 1.5H14a2 2 0 1 1-4 0H5a2 2 0 1 1-4 0H1.5A1.5 1.5 0 0 1 0 10.5v-7zm1.294 7.456A1.999 1.999 0 0 1 4.732 11h5.536a2 2 0 0 1 .732-.732V3.5a.5.5 0 0 0-.5-.5h-9a.5.5 0 0 0-.5.5v7a.5.5 0 0 0 .294.456zM12 10a2 2 0 0 1 1.732 1h.768a.5.5 0 0 0 .5-.5V8.35a.5.5 0 0 0-.11-.312l-1.48-1.85A.5.5 0 0 0 13.02 6H12v4zm-9 1a1 1 0 1 0 0 2 1 1 0 0 0 0-2zm9 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2z"></path></svg> Delivery</span></div>
+<div class="flex justify-between items-center"><span>Itens:</span><span>3</span></div>
+<div class="flex justify-between items-center"><span>Hora:</span><span class="font-mono">19:10:05</span></div>
+</div>
+<div class="border-t pt-4 flex justify-between items-center">
+<span class="text-lg font-bold text-gray-800">Total:</span>
+<span class="text-2xl font-bold text-gray-900">R$ 38,50</span>
+</div>
+</article>
+</main>
+<!-- END: OrdersGrid -->
+</div>
+</body></html>

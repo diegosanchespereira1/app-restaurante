@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css" rel="stylesheet"/>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Detalhes do Pedido - ORD-8125</title>
+<!-- Tailwind CSS v3 via CDN -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Custom Tailwind Configuration -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'order-yellow': '#F5B947',
+            'order-orange': '#F57F17',
+            'light-gray-bg': '#F9FAFB',
+            'subtle-gray': '#E5E7EB',
+            'medium-gray': '#6B7280',
+            'dark-gray': '#374151',
+          }
+        }
+      }
+    }
+  </script>
+<!-- Custom CSS for elements that are tricky with Tailwind alone -->
+<style data-purpose="custom-styles">
+    /* A subtle box shadow for the cards to match the design */
+    .card-shadow {
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+    }
+  </style>
+</head>
+<body class="bg-light-gray-bg font-sans text-dark-gray antialiased" style="background-color: #f8f9fa;">
+<div class="container mx-auto p-6 lg:p-12">
+<!-- BEGIN: PageHeader -->
+<header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+<!-- Header Title and Metadata -->
+<div data-purpose="header-title-section">
+<div class="flex items-center gap-3">
+<a class="text-gray-500 hover:text-gray-800" href="#">
+<svg class="h-6 w-6" fill="none" stroke="currentColor" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M10 19l-7-7m0 0l7-7m-7 7h18" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
+</svg>
+</a>
+<h1 class="text-3xl font-bold text-dark-gray">ID do Pedido: <span class="font-bold">ORD-8125</span></h1>
+</div>
+<div class="flex items-center space-x-3 text-sm text-medium-gray mt-2 ml-9">
+<!-- Order Timestamp -->
+<div class="flex items-center space-x-1.5">
+<i class="fas fa-clock"></i>
+<span>07/12/2025 21:24</span>
+</div>
+<!-- Separator -->
+<span>•</span>
+<div class="flex items-center space-x-1.5">
+<i class="fas fa-box"></i>
+<span>Retirada</span>
+</div>
+<!-- Separator -->
+<span>•</span>
+<div class="flex items-center space-x-1.5">
+<i class="fas fa-user"></i>
+<span>Cliente: João Silva</span>
+</div>
+</div>
+</div>
+<!-- Header Action Buttons -->
+<div class="flex items-center space-x-2 mt-4 md:mt-0" data-purpose="header-actions">
+<button class="flex items-center justify-center space-x-2 text-dark-gray font-medium py-2 px-4 rounded-lg text-sm hover:bg-gray-300 transition-colors border border-gray-300"><i class="fas fa-print"></i><span>Imprimir Recibo</span></button>
+<button class="flex items-center justify-center space-x-2 text-dark-gray font-medium py-2 px-4 rounded-lg text-sm hover:bg-gray-300 transition-colors border border-gray-300"><i class="fas fa-sync-alt"></i><span>Atualizar Status (Preparando)</span></button>
+<button class="flex items-center justify-center space-x-2 bg-dark-gray text-white font-medium py-2 px-4 rounded-lg text-sm hover:bg-gray-800 transition-colors"><i class="fas fa-credit-card"></i><span>Pagar Agora</span></button>
+</div>
+</header>
+<!-- END: PageHeader -->
+<!-- BEGIN: MainContent -->
+<main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+<!-- BEGIN: LeftColumn -->
+<div class="lg:col-span-1 flex flex-col space-y-6" data-purpose="left-column">
+<!-- Total Value Card -->
+<section aria-labelledby="total-value-heading" class="bg-white p-6 rounded-xl card-shadow mb-6" style="box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);">
+<h2 class="text-base font-medium text-dark-gray mb-1" id="total-value-heading">Valor Total</h2>
+<p class="text-4xl font-bold text-dark-gray">R$ 133,00</p>
+</section>
+<!-- Order Status Card -->
+<section aria-labelledby="order-status-heading" class="bg-white p-6 rounded-xl card-shadow mb-6" style="box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);">
+<h2 class="text-base font-medium text-dark-gray mb-3" id="order-status-heading">Status do Pedido</h2>
+<div class="bg-order-yellow text-dark-gray font-semibold py-3 px-4 rounded-lg flex items-center space-x-2" style="background-color: #ffc107;">
+<i class="fas fa-clock"></i>
+<span>Preparando</span>
+</div>
+</section>
+<!-- Order Summary Card -->
+<section aria-labelledby="order-summary-heading" class="bg-white p-6 rounded-xl card-shadow mb-6" style="box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);">
+<h2 class="text-base font-medium text-dark-gray mb-4" id="order-summary-heading">Resumo do Pedido</h2>
+<div class="space-y-2 text-sm text-medium-gray mb-4"><div class="flex justify-between">
+<span>Subtotal</span>
+<span>R$ 133,00</span>
+</div>
+<div class="flex justify-between">
+<span class="font-bold">Total:</span>
+<span class="font-bold">R$ 133,00</span>
+</div></div>
+<button class="w-full bg-order-orange text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 text-base hover:bg-orange-700 transition-colors" style="background-color: #fd7e14;">
+<i class="fas fa-credit-card"></i>
+<span>Pagar</span>
+</button>
+</section>
+<!-- Observations Card -->
+<section aria-labelledby="observations-heading" class="bg-white p-6 rounded-xl card-shadow" style="box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);">
+<h2 class="text-base font-medium text-dark-gray mb-3" id="observations-heading">Observações</h2>
+<textarea class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition text-sm" placeholder="Digite sua observação aqui..." rows="4"></textarea>
+<button class="w-full bg-white text-dark-gray font-semibold py-3 px-4 rounded-lg mt-3 border border-gray-300 hover:bg-gray-100 transition-colors text-sm">
+            Adicionar Observação
+          </button>
+</section>
+</div>
+<!-- END: LeftColumn -->
+<!-- BEGIN: RightColumn -->
+<div class="lg:col-span-2" data-purpose="right-column">
+<!-- Order Items Card -->
+<section aria-labelledby="order-items-heading" class="bg-white p-6 rounded-xl card-shadow h-full" style="box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.05);">
+<h2 class="text-xl font-semibold text-dark-gray mb-5" id="order-items-heading">Itens do Pedido</h2>
+<ul class="space-y-6">
+<!-- Order Item 1 -->
+<li class="flex items-center pb-4 border-b border-gray-200">
+<span class="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-medium-gray mr-4">1</span>
+<div class="flex-grow">
+<p class="font-medium text-dark-gray">Margherita</p>
+<p class="text-sm text-medium-gray">R$ 15,00</p>
+</div>
+<p class="text-dark-gray text-sm">2x R$ 30,00</p>
+</li>
+<!-- Order Item 2 -->
+<li class="flex items-center pb-4 border-b border-gray-200">
+<span class="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-medium-gray mr-4">2</span>
+<div class="flex-grow">
+<p class="font-medium text-dark-gray">Bacon Burger</p>
+<p class="text-sm text-medium-gray">R$ 14,00</p>
+</div>
+<p class="text-dark-gray text-sm">2x R$ 28,00</p>
+</li>
+<!-- Order Item 3 -->
+<li class="flex items-center pb-4 border-b border-gray-200">
+<span class="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-medium-gray mr-4">3</span>
+<div class="flex-grow">
+<p class="font-medium text-dark-gray">Classic Burger</p>
+<p class="text-sm text-medium-gray">R$ 12,00</p>
+</div>
+<p class="text-dark-gray text-sm">1x R$ 12,00</p>
+</li>
+<!-- Order Item 4 -->
+<li class="flex items-center pb-4 border-b border-gray-200">
+<span class="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-medium-gray mr-4">4</span>
+<div class="flex-grow">
+<p class="font-medium text-dark-gray">Pepperoni</p>
+<p class="text-sm text-medium-gray">R$ 17,00</p>
+</div>
+<p class="text-dark-gray text-sm">1x R$ 17,00</p>
+</li>
+<!-- Order Item 5 -->
+<li class="flex items-center border-gray-200">
+<span class="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-medium-gray mr-4">5</span>
+<div class="flex-grow">
+<p class="font-medium text-dark-gray">Frango Assado</p>
+<p class="text-sm text-medium-gray">R$ 46,00</p>
+</div>
+<p class="text-dark-gray text-sm">1x R$ 46,00</p>
+</li>
+</ul>
+</section>
+</div>
+<!-- END: RightColumn -->
+</main>
+<!-- END: MainContent -->
+</div>
+</body></html>
