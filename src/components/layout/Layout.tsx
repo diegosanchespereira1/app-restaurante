@@ -13,11 +13,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <main className="flex-1 flex flex-col overflow-hidden">
-                {/* Mobile Header */}
-                <div className="flex items-center p-4 border-b md:hidden print:hidden">
-                    <span className="text-lg font-bold">{t("appTitle")}</span>
-                </div>
-
                 {/* Content */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-8 mobile-content md:pb-8 print:p-0 print:overflow-visible print:pb-0 mb-safe">
                     {children}
