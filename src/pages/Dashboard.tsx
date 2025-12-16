@@ -74,49 +74,37 @@ export function Dashboard() {
                 </Card>
             </div>
 
-            <div className="grid gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="lg:col-span-4">
-                    <CardHeader>
-                        <CardTitle>Recent Revenue</CardTitle>
-                    </CardHeader>
-                    <CardContent className="pl-2">
-                        <div className="h-[200px] flex items-center justify-center text-muted-foreground">
-                            Chart Placeholder
-                        </div>
-                    </CardContent>
-                </Card>
-                <Card className="lg:col-span-3">
-                    <CardHeader>
-                        <CardTitle>{t("recentOrders")}</CardTitle>
-                        <p className="text-sm text-muted-foreground">
-                            {t("recentOrdersDescription") || "Latest completed transactions."}
-                        </p>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="space-y-8">
-                            {orders
-                                .filter(order => order.status === "Closed")
-                                .slice(0, 5)
-                                .map(order => (
-                                    <div key={order.id} className="flex items-center">
-                                        <div className="space-y-1">
-                                            <p className="text-sm font-medium leading-none">{order.customer}</p>
-                                            <p className="text-sm text-muted-foreground">
-                                                {order.id} • {order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}
-                                            </p>
-                                        </div>
-                                        <div className="ml-auto font-medium">+{formatCurrency(order.total)}</div>
+            <Card>
+                <CardHeader>
+                    <CardTitle>{t("recentOrders")}</CardTitle>
+                    <p className="text-sm text-muted-foreground">
+                        {t("recentOrdersDescription") || "Latest completed transactions."}
+                    </p>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-8">
+                        {orders
+                            .filter(order => order.status === "Closed")
+                            .slice(0, 5)
+                            .map(order => (
+                                <div key={order.id} className="flex items-center">
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-medium leading-none">{order.customer}</p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {order.id} • {order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}
+                                        </p>
                                     </div>
-                                ))}
-                            {orders.filter(order => order.status === "Closed").length === 0 && (
-                                <div className="text-center text-muted-foreground py-4">
-                                    {t("noOrders")}
+                                    <div className="ml-auto font-medium">+{formatCurrency(order.total)}</div>
                                 </div>
-                            )}
-                        </div>
-                    </CardContent>
-                </Card>
-            </div>
+                            ))}
+                        {orders.filter(order => order.status === "Closed").length === 0 && (
+                            <div className="text-center text-muted-foreground py-4">
+                                {t("noOrders")}
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }
