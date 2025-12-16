@@ -103,9 +103,9 @@ export function Orders() {
             </header>
 
             {/* Filters */}
-            <section className="flex items-center space-x-4 mb-8">
-                {/* Search Input */}
-                <div className="relative flex-grow">
+            <section className="mb-8">
+                {/* Search Input - First Line */}
+                <div className="relative mb-4">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3">
                         <Search className="w-5 h-5 text-gray-400" />
                     </span>
@@ -118,47 +118,50 @@ export function Orders() {
                     />
                 </div>
 
-                {/* Type Filter Dropdown */}
-                <div className="w-64 relative">
-                    <Select value={typeFilter} onValueChange={setTypeFilter}>
-                        <SelectTrigger className="w-full py-3 px-4 border border-gray-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 transition">
-                            <SelectValue placeholder="Tipo de Pedido" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">Tipo de Pedido</SelectItem>
-                            <SelectItem value="delivery">Delivery</SelectItem>
-                            <SelectItem value="pickup">Retirada</SelectItem>
-                            <SelectItem value="dine_in">Mesa</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </div>
+                {/* Filter Options - Second Line */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                    {/* Type Filter Dropdown */}
+                    <div className="w-full sm:w-64 relative">
+                        <Select value={typeFilter} onValueChange={setTypeFilter}>
+                            <SelectTrigger className="w-full py-3 px-4 border border-gray-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 transition">
+                                <SelectValue placeholder="Tipo de Pedido" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">Tipo de Pedido</SelectItem>
+                                <SelectItem value="delivery">Delivery</SelectItem>
+                                <SelectItem value="pickup">Retirada</SelectItem>
+                                <SelectItem value="dine_in">Mesa</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
 
-                {/* Filter Buttons */}
-                <div className="flex items-center border border-gray-300 rounded-lg p-1 bg-white">
-                    <Button
-                        variant={statusFilter === "all" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "delivery" 
-                                ? "text-blue-600 bg-blue-50 border border-blue-200" 
-                                : "text-gray-600 hover:bg-gray-100"
-                        }`}
-                        onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
-                    >
-                        <Truck className="w-5 h-5" />
-                        Delivery
-                    </Button>
-                    <Button
-                        variant={statusFilter === "pickup" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "pickup" 
-                                ? "text-blue-600 bg-blue-50 border border-blue-200" 
-                                : "text-gray-600 hover:bg-gray-100"
-                        }`}
-                        onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
-                    >
-                        <ShoppingBag className="w-5 h-5" />
-                        Retirada
-                    </Button>
+                    {/* Filter Buttons */}
+                    <div className="flex items-center border border-gray-300 rounded-lg p-1 bg-white">
+                        <Button
+                            variant={statusFilter === "all" ? "default" : "ghost"}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                                statusFilter === "delivery"
+                                    ? "text-blue-600 bg-blue-50 border border-blue-200"
+                                    : "text-gray-600 hover:bg-gray-100"
+                            }`}
+                            onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
+                        >
+                            <Truck className="w-5 h-5" />
+                            Delivery
+                        </Button>
+                        <Button
+                            variant={statusFilter === "pickup" ? "default" : "ghost"}
+                            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
+                                statusFilter === "pickup"
+                                    ? "text-blue-600 bg-blue-50 border border-blue-200"
+                                    : "text-gray-600 hover:bg-gray-100"
+                            }`}
+                            onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
+                        >
+                            <ShoppingBag className="w-5 h-5" />
+                            Retirada
+                        </Button>
+                    </div>
                 </div>
             </section>
 
