@@ -40,7 +40,7 @@
   /* Ensure proper spacing for mobile content */
   @media (max-width: 767px) {
     .mobile-content {
-      padding-bottom: calc(80px + env(safe-area-inset-bottom));
+      padding-bottom: calc(110px + env(safe-area-inset-bottom));
     }
   }
 }
