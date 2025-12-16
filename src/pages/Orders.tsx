@@ -182,26 +182,25 @@ export function Orders() {
                                 className="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)] cursor-pointer hover:shadow-lg transition-shadow"
                                 onClick={() => navigate(`/orders/${order.id}`)}
                             >
-                                <div className="flex justify-between items-start mb-4 mb-6">
-                                    <h2 className="text-2xl font-bold text-gray-800">{order.customer}</h2>
-                                    <span className={`flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full border ${statusInfo.className}`}>
-                                        <StatusIcon className="w-4 h-4" />
-                                        {statusInfo.label}
-                                    </span>
-                                </div>
-                                
-                                <div className="space-y-4">
-                                    {/* Order ID - Highlighted */}
-                                    <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3">
-                                        <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium text-orange-700">ID do Pedido</span>
-                                            <div className="bg-orange-500 text-white px-3 py-1 rounded-full">
-                                                <span className="font-mono font-bold text-sm tracking-wider">{order.id}</span>
-                                            </div>
+                                {/* Order ID - Highlighted */}
+                                <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-sm font-medium text-orange-700">ID do Pedido</span>
+                                        <div className="bg-orange-500 text-white px-3 py-1 rounded-full">
+                                            <span className="font-mono font-bold text-sm tracking-wider">{order.id}</span>
                                         </div>
                                     </div>
-                                    
+                                </div>
+                                
+                                <div className="space-y-4 my-2.5">
                                     <div className="space-y-3 text-gray-600">
+                                        <div className="flex justify-between items-start mb-4 mb-6">
+                                            <h2 className="text-2xl font-bold text-gray-800">{order.customer}</h2>
+                                            <span className={`flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full border ${statusInfo.className}`}>
+                                                <StatusIcon className="w-4 h-4" />
+                                                {statusInfo.label}
+                                            </span>
+                                        </div>
                                         <div className="flex justify-between items-center">
                                             <span>Tipo:</span>
                                             <span className="flex items-center gap-2">
