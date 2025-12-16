@@ -44,7 +44,7 @@
     }
     
     .mb-safe {
-      margin-bottom: calc(110px + env(safe-area-inset-bottom));
+      margin-bottom: calc(77px + env(safe-area-inset-bottom));
     }
   }
 }
