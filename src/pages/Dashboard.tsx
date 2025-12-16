@@ -33,7 +33,7 @@ export function Dashboard() {
                 </Button>
             </div>
 
-            <div className={`grid gap-4 md:grid-cols-2 ${isTablesEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            <div className={`grid gap-4 grid-cols-2 md:grid-cols-2 ${isTablesEnabled ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t("totalRevenue")}</CardTitle>
@@ -74,8 +74,8 @@ export function Dashboard() {
                 </Card>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-                <Card className="col-span-4">
+            <div className="grid gap-4 grid-cols-2 md:grid-cols-2 lg:grid-cols-7">
+                <Card className="lg:col-span-4">
                     <CardHeader>
                         <CardTitle>Recent Revenue</CardTitle>
                     </CardHeader>
@@ -85,7 +85,7 @@ export function Dashboard() {
                         </div>
                     </CardContent>
                 </Card>
-                <Card className="col-span-3">
+                <Card className="lg:col-span-3">
                     <CardHeader>
                         <CardTitle>{t("recentOrders")}</CardTitle>
                         <p className="text-sm text-muted-foreground">
