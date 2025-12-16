@@ -30,3 +30,17 @@
     @apply bg-background text-foreground font-sans antialiased;
   }
 }
+
+/* Mobile Bottom Navigation Styles */
+@layer components {
+  .mobile-bottom-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Ensure proper spacing for mobile content */
+  @media (max-width: 767px) {
+    .mobile-content {
+      padding-bottom: calc(80px + env(safe-area-inset-bottom));
+    }
+  }
+}
