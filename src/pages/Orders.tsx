@@ -1,10 +1,9 @@
 import { useState } from "react"
 import { Button } from "../components/ui/button"
-import { Search, Truck, CheckCircle, Clock, ShoppingBag } from "lucide-react"
+import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { Input } from "../components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
 import { formatCurrency } from "../lib/utils"
 
@@ -12,7 +11,6 @@ export function Orders() {
     const navigate = useNavigate()
     const { orders } = useRestaurant()
     const [searchQuery, setSearchQuery] = useState("")
-    const [typeFilter, setTypeFilter] = useState("all")
     const [statusFilter, setStatusFilter] = useState("all")
 
     const filteredOrders = orders.filter(order => {
@@ -20,16 +18,12 @@ export function Orders() {
             (order.table && order.table.toLowerCase().includes(searchQuery.toLowerCase())) ||
             order.customer.toLowerCase().includes(searchQuery.toLowerCase())
         
-        const matchesType = typeFilter === "all" || 
-            (typeFilter === "delivery" && order.orderType === "delivery") ||
-            (typeFilter === "takeout" && order.orderType === "takeout") ||
-            (typeFilter === "dine_in" && order.orderType === "dine_in")
-        
         const matchesStatus = statusFilter === "all" ||
             (statusFilter === "delivery" && order.orderType === "delivery") ||
-            (statusFilter === "pickup" && order.orderType === "takeout")
+            (statusFilter === "pickup" && order.orderType === "takeout") ||
+            (statusFilter === "mesa" && order.orderType === "dine_in")
         
-        return matchesSearch && matchesType && matchesStatus
+        return matchesSearch && matchesStatus
     })
 
     const getStatusInfo = (status: string) => {
@@ -118,50 +112,55 @@ export function Orders() {
                     />
                 </div>
 
-                {/* Filter Options - Second Line */}
-                <div className="flex flex-col sm:flex-row gap-4">
-                    {/* Type Filter Dropdown */}
-                    <div className="w-full sm:w-64 relative">
-                        <Select value={typeFilter} onValueChange={setTypeFilter}>
-                            <SelectTrigger className="w-full py-3 px-4 border border-gray-300 rounded-lg bg-white focus:ring-blue-500 focus:border-blue-500 transition">
-                                <SelectValue placeholder="Tipo de Pedido" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">Tipo de Pedido</SelectItem>
-                                <SelectItem value="delivery">Delivery</SelectItem>
-                                <SelectItem value="pickup">Retirada</SelectItem>
-                                <SelectItem value="dine_in">Mesa</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
-
-                    {/* Filter Buttons */}
-                    <div className="flex items-center border border-gray-300 rounded-lg p-1 bg-white">
-                        <Button
-                            variant={statusFilter === "all" ? "default" : "ghost"}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                                statusFilter === "delivery"
-                                    ? "text-blue-600 bg-blue-50 border border-blue-200"
-                                    : "text-gray-600 hover:bg-gray-100"
-                            }`}
-                            onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
-                        >
-                            <Truck className="w-5 h-5" />
-                            Delivery
-                        </Button>
-                        <Button
-                            variant={statusFilter === "pickup" ? "default" : "ghost"}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-md font-medium transition-colors ${
-                                statusFilter === "pickup"
-                                    ? "text-blue-600 bg-blue-50 border border-blue-200"
-                                    : "text-gray-600 hover:bg-gray-100"
-                            }`}
-                            onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
-                        >
-                            <ShoppingBag className="w-5 h-5" />
-                            Retirada
-                        </Button>
-                    </div>
+                {/* Filter Buttons - Second Line */}
+                <div className="flex flex-wrap items-center gap-2 border border-gray-300 rounded-lg p-2 bg-white">
+                    <Button
+                        variant={statusFilter === "all" ? "default" : "ghost"}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                            statusFilter === "all"
+                                ? "text-blue-600 bg-blue-50 border border-blue-200"
+                                : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                        onClick={() => setStatusFilter("all")}
+                    >
+                        Todos
+                    </Button>
+                    <Button
+                        variant={statusFilter === "delivery" ? "default" : "ghost"}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                            statusFilter === "delivery"
+                                ? "text-blue-600 bg-blue-50 border border-blue-200"
+                                : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                        onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
+                    >
+                        <Truck className="w-4 h-4" />
+                        Delivery
+                    </Button>
+                    <Button
+                        variant={statusFilter === "pickup" ? "default" : "ghost"}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                            statusFilter === "pickup"
+                                ? "text-blue-600 bg-blue-50 border border-blue-200"
+                                : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                        onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
+                    >
+                        <ShoppingBag className="w-4 h-4" />
+                        Retirada
+                    </Button>
+                    <Button
+                        variant={statusFilter === "mesa" ? "default" : "ghost"}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                            statusFilter === "mesa"
+                                ? "text-blue-600 bg-blue-50 border border-blue-200"
+                                : "text-gray-600 hover:bg-gray-100"
+                        }`}
+                        onClick={() => setStatusFilter(statusFilter === "mesa" ? "all" : "mesa")}
+                    >
+                        <Armchair className="w-4 h-4" />
+                        Mesa
+                    </Button>
                 </div>
             </section>
 
