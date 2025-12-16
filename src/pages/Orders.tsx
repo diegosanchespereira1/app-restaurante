@@ -113,7 +113,7 @@ export function Orders() {
                 </div>
 
                 {/* Filter Buttons - Second Line */}
-                <div className="flex flex-wrap items-center gap-2 border border-gray-300 rounded-lg p-2 bg-white">
+                <div className="flex justify-between items-center gap-2 border border-gray-300 rounded-lg p-2 bg-white">
                     <Button
                         variant={statusFilter === "all" ? "default" : "ghost"}
                         className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
