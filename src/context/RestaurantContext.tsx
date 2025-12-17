@@ -197,43 +197,67 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     useEffect(() => {
         fetchData()
 
-        // Skip real-time subscriptions in demo mode
-        if (!isSupabaseConfigured) {
-            return
-        }
+        // Real-time subscriptions for Supabase mode
+        if (isSupabaseConfigured) {
+            // Real-time subscriptions
+            const channels = supabase
+                .channel('restaurant-updates')
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'orders' },
+                    (payload) => {
+                        console.log('Real-time order update:', payload)
+                        fetchData() // Refresh data when orders change
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'restaurant_tables' },
+                    (payload) => {
+                        console.log('Real-time table update:', payload)
+                        fetchData() // Refresh data when tables change
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'menu_items' },
+                    (payload) => {
+                        console.log('Real-time menu update:', payload)
+                        fetchData() // Refresh data when menu changes
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'expenses' },
+                    (payload) => {
+                        console.log('Real-time expense update:', payload)
+                        fetchData() // Refresh data when expenses change
+                    }
+                )
+                .on(
+                    'postgres_changes',
+                    { event: '*', schema: 'public', table: 'categories' },
+                    (payload) => {
+                        console.log('Real-time category update:', payload)
+                        fetchData() // Refresh data when categories change
+                    }
+                )
+                .subscribe((status) => {
+                    console.log('Real-time subscription status:', status)
+                })
 
-        // Real-time subscriptions
-        const channels = supabase
-            .channel('custom-all-channel')
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'orders' },
-                () => { fetchData() }
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'restaurant_tables' },
-                () => { fetchData() }
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'menu_items' },
-                () => { fetchData() }
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'expenses' },
-                () => { fetchData() }
-            )
-            .on(
-                'postgres_changes',
-                { event: '*', schema: 'public', table: 'categories' },
-                () => { fetchData() }
-            )
-            .subscribe()
+            return () => {
+                supabase.removeChannel(channels)
+            }
+        } else {
+            // Demo mode: polling for real-time updates
+            console.log('Demo mode: starting polling for real-time updates')
+            const pollInterval = setInterval(() => {
+                console.log('Polling for updates in demo mode...')
+                fetchData()
+            }, 3000) // Poll every 3 seconds in demo mode
 
-        return () => {
-            supabase.removeChannel(channels)
+            return () => clearInterval(pollInterval)
         }
     }, [])
 
@@ -423,7 +447,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
-    const closeTable = async (tableId: number, method: "Cash" | "Card" | "Voucher" | "PIX") => {
+    const closeTable = async (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => {
         const table = tables.find(t => t.id === tableId)
         if (!table) return { success: false, error: "Table not found" }
 
@@ -432,7 +456,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
         setOrders(prev => prev.map(order => {
             if (order.table === table.number && order.status !== "Closed") {
-                return { ...order, status: "Closed", paymentMethod: method, closedAt: now }
+                return { ...order, status: "Closed", paymentMethod: paymentMethod, closedAt: now }
             }
             return order
         }))
@@ -460,7 +484,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             const orderIds = activeOrders.map((o: any) => o.id)
             const { error: updateError } = await supabase
                 .from('orders')
-                .update({ status: 'Closed', payment_method: method, closed_at: now })
+                .update({ status: 'Closed', payment_method: paymentMethod, closed_at: now })
                 .in('id', orderIds)
 
             if (updateError) {
@@ -638,7 +662,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     }
 
     const generateOrderId = () => {
-        const orderNumber = nextOrderNumber.toString().padStart(2, '0')
+        const orderNumber = nextOrderNumber.toString().padStart(4, '0')
         setNextOrderNumber(prev => prev + 1)
         return orderNumber
     }

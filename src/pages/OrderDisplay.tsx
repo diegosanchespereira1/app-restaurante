@@ -2,27 +2,34 @@ import { useState, useEffect } from "react"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
-import { Clock, CheckCircle, Truck, ShoppingBag, Armchair, RefreshCw } from "lucide-react"
+import { Clock, CheckCircle, Truck, ShoppingBag, Armchair, RefreshCw, Wifi, WifiOff } from "lucide-react"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useSettings } from "../context/SettingsContext"
 import { formatCurrency } from "../lib/utils"
 
 export function OrderDisplay() {
-    const { orders, updateOrderStatus } = useRestaurant()
+    const { orders, updateOrderStatus, isDemoMode } = useRestaurant()
     const { isOrderDisplayEnabled } = useSettings()
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [lastUpdate, setLastUpdate] = useState(new Date())
+    const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'polling'>('connected')
 
-    // Auto-refresh every 30 seconds
+    // Real-time updates: 5 seconds for faster updates, 2 seconds in demo mode
+    const REFRESH_INTERVAL = isDemoMode ? 2000 : 5000
+
+    // Auto-refresh for real-time updates
     useEffect(() => {
         const interval = setInterval(() => {
             setIsRefreshing(true)
-            setTimeout(() => setIsRefreshing(false), 1000)
-            setLastUpdate(new Date())
-        }, 30000)
+            setConnectionStatus(isDemoMode ? 'polling' : 'connected')
+            setTimeout(() => {
+                setIsRefreshing(false)
+                setLastUpdate(new Date())
+            }, 500)
+        }, REFRESH_INTERVAL)
 
         return () => clearInterval(interval)
-    }, [])
+    }, [REFRESH_INTERVAL, isDemoMode])
 
     // Filter active orders (exclude delivered/closed)
     const activeOrders = orders.filter(order => 
@@ -30,7 +37,9 @@ export function OrderDisplay() {
     )
 
     const handleStatusUpdate = async (orderId: string, newStatus: typeof orders[0]["status"]) => {
+        setConnectionStatus(isDemoMode ? 'polling' : 'connected')
         await updateOrderStatus(orderId, newStatus)
+        setLastUpdate(new Date())
     }
 
     const getNextStatus = (currentStatus: string) => {
@@ -122,6 +131,28 @@ export function OrderDisplay() {
         )
     }
 
+    const getConnectionIcon = () => {
+        switch (connectionStatus) {
+            case 'connected':
+                return <Wifi className="w-4 h-4 text-green-500" />
+            case 'polling':
+                return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
+            case 'disconnected':
+                return <WifiOff className="w-4 h-4 text-red-500" />
+        }
+    }
+
+    const getConnectionText = () => {
+        switch (connectionStatus) {
+            case 'connected':
+                return "Conectado"
+            case 'polling':
+                return isDemoMode ? "Modo Demo - Atualizando" : "Conectado - Atualizando"
+            case 'disconnected':
+                return "Desconectado"
+        }
+    }
+
     return (
         <div className="min-h-screen bg-gray-100">
             {/* Header */}
@@ -135,6 +166,10 @@ export function OrderDisplay() {
                             </p>
                         </div>
                         <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2 text-sm">
+                                {getConnectionIcon()}
+                                <span className="text-gray-600">{getConnectionText()}</span>
+                            </div>
                             <Badge variant="outline" className="text-lg px-3 py-1">
                                 {activeOrders.length} pedidos ativos
                             </Badge>
@@ -143,8 +178,11 @@ export function OrderDisplay() {
                                 size="sm"
                                 onClick={() => {
                                     setIsRefreshing(true)
-                                    setTimeout(() => setIsRefreshing(false), 1000)
-                                    setLastUpdate(new Date())
+                                    setConnectionStatus(isDemoMode ? 'polling' : 'connected')
+                                    setTimeout(() => {
+                                        setIsRefreshing(false)
+                                        setLastUpdate(new Date())
+                                    }, 500)
                                 }}
                                 disabled={isRefreshing}
                             >
@@ -259,7 +297,11 @@ export function OrderDisplay() {
                                                     onClick={() => handleStatusUpdate(order.id, nextStatus as any)}
                                                     className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white"
                                                     size="lg"
+                                                    disabled={isRefreshing}
                                                 >
+                                                    {isRefreshing ? (
+                                                        <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                                                    ) : null}
                                                     {statusInfo.nextAction}
                                                 </Button>
                                             )}
