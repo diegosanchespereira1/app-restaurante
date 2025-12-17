@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Label } from "../components/ui/label"
 import { Switch } from "../components/ui/switch"
+import { Button } from "../components/ui/button"
 import {
     Select,
     SelectContent,
@@ -10,10 +11,35 @@ import {
 } from "../components/ui/select"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
+import { Save, RotateCcw } from "lucide-react"
+import { useState } from "react"
 
 export function Settings() {
     const { language, setLanguage, t } = useLanguage()
-    const { updateSettings, isTablesEnabled, isOrderDisplayEnabled } = useSettings()
+    const { 
+        updateSettings, 
+        isTablesEnabled, 
+        isOrderDisplayEnabled, 
+        saveSettings, 
+        resetSettings, 
+        isLoading
+    } = useSettings()
+    
+    const [saveMessage, setSaveMessage] = useState<string | null>(null)
+
+    const handleSave = () => {
+        saveSettings()
+        setSaveMessage("Configurações salvas com sucesso!")
+        setTimeout(() => setSaveMessage(null), 3000)
+    }
+
+    const handleReset = () => {
+        if (window.confirm("Tem certeza que deseja resetar todas as configurações para os valores padrão?")) {
+            resetSettings()
+            setSaveMessage("Configurações resetadas para o padrão!")
+            setTimeout(() => setSaveMessage(null), 3000)
+        }
+    }
 
     return (
         <div className="space-y-6">
@@ -21,6 +47,37 @@ export function Settings() {
                 <h2 className="text-3xl font-bold tracking-tight">{t("settingsTitle")}</h2>
                 <p className="text-muted-foreground">{t("settingsDescription")}</p>
             </div>
+
+            {/* Save/Reset Actions */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Ações de Configuração</CardTitle>
+                    <CardDescription>
+                        Salve suas configurações ou reset para os valores padrão
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="flex gap-4">
+                        <Button onClick={handleSave} className="flex items-center gap-2">
+                            <Save className="w-4 h-4" />
+                            Salvar Configurações
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            onClick={handleReset}
+                            className="flex items-center gap-2"
+                        >
+                            <RotateCcw className="w-4 h-4" />
+                            Reset para Padrão
+                        </Button>
+                    </div>
+                    {saveMessage && (
+                        <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md">
+                            {saveMessage}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
 
             <div className="grid gap-6">
                 <Card>
@@ -53,6 +110,9 @@ export function Settings() {
                         <div className="flex items-center justify-between">
                             <div className="space-y-0.5">
                                 <Label htmlFor="enable-tables">{t("enableTables")}</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Status atual: {isTablesEnabled ? "Ativado" : "Desativado"}
+                                </p>
                             </div>
                             <Switch
                                 id="enable-tables"
@@ -76,7 +136,7 @@ export function Settings() {
                             <div className="space-y-0.5">
                                 <Label htmlFor="enable-order-display">Habilitar Tela de Pedidos</Label>
                                 <p className="text-sm text-muted-foreground">
-                                    Disponível em: /order-display
+                                    Disponível em: /order-display • Status atual: {isOrderDisplayEnabled ? "Ativado" : "Desativado"}
                                 </p>
                             </div>
                             <Switch
@@ -88,6 +148,38 @@ export function Settings() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Current Settings Display */}
+            <Card>
+                <CardHeader>
+                    <CardTitle>Configurações Atuais</CardTitle>
+                    <CardDescription>
+                        Resumo das configurações salvas
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                            <span>Idioma:</span>
+                            <span className="font-medium">{language === 'pt' ? 'Português' : 'English'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Gestão de Mesas:</span>
+                            <span className="font-medium">{isTablesEnabled ? 'Ativado' : 'Desativado'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                            <span>Tela de Pedidos:</span>
+                            <span className="font-medium">{isOrderDisplayEnabled ? 'Ativado' : 'Desativado'}</span>
+                        </div>
+                        {isLoading && (
+                            <div className="flex justify-between">
+                                <span>Estado:</span>
+                                <span className="font-medium text-orange-600">Carregando...</span>
+                            </div>
+                        )}
+                    </div>
+                </CardContent>
+            </Card>
         </div>
     )
 }

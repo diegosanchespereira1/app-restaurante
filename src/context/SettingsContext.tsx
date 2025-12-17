@@ -10,6 +10,9 @@ interface SettingsContextType {
   updateSettings: (newSettings: Partial<Settings>) => void
   isTablesEnabled: boolean
   isOrderDisplayEnabled: boolean
+  saveSettings: () => void
+  resetSettings: () => void
+  isLoading: boolean
 }
 
 const defaultSettings: Settings = {
@@ -21,27 +24,74 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(defaultSettings)
+  const [isLoading, setIsLoading] = useState(true)
 
   // Load settings from localStorage on mount
   useEffect(() => {
-    const savedSettings = localStorage.getItem('restaurant-settings')
-    if (savedSettings) {
+    const loadSettings = async () => {
       try {
-        const parsed = JSON.parse(savedSettings)
-        setSettings({ ...defaultSettings, ...parsed })
+        const savedSettings = localStorage.getItem('restaurant-settings')
+        console.log('Loading settings from localStorage:', savedSettings)
+        
+        if (savedSettings) {
+          const parsed = JSON.parse(savedSettings)
+          console.log('Parsed settings:', parsed)
+          
+          // Merge saved settings with defaults to handle new settings that might be added
+          const mergedSettings = { ...defaultSettings, ...parsed }
+          console.log('Merged settings:', mergedSettings)
+          
+          setSettings(mergedSettings)
+        } else {
+          console.log('No saved settings found, using defaults')
+          setSettings(defaultSettings)
+        }
       } catch (error) {
-        console.error('Error parsing saved settings:', error)
+        console.error('Error loading settings from localStorage:', error)
+        setSettings(defaultSettings)
+      } finally {
+        setIsLoading(false)
       }
     }
+
+    loadSettings()
   }, [])
 
   // Save settings to localStorage whenever they change
   useEffect(() => {
-    localStorage.setItem('restaurant-settings', JSON.stringify(settings))
-  }, [settings])
+    if (!isLoading) {
+      try {
+        localStorage.setItem('restaurant-settings', JSON.stringify(settings))
+        console.log('Settings saved to localStorage:', settings)
+      } catch (error) {
+        console.error('Error saving settings to localStorage:', error)
+      }
+    }
+  }, [settings, isLoading])
 
   const updateSettings = (newSettings: Partial<Settings>) => {
+    console.log('Updating settings:', newSettings)
     setSettings(prev => ({ ...prev, ...newSettings }))
+  }
+
+  const saveSettings = () => {
+    try {
+      localStorage.setItem('restaurant-settings', JSON.stringify(settings))
+      console.log('Settings manually saved:', settings)
+      // You could add a toast notification here
+    } catch (error) {
+      console.error('Error manually saving settings:', error)
+    }
+  }
+
+  const resetSettings = () => {
+    setSettings(defaultSettings)
+    try {
+      localStorage.removeItem('restaurant-settings')
+      console.log('Settings reset to defaults')
+    } catch (error) {
+      console.error('Error resetting settings:', error)
+    }
   }
 
   const isTablesEnabled = settings.enableTables
@@ -53,7 +103,10 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         settings,
         updateSettings,
         isTablesEnabled,
-        isOrderDisplayEnabled
+        isOrderDisplayEnabled,
+        saveSettings,
+        resetSettings,
+        isLoading
       }}
     >
       {children}
