@@ -1,10 +1,7 @@
 import { Sidebar } from "./Sidebar"
 import { MobileBottomNav } from "./MobileBottomNav"
-import { useLanguage } from "../../context/LanguageContext"
 
 export function Layout({ children }: { children: React.ReactNode }) {
-    const { t } = useLanguage()
-
     return (
         <div className="flex h-screen bg-background">
             {/* Desktop Sidebar */}

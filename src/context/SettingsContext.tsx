@@ -2,16 +2,19 @@ import { createContext, useContext, useState, useEffect, type ReactNode } from '
 
 interface Settings {
   enableTables: boolean
+  enableOrderDisplay: boolean
 }
 
 interface SettingsContextType {
   settings: Settings
   updateSettings: (newSettings: Partial<Settings>) => void
   isTablesEnabled: boolean
+  isOrderDisplayEnabled: boolean
 }
 
 const defaultSettings: Settings = {
-  enableTables: true
+  enableTables: true,
+  enableOrderDisplay: false
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
@@ -42,13 +45,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   }
 
   const isTablesEnabled = settings.enableTables
+  const isOrderDisplayEnabled = settings.enableOrderDisplay
 
   return (
     <SettingsContext.Provider
       value={{
         settings,
         updateSettings,
-        isTablesEnabled
+        isTablesEnabled,
+        isOrderDisplayEnabled
       }}
     >
       {children}

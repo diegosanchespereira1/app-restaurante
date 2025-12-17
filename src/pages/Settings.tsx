@@ -13,7 +13,7 @@ import { useSettings } from "../context/SettingsContext"
 
 export function Settings() {
     const { language, setLanguage, t } = useLanguage()
-    const { updateSettings, isTablesEnabled } = useSettings()
+    const { updateSettings, isTablesEnabled, isOrderDisplayEnabled } = useSettings()
 
     return (
         <div className="space-y-6">
@@ -58,6 +58,31 @@ export function Settings() {
                                 id="enable-tables"
                                 checked={isTablesEnabled}
                                 onCheckedChange={(checked) => updateSettings({ enableTables: checked })}
+                            />
+                        </div>
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Tela de Pedidos</CardTitle>
+                        <CardDescription>
+                            Ative para usar a tela dedicada de monitoramento de pedidos. 
+                            Esta tela é otimizada para cozinhas e permite visualizar e atualizar status dos pedidos em tempo real.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex items-center justify-between">
+                            <div className="space-y-0.5">
+                                <Label htmlFor="enable-order-display">Habilitar Tela de Pedidos</Label>
+                                <p className="text-sm text-muted-foreground">
+                                    Disponível em: /order-display
+                                </p>
+                            </div>
+                            <Switch
+                                id="enable-order-display"
+                                checked={isOrderDisplayEnabled}
+                                onCheckedChange={(checked) => updateSettings({ enableOrderDisplay: checked })}
                             />
                         </div>
                     </CardContent>

@@ -10,6 +10,7 @@ import { Menu } from "./pages/Menu"
 import { Settings } from "./pages/Settings"
 import { Finance } from "./pages/Finance"
 import { SalesChart } from "./pages/SalesChart"
+import { OrderDisplay } from "./pages/OrderDisplay"
 
 import { RestaurantProvider } from "./context/RestaurantContext"
 import { LanguageProvider } from "./context/LanguageContext"
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/tables/:id/bill" element={<TableBill />} />
                 <Route path="/menu" element={<Menu />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/order-display" element={<OrderDisplay />} />
               </Routes>
             </Layout>
           </Router>
