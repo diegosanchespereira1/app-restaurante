@@ -155,7 +155,7 @@ export function OrderDisplay() {
                 </div>
             </header>
 
-            {/* Orders Grid */}
+            {/* Orders Grid - Fixed 2 columns */}
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {activeOrders.length === 0 ? (
                     <div className="text-center py-16">
@@ -170,7 +170,7 @@ export function OrderDisplay() {
                         </div>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-2 gap-6">
                         {activeOrders
                             .sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime())
                             .map((order) => {
