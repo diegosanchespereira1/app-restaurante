@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
@@ -14,8 +14,17 @@ export function OrderDisplayStandalone() {
     const [lastUpdate, setLastUpdate] = useState(new Date())
     const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('connected')
 
-    // Only manual refresh - no automatic polling
-    // Real-time updates are handled by Supabase WebSocket subscriptions
+    // Auto-refresh every 30 seconds for demo mode, manual only for production
+    useEffect(() => {
+        if (isDemoMode) {
+            const interval = setInterval(() => {
+                console.log('Demo mode: Auto-refreshing orders...')
+                window.location.reload()
+            }, 30000) // 30 seconds in demo mode
+
+            return () => clearInterval(interval)
+        }
+    }, [isDemoMode])
 
     // Filter active orders (exclude delivered/closed)
     const activeOrders = orders.filter(order => 
@@ -23,23 +32,34 @@ export function OrderDisplayStandalone() {
     )
 
     const handleStatusUpdate = async (orderId: string, newStatus: typeof orders[0]["status"]) => {
+        console.log(`Updating order ${orderId} to status: ${newStatus}`)
         setConnectionStatus('checking')
-        await updateOrderStatus(orderId, newStatus)
-        setLastUpdate(new Date())
-        setConnectionStatus('connected')
+        
+        try {
+            const result = await updateOrderStatus(orderId, newStatus)
+            console.log('Update result:', result)
+            
+            if (result.success) {
+                setLastUpdate(new Date())
+                setConnectionStatus('connected')
+                console.log('Order status updated successfully')
+            } else {
+                console.error('Failed to update order:', result.error)
+                setConnectionStatus('disconnected')
+            }
+        } catch (error) {
+            console.error('Error updating order status:', error)
+            setConnectionStatus('disconnected')
+        }
     }
 
     const handleManualRefresh = async () => {
+        console.log('Manual refresh triggered')
         setIsRefreshing(true)
         setConnectionStatus('checking')
         
-        // Trigger a page reload to fetch latest data
-        // In a real app, you'd have a refresh function in the context
-        setTimeout(() => {
-            setIsRefreshing(false)
-            setLastUpdate(new Date())
-            setConnectionStatus('connected')
-        }, 1000)
+        // Force a page reload to get the latest data
+        window.location.reload()
     }
 
     const getNextStatus = (currentStatus: string) => {
@@ -154,11 +174,11 @@ export function OrderDisplayStandalone() {
     const getConnectionText = () => {
         switch (connectionStatus) {
             case 'connected':
-                return isDemoMode ? "Modo Demo - Atualizações Manuais" : "Conectado - Tempo Real"
+                return isDemoMode ? "Modo Demo - Auto-refresh 30s" : "Conectado - Tempo Real"
             case 'checking':
-                return "Verificando atualizações..."
+                return "Atualizando..."
             case 'disconnected':
-                return "Desconectado"
+                return "Erro de conexão"
         }
     }
 
@@ -309,9 +329,9 @@ export function OrderDisplayStandalone() {
                                                     onClick={() => handleStatusUpdate(order.id, nextStatus as any)}
                                                     className="w-full mt-4 bg-blue-600 hover:bg-blue-700 text-white"
                                                     size="lg"
-                                                    disabled={isRefreshing}
+                                                    disabled={isRefreshing || connectionStatus === 'checking'}
                                                 >
-                                                    {isRefreshing ? (
+                                                    {connectionStatus === 'checking' ? (
                                                         <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                                                     ) : null}
                                                     {statusInfo.nextAction}

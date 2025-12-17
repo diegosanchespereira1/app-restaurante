@@ -118,10 +118,14 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
         // Demo mode: use demo data when Supabase is not configured
         if (!isSupabaseConfigured) {
+            console.log('Demo mode: Fetching demo data...')
             setMenuItems(demoMenuItems)
             setTables(demoTables)
             setCategories(demoCategories)
-            setOrders([])
+            // In demo mode, keep existing orders or set empty if none exist
+            if (orders.length === 0) {
+                setOrders([])
+            }
             setExpenses([])
             setIsLoading(false)
             return
@@ -252,8 +256,17 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 supabase.removeChannel(channels)
             }
         } else {
-            // Demo mode: no polling - updates only through user actions
-            console.log('Demo mode: Real-time updates through user actions only')
+            // Demo mode: polling for updates every 10 seconds
+            console.log('Demo mode: Starting polling for updates (10s interval)')
+            const pollInterval = setInterval(() => {
+                console.log('Demo mode: Polling for updates...')
+                fetchData()
+            }, 10000) // Poll every 10 seconds in demo mode
+
+            return () => {
+                console.log('Cleaning up demo mode polling')
+                clearInterval(pollInterval)
+            }
         }
     }, [])
 
@@ -319,6 +332,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     }
 
     const updateOrderStatus = async (orderId: string, status: Order["status"]) => {
+        console.log(`Updating order ${orderId} to status: ${status}`)
+        
         // Optimistic update
         const previousOrders = [...orders]
         setOrders((prev) =>
@@ -327,6 +342,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
         // Demo mode: just use local state
         if (!isSupabaseConfigured) {
+            console.log('Demo mode: Order status updated locally')
             return { success: true }
         }
 
@@ -336,6 +352,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             setOrders(previousOrders)
             return { success: false, error: error.message }
         }
+        console.log('Order status updated successfully in database')
         return { success: true }
     }
 
