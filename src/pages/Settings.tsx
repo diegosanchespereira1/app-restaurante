@@ -11,7 +11,7 @@ import {
 } from "../components/ui/select"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
-import { Save, RotateCcw } from "lucide-react"
+import { Save, RotateCcw, ExternalLink } from "lucide-react"
 import { useState } from "react"
 
 export function Settings() {
@@ -39,6 +39,13 @@ export function Settings() {
             setSaveMessage("Configurações resetadas para o padrão!")
             setTimeout(() => setSaveMessage(null), 3000)
         }
+    }
+
+    const openOrderDisplayInNewWindow = () => {
+        const currentUrl = window.location.href
+        const baseUrl = currentUrl.split('#')[0] // Remove hash if present
+        const orderDisplayUrl = `${baseUrl}#/order-display-standalone`
+        window.open(orderDisplayUrl, '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes')
     }
 
     return (
@@ -78,6 +85,30 @@ export function Settings() {
                     )}
                 </CardContent>
             </Card>
+
+            {/* Order Display Actions */}
+            {isOrderDisplayEnabled && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Tela de Pedidos</CardTitle>
+                        <CardDescription>
+                            Acesso rápido para a tela dedicada de monitoramento de pedidos
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <Button 
+                            onClick={openOrderDisplayInNewWindow}
+                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                        >
+                            <ExternalLink className="w-4 h-4" />
+                            Abrir Tela de Pedidos em Nova Janela
+                        </Button>
+                        <p className="text-sm text-muted-foreground mt-2">
+                            A tela será aberta em uma nova janela sem menus, otimizada para monitoramento de cozinha
+                        </p>
+                    </CardContent>
+                </Card>
+            )}
 
             <div className="grid gap-6">
                 <Card>
