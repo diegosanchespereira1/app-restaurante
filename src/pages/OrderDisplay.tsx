@@ -220,11 +220,11 @@ export function OrderDisplay() {
                                                 </div>
                                             </div>
 
-                                            {/* Items */}
+                                            {/* Items - Show ALL items */}
                                             <div>
                                                 <h4 className="font-medium text-gray-900 mb-2">Itens:</h4>
                                                 <div className="space-y-1">
-                                                    {order.items.slice(0, 3).map((item, index) => (
+                                                    {order.items.map((item, index) => (
                                                         <div key={index} className="flex justify-between text-sm">
                                                             <span className="text-gray-600">
                                                                 {item.quantity}x {item.name}
@@ -234,11 +234,6 @@ export function OrderDisplay() {
                                                             </span>
                                                         </div>
                                                     ))}
-                                                    {order.items.length > 3 && (
-                                                        <div className="text-xs text-gray-500 text-center pt-1">
-                                                            +{order.items.length - 3} itens adicionais
-                                                        </div>
-                                                    )}
                                                 </div>
                                             </div>
 
