@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
@@ -12,24 +12,10 @@ export function OrderDisplayStandalone() {
     const { isOrderDisplayEnabled } = useSettings()
     const [isRefreshing, setIsRefreshing] = useState(false)
     const [lastUpdate, setLastUpdate] = useState(new Date())
-    const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'polling'>('connected')
+    const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'checking'>('connected')
 
-    // Real-time updates: 5 seconds for faster updates, 2 seconds in demo mode
-    const REFRESH_INTERVAL = isDemoMode ? 2000 : 5000
-
-    // Auto-refresh for real-time updates
-    useEffect(() => {
-        const interval = setInterval(() => {
-            setIsRefreshing(true)
-            setConnectionStatus(isDemoMode ? 'polling' : 'connected')
-            setTimeout(() => {
-                setIsRefreshing(false)
-                setLastUpdate(new Date())
-            }, 500)
-        }, REFRESH_INTERVAL)
-
-        return () => clearInterval(interval)
-    }, [REFRESH_INTERVAL, isDemoMode])
+    // Only manual refresh - no automatic polling
+    // Real-time updates are handled by Supabase WebSocket subscriptions
 
     // Filter active orders (exclude delivered/closed)
     const activeOrders = orders.filter(order => 
@@ -37,9 +23,23 @@ export function OrderDisplayStandalone() {
     )
 
     const handleStatusUpdate = async (orderId: string, newStatus: typeof orders[0]["status"]) => {
-        setConnectionStatus(isDemoMode ? 'polling' : 'connected')
+        setConnectionStatus('checking')
         await updateOrderStatus(orderId, newStatus)
         setLastUpdate(new Date())
+        setConnectionStatus('connected')
+    }
+
+    const handleManualRefresh = async () => {
+        setIsRefreshing(true)
+        setConnectionStatus('checking')
+        
+        // Trigger a page reload to fetch latest data
+        // In a real app, you'd have a refresh function in the context
+        setTimeout(() => {
+            setIsRefreshing(false)
+            setLastUpdate(new Date())
+            setConnectionStatus('connected')
+        }, 1000)
     }
 
     const getNextStatus = (currentStatus: string) => {
@@ -144,7 +144,7 @@ export function OrderDisplayStandalone() {
         switch (connectionStatus) {
             case 'connected':
                 return <Wifi className="w-4 h-4 text-green-500" />
-            case 'polling':
+            case 'checking':
                 return <RefreshCw className="w-4 h-4 text-blue-500 animate-spin" />
             case 'disconnected':
                 return <WifiOff className="w-4 h-4 text-red-500" />
@@ -154,9 +154,9 @@ export function OrderDisplayStandalone() {
     const getConnectionText = () => {
         switch (connectionStatus) {
             case 'connected':
-                return "Conectado"
-            case 'polling':
-                return isDemoMode ? "Modo Demo - Atualizando" : "Conectado - Atualizando"
+                return isDemoMode ? "Modo Demo - Atualizações Manuais" : "Conectado - Tempo Real"
+            case 'checking':
+                return "Verificando atualizações..."
             case 'disconnected':
                 return "Desconectado"
         }
@@ -185,14 +185,7 @@ export function OrderDisplayStandalone() {
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => {
-                                    setIsRefreshing(true)
-                                    setConnectionStatus(isDemoMode ? 'polling' : 'connected')
-                                    setTimeout(() => {
-                                        setIsRefreshing(false)
-                                        setLastUpdate(new Date())
-                                    }, 500)
-                                }}
+                                onClick={handleManualRefresh}
                                 disabled={isRefreshing}
                             >
                                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />

@@ -199,6 +199,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
         // Real-time subscriptions for Supabase mode
         if (isSupabaseConfigured) {
+            console.log('Setting up real-time subscriptions...')
             // Real-time subscriptions
             const channels = supabase
                 .channel('restaurant-updates')
@@ -206,7 +207,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'orders' },
                     (payload) => {
-                        console.log('Real-time order update:', payload)
+                        console.log('Real-time order update detected:', payload)
                         fetchData() // Refresh data when orders change
                     }
                 )
@@ -214,7 +215,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'restaurant_tables' },
                     (payload) => {
-                        console.log('Real-time table update:', payload)
+                        console.log('Real-time table update detected:', payload)
                         fetchData() // Refresh data when tables change
                     }
                 )
@@ -222,7 +223,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'menu_items' },
                     (payload) => {
-                        console.log('Real-time menu update:', payload)
+                        console.log('Real-time menu update detected:', payload)
                         fetchData() // Refresh data when menu changes
                     }
                 )
@@ -230,7 +231,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'expenses' },
                     (payload) => {
-                        console.log('Real-time expense update:', payload)
+                        console.log('Real-time expense update detected:', payload)
                         fetchData() // Refresh data when expenses change
                     }
                 )
@@ -238,7 +239,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     'postgres_changes',
                     { event: '*', schema: 'public', table: 'categories' },
                     (payload) => {
-                        console.log('Real-time category update:', payload)
+                        console.log('Real-time category update detected:', payload)
                         fetchData() // Refresh data when categories change
                     }
                 )
@@ -247,17 +248,12 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 })
 
             return () => {
+                console.log('Cleaning up real-time subscriptions')
                 supabase.removeChannel(channels)
             }
         } else {
-            // Demo mode: polling for real-time updates
-            console.log('Demo mode: starting polling for real-time updates')
-            const pollInterval = setInterval(() => {
-                console.log('Polling for updates in demo mode...')
-                fetchData()
-            }, 3000) // Poll every 3 seconds in demo mode
-
-            return () => clearInterval(pollInterval)
+            // Demo mode: no polling - updates only through user actions
+            console.log('Demo mode: Real-time updates through user actions only')
         }
     }, [])
 
