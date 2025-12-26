@@ -129,8 +129,11 @@ export function formatReceiptToESCPOS(data: {
   commands += ESCPOS.LINE_FEED
   
   // Totais
+  // Calcular subtotal se não fornecido (fallback de segurança)
+  const subtotal = data.subtotal ?? data.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+  
   commands += ESCPOS.ALIGN_RIGHT
-  commands += `Subtotal: R$ ${data.subtotal.toFixed(2)}\n`
+  commands += `Subtotal: R$ ${subtotal.toFixed(2)}\n`
   commands += ESCPOS.BOLD_ON
   commands += ESCPOS.FONT_LARGE
   commands += `TOTAL: R$ ${data.total.toFixed(2)}\n`

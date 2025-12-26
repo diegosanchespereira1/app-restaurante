@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../context/AuthContext'
 import { useLanguage } from '../../context/LanguageContext'
@@ -38,8 +38,37 @@ export function ProtectedRoute({
     return <Navigate to="/login" replace />
   }
 
-  // If role is required, check permissions
-  if (requiredRole && profile) {
+  // If role is required, always check permissions (fail-safe: deny access if profile is missing)
+  if (requiredRole) {
+    // If there's no profile when a role is required, deny access for security
+    if (!profile) {
+      return (
+        <div className="flex items-center justify-center min-h-screen p-4">
+          <Card className="w-full max-w-md">
+            <CardHeader>
+              <div className="flex justify-center mb-4">
+                <div className="rounded-full bg-destructive/10 p-3">
+                  <AlertCircle className="h-8 w-8 text-destructive" />
+                </div>
+              </div>
+              <CardTitle className="text-center">
+                {t('accessDenied') || 'Acesso Negado'}
+              </CardTitle>
+              <CardDescription className="text-center">
+                {t('accessDeniedMessage') || 'Você não tem permissão para acessar esta página'}
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="text-center">
+              <Button onClick={() => window.history.back()}>
+                {t('back') || 'Voltar'}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )
+    }
+
+    // Check permissions - hasPermission already returns false if profile is null
     if (!hasPermission(requiredRole)) {
       return (
         <div className="flex items-center justify-center min-h-screen p-4">

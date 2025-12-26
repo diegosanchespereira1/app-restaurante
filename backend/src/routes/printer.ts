@@ -123,10 +123,22 @@ router.post('/print', async (req: Request, res: Response<ApiResponse>) => {
     }
 
     // Validação básica dos dados de impressão
-    if (!printData.orderId || !printData.customer || !printData.items || !printData.total) {
+    // Nota: total pode ser 0 (pedidos gratuitos ou com 100% de desconto)
+    if (
+      printData.orderId == null || 
+      printData.customer == null || 
+      !Array.isArray(printData.items) || 
+      printData.items.length === 0 ||
+      printData.subtotal == null ||
+      typeof printData.subtotal !== 'number' ||
+      isNaN(printData.subtotal) ||
+      printData.total == null || 
+      typeof printData.total !== 'number' ||
+      isNaN(printData.total)
+    ) {
       return res.status(400).json({
         success: false,
-        message: 'printData deve conter: orderId, customer, items, total'
+        message: 'printData deve conter: orderId, customer, items (array não vazio), subtotal (número válido), total (número válido)'
       })
     }
 
