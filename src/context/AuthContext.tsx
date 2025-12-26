@@ -21,7 +21,7 @@ interface AuthContextType {
   isLoading: boolean
   error: string | null
   signIn: (emailOrUsername: string, password: string) => Promise<{ success: boolean; error?: string }>
-  signUp: (email: string, password: string, fullName?: string, role?: UserRole, username?: string) => Promise<{ success: boolean; error?: string }>
+  signUp: (email: string, password: string, fullName?: string, username?: string) => Promise<{ success: boolean; error?: string }>
   signOut: () => Promise<void>
   refreshProfile: () => Promise<void>
   hasPermission: (requiredRole: UserRole | UserRole[]) => boolean
@@ -396,7 +396,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     email: string,
     password: string,
     fullName?: string,
-    role: UserRole = 'usuario',
     username?: string
   ): Promise<{ success: boolean; error?: string }> => {
     setError(null)
