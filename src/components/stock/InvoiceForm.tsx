@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState } from "react"
 import { useStock } from "../../context/StockContext"
 import { Button } from "../ui/button"
 import { Input } from "../ui/input"
