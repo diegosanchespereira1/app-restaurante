@@ -13,7 +13,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const [language, setLanguage] = useState<Language>("pt")
 
     const t = (key: ExtendedTranslationKey) => {
-        return translations[language][key] || key
+        const translation = translations[language]
+        if (key in translation) {
+            return (translation as Record<string, string>)[key] || key
+        }
+        return key
     }
 
     return (
