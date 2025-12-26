@@ -4,6 +4,7 @@ import { Button } from "../components/ui/button"
 import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer } from "lucide-react"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
+import { useSettings } from "../context/SettingsContext"
 import {
     Dialog,
     DialogContent,
@@ -17,12 +18,14 @@ import { Label } from "../components/ui/label"
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 
 import { formatCurrency } from "../lib/utils"
+import { printReceipt } from "../lib/printer"
 
 export function OrderDetails() {
     const { id } = useParams()
     const navigate = useNavigate()
     const { orders, updateOrderStatus, processPayment } = useRestaurant()
     const { t } = useLanguage()
+    const { printerSettings } = useSettings()
     const [note, setNote] = useState("")
     const [isPaymentOpen, setIsPaymentOpen] = useState(false)
     const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Voucher" | "PIX">("Cash")
@@ -58,8 +61,35 @@ export function OrderDetails() {
         }
     }
 
-    const handlePrint = () => {
-        window.print()
+    const handlePrint = async () => {
+        if (printerSettings.enabled) {
+            // Usa o módulo de impressão configurado
+            const printData = {
+                orderId: order.id,
+                customer: order.customer,
+                table: order.table,
+                orderType: order.orderType,
+                items: order.items.map(item => ({
+                    name: item.name,
+                    quantity: item.quantity,
+                    price: item.price
+                })),
+                subtotal: order.total,
+                total: order.total,
+                paymentMethod: order.paymentMethod,
+                notes: note || undefined,
+                date: new Date().toLocaleDateString('pt-BR'),
+                time: order.time || new Date().toLocaleTimeString('pt-BR')
+            }
+            
+            const success = await printReceipt(printData, printerSettings)
+            if (!success) {
+                alert('Erro ao imprimir recibo. Verifique as configurações da impressora.')
+            }
+        } else {
+            // Fallback para impressão padrão do navegador
+            window.print()
+        }
     }
 
     const getStatusColor = (status: typeof order.status) => {

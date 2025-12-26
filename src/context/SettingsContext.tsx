@@ -1,23 +1,47 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 
+interface PrinterSettings {
+  enabled: boolean
+  type: 'browser' | 'network' | 'usb'
+  name: string
+  ipAddress: string
+  port: number
+  paperSize: '80mm' | '58mm' | 'A4'
+  autoPrint: boolean
+}
+
 interface Settings {
   enableTables: boolean
   enableOrderDisplay: boolean
+  printer: PrinterSettings
 }
 
 interface SettingsContextType {
   settings: Settings
   updateSettings: (newSettings: Partial<Settings>) => void
+  updatePrinterSettings: (printerSettings: Partial<PrinterSettings>) => void
   isTablesEnabled: boolean
   isOrderDisplayEnabled: boolean
+  printerSettings: PrinterSettings
   saveSettings: () => void
   resetSettings: () => void
   isLoading: boolean
 }
 
+const defaultPrinterSettings: PrinterSettings = {
+  enabled: false,
+  type: 'browser',
+  name: '',
+  ipAddress: '',
+  port: 9100,
+  paperSize: '80mm',
+  autoPrint: false
+}
+
 const defaultSettings: Settings = {
   enableTables: true,
-  enableOrderDisplay: false
+  enableOrderDisplay: false,
+  printer: defaultPrinterSettings
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)
@@ -74,6 +98,14 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     setSettings(prev => ({ ...prev, ...newSettings }))
   }
 
+  const updatePrinterSettings = (printerSettings: Partial<PrinterSettings>) => {
+    console.log('Updating printer settings:', printerSettings)
+    setSettings(prev => ({
+      ...prev,
+      printer: { ...prev.printer, ...printerSettings }
+    }))
+  }
+
   const saveSettings = () => {
     try {
       localStorage.setItem('restaurant-settings', JSON.stringify(settings))
@@ -96,14 +128,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   const isTablesEnabled = settings.enableTables
   const isOrderDisplayEnabled = settings.enableOrderDisplay
+  const printerSettings = settings.printer
 
   return (
     <SettingsContext.Provider
       value={{
         settings,
         updateSettings,
+        updatePrinterSettings,
         isTablesEnabled,
         isOrderDisplayEnabled,
+        printerSettings,
         saveSettings,
         resetSettings,
         isLoading
@@ -121,3 +156,5 @@ export function useSettings() {
   }
   return context
 }
+
+export type { PrinterSettings }

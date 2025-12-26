@@ -1,75 +1,11 @@
+-- Complete script to create user_profiles table with username support
+-- Run this script in your Supabase SQL Editor
+
 -- Enable UUID extension
 create extension if not exists "uuid-ossp";
 
--- Create Menu Items Table
-create table menu_items (
-  id serial primary key,
-  name text not null,
-  price numeric not null,
-  description text,
-  category text not null,
-  status text default 'Available',
-  image text
-);
-
--- Create Tables Table
-create table restaurant_tables (
-  id serial primary key,
-  number text unique not null,
-  status text default 'Available'
-);
-
--- Create Orders Table
-create table orders (
-  id text primary key,
-  customer text,
-  table_number text, -- Nullable for Takeout/Delivery
-  order_type text default 'dine_in', -- 'dine_in', 'takeout', 'delivery'
-  total numeric not null,
-  status text default 'Pending',
-  created_at timestamptz default now(),
-  closed_at timestamptz,
-  notes text,
-  payment_method text
-);
-
--- Create Order Items Table
-create table order_items (
-  id serial primary key,
-  order_id text references orders(id) on delete cascade,
-  menu_item_id int references menu_items(id),
-  name text not null,
-  price numeric not null,
-  quantity int not null
-);
-
--- Insert Initial Menu Items
-insert into menu_items (name, price, description, category, status, image) values
-('Classic Burger', 12.00, 'Beef patty, lettuce, tomato, cheese', 'Burgers', 'Available', 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=800&auto=format&fit=crop&q=60'),
-('Bacon Burger', 14.00, 'Beef patty, bacon, cheese, BBQ sauce', 'Burgers', 'Available', 'https://images.unsplash.com/photo-1594212699903-ec8a3eca50f5?w=800&auto=format&fit=crop&q=60'),
-('Margherita', 15.00, 'Tomato sauce, mozzarella, basil', 'Pizza', 'Available', 'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=800&auto=format&fit=crop&q=60'),
-('Pepperoni', 17.00, 'Tomato sauce, mozzarella, pepperoni', 'Pizza', 'Available', 'https://images.unsplash.com/photo-1628840042765-356cda07504e?w=800&auto=format&fit=crop&q=60');
-
--- Insert Initial Tables
-insert into restaurant_tables (number, status) values
-('T1', 'Available'),
-('T2', 'Occupied'),
-('T3', 'Available'),
-('T4', 'Available'),
-('T5', 'Reserved');
-
--- Create Expenses Table
-create table expenses (
-  id serial primary key,
-  description text not null,
-  amount numeric not null,
-  category text not null, -- 'Inventory', 'Utilities', 'Salaries', 'Rent', 'Other'
-  date date not null,
-  created_at timestamptz default now()
-);
-
 -- Create User Profiles Table
-create table user_profiles (
+create table if not exists user_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,
   username text unique,
@@ -82,9 +18,37 @@ create table user_profiles (
 -- Enable Row Level Security
 alter table user_profiles enable row level security;
 
+-- Drop existing policies if they exist (to avoid conflicts)
+drop policy if exists "Users can view own profile" on user_profiles;
+drop policy if exists "Users can update own profile" on user_profiles;
+drop policy if exists "Admins can manage all profiles" on user_profiles;
+drop policy if exists "Users can insert own profile" on user_profiles;
+
+-- Create helper function to check user role (bypasses RLS to avoid recursion)
+create or replace function public.get_user_role(user_id uuid)
+returns text
+language plpgsql
+security definer
+stable
+as $$
+declare
+  user_role text;
+begin
+  select role into user_role
+  from user_profiles
+  where id = user_id;
+  
+  return coalesce(user_role, 'usuario');
+end;
+$$;
+
 -- Create policy: Users can read their own profile
 create policy "Users can view own profile" on user_profiles
   for select using (auth.uid() = id);
+
+-- Create policy: Users can insert their own profile
+create policy "Users can insert own profile" on user_profiles
+  for insert with check (auth.uid() = id);
 
 -- Create policy: Users can update their own profile (except role)
 -- This policy prevents users from changing their own role
@@ -96,14 +60,11 @@ create policy "Users can update own profile" on user_profiles
     role = (select role from user_profiles where id = auth.uid())
   );
 
--- Create policy: Only admins can insert/update roles
+-- Create policy: Admins can manage all profiles (using function to avoid recursion)
 create policy "Admins can manage all profiles" on user_profiles
-  for all using (
-    exists (
-      select 1 from user_profiles
-      where id = auth.uid() and role = 'admin'
-    )
-  );
+  for all 
+  using (public.get_user_role(auth.uid()) = 'admin')
+  with check (public.get_user_role(auth.uid()) = 'admin');
 
 -- Function to prevent non-admins from changing their role
 create or replace function public.prevent_role_change()
@@ -145,10 +106,14 @@ begin
     coalesce(new.raw_user_meta_data->>'username', null),
     coalesce(new.raw_user_meta_data->>'full_name', ''),
     'usuario'  -- Always default to non-privileged role; admin roles must be assigned separately
-  );
+  )
+  on conflict (id) do nothing;
   return new;
 end;
 $$ language plpgsql security definer;
+
+-- Drop existing trigger if it exists
+drop trigger if exists on_auth_user_created on auth.users;
 
 -- Trigger to create profile on user signup
 create trigger on_auth_user_created
@@ -164,7 +129,11 @@ begin
 end;
 $$ language plpgsql;
 
+-- Drop existing trigger if it exists
+drop trigger if exists update_user_profiles_updated_at on user_profiles;
+
 -- Trigger to update updated_at on user_profiles
 create trigger update_user_profiles_updated_at
   before update on user_profiles
   for each row execute function public.update_updated_at_column();
+

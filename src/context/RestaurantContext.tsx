@@ -398,6 +398,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     const processPayment = async (orderId: string, method: "Cash" | "Card" | "Voucher" | "PIX") => {
         const now = new Date().toISOString()
         const previousOrders = [...orders]
+        const order = orders.find(o => o.id === orderId)
 
         setOrders((prev) =>
             prev.map((order) => {
@@ -411,7 +412,6 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         // Demo mode: just use local state
         if (!isSupabaseConfigured) {
             // Check table status logic
-            const order = orders.find(o => o.id === orderId)
             if (order && order.table) {
                 const otherActiveOrders = orders.filter(o =>
                     o.table === order.table &&
@@ -441,8 +441,43 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: false, error: error.message }
         }
 
+        // Reduce stock for order items
+        if (order) {
+            try {
+                // Get current user for stock movement
+                const { data: { user } } = await supabase.auth.getUser()
+
+                // For each item in the order, find matching inventory item and reduce stock
+                for (const orderItem of order.items) {
+                    // Try to find inventory item by menu_item_id or by name
+                    const { data: inventoryItems } = await supabase
+                        .from('inventory_items')
+                        .select('id')
+                        .or(`menu_item_id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                        .limit(1)
+
+                    if (inventoryItems && inventoryItems.length > 0) {
+                        const inventoryItemId = inventoryItems[0].id
+
+                        // Create stock movement (exit)
+                        await supabase.from('stock_movements').insert({
+                            inventory_item_id: inventoryItemId,
+                            movement_type: 'exit',
+                            quantity: orderItem.quantity,
+                            reference_id: parseInt(orderId.replace(/\D/g, '')) || null,
+                            reference_type: 'order',
+                            notes: `Saída via pedido ${orderId}`,
+                            created_by: user?.id || null
+                        })
+                    }
+                }
+            } catch (stockError) {
+                console.error("Error reducing stock:", stockError)
+                // Don't fail the payment if stock reduction fails
+            }
+        }
+
         // Check table status logic
-        const order = orders.find(o => o.id === orderId)
         if (order && order.table) {
             const otherActiveOrders = orders.filter(o =>
                 o.table === order.table &&
@@ -504,6 +539,40 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 console.error("Error closing orders:", updateError)
                 setOrders(previousOrders)
                 return { success: false, error: updateError.message }
+            }
+
+            // Reduce stock for all closed orders
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+
+                for (const order of tableOrders) {
+                    for (const orderItem of order.items) {
+                        // Try to find inventory item by menu_item_id or by name
+                        const { data: inventoryItems } = await supabase
+                            .from('inventory_items')
+                            .select('id')
+                            .or(`menu_item_id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                            .limit(1)
+
+                        if (inventoryItems && inventoryItems.length > 0) {
+                            const inventoryItemId = inventoryItems[0].id
+
+                            // Create stock movement (exit)
+                            await supabase.from('stock_movements').insert({
+                                inventory_item_id: inventoryItemId,
+                                movement_type: 'exit',
+                                quantity: orderItem.quantity,
+                                reference_id: parseInt(order.id.replace(/\D/g, '')) || null,
+                                reference_type: 'order',
+                                notes: `Saída via pedido ${order.id} (fechamento de mesa)`,
+                                created_by: user?.id || null
+                            })
+                        }
+                    }
+                }
+            } catch (stockError) {
+                console.error("Error reducing stock:", stockError)
+                // Don't fail the table close if stock reduction fails
             }
         }
 
