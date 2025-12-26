@@ -18,9 +18,12 @@ import { RestaurantProvider } from "./context/RestaurantContext"
 import { LanguageProvider } from "./context/LanguageContext"
 import { SettingsProvider } from "./context/SettingsContext"
 import { AuthProvider, useAuth } from "./context/AuthContext"
+import { StockProvider } from "./context/StockContext"
 import { ProtectedRoute } from "./components/auth/ProtectedRoute"
 
 import { TableBill } from "./pages/TableBill"
+import { Stock } from "./pages/Stock"
+import { AddInventoryItem } from "./pages/AddInventoryItem"
 
 // Component to handle authenticated routes
 function AuthenticatedRoutes() {
@@ -77,6 +80,22 @@ function AuthenticatedRoutes() {
           } 
         />
         <Route path="/order-display" element={<OrderDisplay />} />
+        <Route 
+          path="/stock" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <Stock />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/stock/add" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <AddInventoryItem />
+            </ProtectedRoute>
+          } 
+        />
       </Routes>
     </Layout>
   )
@@ -87,20 +106,22 @@ function App() {
     <SettingsProvider>
       <LanguageProvider>
         <AuthProvider>
-          <RestaurantProvider>
-            <Router>
-              <Routes>
-                {/* Public routes */}
-                <Route path="/login" element={<Login />} />
-                
-                {/* Standalone route without Layout wrapper */}
-                <Route path="/order-display-standalone" element={<OrderDisplayStandalone />} />
-                
-                {/* All authenticated routes with Layout wrapper */}
-                <Route path="/*" element={<AuthenticatedRoutes />} />
-              </Routes>
-            </Router>
-          </RestaurantProvider>
+          <StockProvider>
+            <RestaurantProvider>
+              <Router>
+                <Routes>
+                  {/* Public routes */}
+                  <Route path="/login" element={<Login />} />
+                  
+                  {/* Standalone route without Layout wrapper */}
+                  <Route path="/order-display-standalone" element={<OrderDisplayStandalone />} />
+                  
+                  {/* All authenticated routes with Layout wrapper */}
+                  <Route path="/*" element={<AuthenticatedRoutes />} />
+                </Routes>
+              </Router>
+            </RestaurantProvider>
+          </StockProvider>
         </AuthProvider>
       </LanguageProvider>
     </SettingsProvider>

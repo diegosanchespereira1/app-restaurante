@@ -1,4 +1,4 @@
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Menu, DollarSign, TrendingUp, LogOut, User } from "lucide-react"
+import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Menu, DollarSign, TrendingUp, LogOut, User, Package } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { NavLink, useNavigate } from "react-router-dom"
 import { useLanguage } from "../../context/LanguageContext"
@@ -26,6 +26,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
         { href: "/orders", label: t("orders"), icon: ClipboardList, requiredRole: null as any },
         ...(isTablesEnabled ? [{ href: "/tables", label: t("tables"), icon: Armchair, requiredRole: null as any }] : []),
         { href: "/menu", label: t("menu"), icon: Menu, requiredRole: null as any },
+        { href: "/stock", label: t("stockManagement") || "Estoque", icon: Package, requiredRole: 'admin' as any },
         { href: "/sales", label: t("salesAnalysis"), icon: TrendingUp, requiredRole: ['admin', 'gerente'] as any },
         { href: "/finance", label: t("finance"), icon: DollarSign, requiredRole: ['admin', 'gerente'] as any },
         { href: "/settings", label: t("settings"), icon: Settings, requiredRole: ['admin', 'gerente'] as any },
