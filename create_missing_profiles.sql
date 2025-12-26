@@ -22,7 +22,7 @@ SELECT
   u.email,
   SPLIT_PART(u.email, '@', 1) as username,
   COALESCE(u.raw_user_meta_data->>'full_name', '') as full_name,
-  COALESCE(u.raw_user_meta_data->>'role', 'usuario')::text as role
+  'usuario'::text as role  -- Always default to non-privileged role; admin roles must be assigned separately
 FROM auth.users u
 WHERE NOT EXISTS (
   SELECT 1 FROM user_profiles p WHERE p.id = u.id

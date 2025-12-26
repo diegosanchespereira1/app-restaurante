@@ -1,6 +1,5 @@
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { useStock } from "../../context/StockContext"
 import { Card, CardContent } from "../ui/card"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
@@ -25,7 +24,6 @@ interface StockListProps {
 
 export function StockList({ items }: StockListProps) {
     const navigate = useNavigate()
-    const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
     const [addEntryItemId, setAddEntryItemId] = useState<number | null>(null)
     const [isAddEntryOpen, setIsAddEntryOpen] = useState(false)
 

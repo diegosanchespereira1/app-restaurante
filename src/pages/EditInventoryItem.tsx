@@ -17,7 +17,7 @@ const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
 export function EditInventoryItem() {
     const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
-    const { inventoryItems, updateInventoryItem, isLoading: isStockLoading, getInventoryItemById } = useStock()
+    const { updateInventoryItem, isLoading: isStockLoading, getInventoryItemById } = useStock()
     const { menuItems, categories, isLoading: isRestaurantLoading, addCategory } = useRestaurant()
     const { t } = useLanguage()
     const [isSubmitting, setIsSubmitting] = useState(false)

@@ -3,7 +3,6 @@ import { useStock } from "../../context/StockContext"
 import { Card, CardContent } from "../ui/card"
 import { Badge } from "../ui/badge"
 import { ArrowUp, ArrowDown, Edit } from "lucide-react"
-import { formatCurrency } from "../../lib/utils"
 
 interface StockMovementHistoryProps {
     itemId: number
