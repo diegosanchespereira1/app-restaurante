@@ -100,7 +100,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 -- Trigger to create profile on user signup
 create trigger on_auth_user_created
   after insert on auth.users
-  for each row execute procedure public.handle_new_user();
+  for each row execute function public.handle_new_user();
 
 -- Function to update updated_at timestamp
 create or replace function public.update_updated_at_column()
@@ -117,7 +117,7 @@ drop trigger if exists update_user_profiles_updated_at on user_profiles;
 -- Trigger to update updated_at on user_profiles
 create trigger update_user_profiles_updated_at
   before update on user_profiles
-  for each row execute procedure public.update_updated_at_column();
+  for each row execute function public.update_updated_at_column();
 
 -- Function to prevent non-admins from changing roles
 create or replace function public.prevent_role_change()
