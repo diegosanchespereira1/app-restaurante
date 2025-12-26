@@ -119,3 +119,32 @@ create trigger update_user_profiles_updated_at
   before update on user_profiles
   for each row execute function public.update_updated_at_column();
 
+-- Function to prevent non-admins from changing their role
+create or replace function public.prevent_role_change()
+returns trigger as $$
+declare
+  current_user_role text;
+begin
+  -- Get the current user's role, default to non-admin if not found
+  select coalesce(role, 'usuario') into current_user_role
+  from user_profiles
+  where id = auth.uid();
+  
+  -- If role is null (user not found), default to 'usuario' to prevent bypass
+  current_user_role := coalesce(current_user_role, 'usuario');
+  
+  -- If the role is being changed and the user is not an admin, prevent it
+  if old.role is distinct from new.role and current_user_role != 'admin' then
+    raise exception 'Only admins can change user roles';
+  end if;
+  
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Trigger to prevent non-admin role changes
+drop trigger if exists prevent_role_change_trigger on user_profiles;
+create trigger prevent_role_change_trigger
+  before update on user_profiles
+  for each row execute function public.prevent_role_change();
+
