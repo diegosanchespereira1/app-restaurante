@@ -490,4 +490,4 @@ export type TranslationKey = keyof typeof translations.en
 export type ExtendedTranslationKey = TranslationKey | 
     "salesAnalysis" | "salesByProduct" | "timePeriod" | "allTime" | "today" | "thisWeek" | "thisMonth" | "thisYear" |
     "category" | "allCategories" | "chartType" | "barChart" | "pieChart" | "totalItems" | "uniqueProducts" |
-    "avgOrderValue" | "productSales" | "categoryDistribution" | "topProducts" | "noSalesData"
+    "avgOrderValue" | "productSales" | "categoryDistribution" | "topProducts" | "noSalesData" | "noItemsFound"
