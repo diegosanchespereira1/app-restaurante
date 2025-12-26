@@ -545,28 +545,57 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             try {
                 const { data: { user } } = await supabase.auth.getUser()
 
-                for (const order of tableOrders) {
-                    for (const orderItem of order.items) {
-                        // Try to find inventory item by menu_item_id or by name
-                        const { data: inventoryItems } = await supabase
-                            .from('inventory_items')
-                            .select('id')
-                            .or(`menu_item_id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
-                            .limit(1)
+                // Fetch full orders with items
+                const { data: ordersData, error: ordersError } = await supabase
+                    .from('orders')
+                    .select('*, items:order_items(*)')
+                    .in('id', orderIds)
 
-                        if (inventoryItems && inventoryItems.length > 0) {
-                            const inventoryItemId = inventoryItems[0].id
+                if (ordersError) {
+                    console.error("Error fetching orders for stock reduction:", ordersError)
+                } else if (ordersData) {
+                    const tableOrders: Order[] = ordersData.map((o: any) => ({
+                        id: o.id,
+                        customer: o.customer,
+                        table: o.table_number,
+                        orderType: o.order_type || 'dine_in',
+                        total: o.total,
+                        status: o.status,
+                        time: new Date(o.created_at).toLocaleString(),
+                        closedAt: o.closed_at,
+                        notes: o.notes,
+                        paymentMethod: o.payment_method,
+                        items: o.items.map((i: any) => ({
+                            id: i.menu_item_id,
+                            name: i.name,
+                            price: i.price,
+                            quantity: i.quantity
+                        }))
+                    }))
 
-                            // Create stock movement (exit)
-                            await supabase.from('stock_movements').insert({
-                                inventory_item_id: inventoryItemId,
-                                movement_type: 'exit',
-                                quantity: orderItem.quantity,
-                                reference_id: parseInt(order.id.replace(/\D/g, '')) || null,
-                                reference_type: 'order',
-                                notes: `Saída via pedido ${order.id} (fechamento de mesa)`,
-                                created_by: user?.id || null
-                            })
+                    for (const order of tableOrders) {
+                        for (const orderItem of order.items) {
+                            // Try to find inventory item by menu_item_id or by name
+                            const { data: inventoryItems } = await supabase
+                                .from('inventory_items')
+                                .select('id')
+                                .or(`menu_item_id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                                .limit(1)
+
+                            if (inventoryItems && inventoryItems.length > 0) {
+                                const inventoryItemId = inventoryItems[0].id
+
+                                // Create stock movement (exit)
+                                await supabase.from('stock_movements').insert({
+                                    inventory_item_id: inventoryItemId,
+                                    movement_type: 'exit',
+                                    quantity: orderItem.quantity,
+                                    reference_id: parseInt(order.id.replace(/\D/g, '')) || null,
+                                    reference_type: 'order',
+                                    notes: `Saída via pedido ${order.id} (fechamento de mesa)`,
+                                    created_by: user?.id || null
+                                })
+                            }
                         }
                     }
                 }

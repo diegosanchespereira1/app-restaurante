@@ -102,7 +102,7 @@ export function parseNFEXML(xmlContent: string): NFEParseResult {
     const supplierCNPJ = getTextContent(emit, 'CNPJ') || getTextContent(emit, 'CPF') || ''
     
     // Extrai endereço do emitente
-    const enderEmit = emit?.querySelector('enderEmit')
+    const enderEmit = emit?.querySelector('enderEmit') || null
     const addressParts = [
       getTextContent(enderEmit, 'xLgr'),
       getTextContent(enderEmit, 'nro'),

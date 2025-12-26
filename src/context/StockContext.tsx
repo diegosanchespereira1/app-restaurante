@@ -3,7 +3,6 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type {
   InventoryItem,
   PurchaseInvoice,
-  InvoiceItem,
   StockMovement,
   CreateInventoryItemInput,
   CreatePurchaseInvoiceInput,

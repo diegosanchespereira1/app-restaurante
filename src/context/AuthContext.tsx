@@ -193,7 +193,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(mockUser)
       setProfile({
         id: mockUser.id,
-        email: mockUser.email,
+        email: mockUser.email || 'demo@example.com',
         username: 'demo',
         full_name: 'Demo User',
         role: 'admin',
@@ -345,7 +345,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(mockUser)
       setProfile({
         id: mockUser.id,
-        email: mockUser.email,
+        email: mockUser.email || (emailOrUsername.includes('@') ? emailOrUsername : `${emailOrUsername}@demo.com`),
         username: emailOrUsername.includes('@') ? null : emailOrUsername,
         full_name: 'Demo User',
         role: 'admin',

@@ -118,7 +118,6 @@ export function StockList({ items }: StockListProps) {
                                             <Button 
                                                 variant="outline" 
                                                 size="sm"
-                                                onClick={() => setSelectedItemId(item.id)}
                                             >
                                                 <History className="w-4 h-4 mr-2" />
                                                 Histórico
