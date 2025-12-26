@@ -412,7 +412,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         options: {
           data: {
             full_name: fullName || '',
-            role: role,
+            // Note: role is not passed here as it will be set to 'usuario' by default
+            // Admin roles must be assigned separately by existing admins
             username: username || null,
           },
         },

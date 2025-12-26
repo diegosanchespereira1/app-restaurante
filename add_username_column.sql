@@ -87,7 +87,7 @@ begin
     new.email,
     coalesce(new.raw_user_meta_data->>'username', null),
     coalesce(new.raw_user_meta_data->>'full_name', ''),
-    coalesce(new.raw_user_meta_data->>'role', 'usuario')
+    'usuario'  -- Always default to non-privileged role; admin roles must be assigned separately
   )
   on conflict (id) do nothing;
   return new;

@@ -87,8 +87,14 @@ create policy "Users can view own profile" on user_profiles
   for select using (auth.uid() = id);
 
 -- Create policy: Users can update their own profile (except role)
+-- This policy prevents users from changing their own role
 create policy "Users can update own profile" on user_profiles
-  for update using (auth.uid() = id);
+  for update 
+  using (auth.uid() = id)
+  with check (
+    auth.uid() = id AND 
+    role = (select role from user_profiles where id = auth.uid())
+  );
 
 -- Create policy: Only admins can insert/update roles
 create policy "Admins can manage all profiles" on user_profiles
@@ -98,6 +104,32 @@ create policy "Admins can manage all profiles" on user_profiles
       where id = auth.uid() and role = 'admin'
     )
   );
+
+-- Function to prevent non-admins from changing their role
+create or replace function public.prevent_role_change()
+returns trigger as $$
+declare
+  current_user_role text;
+begin
+  -- Get the current user's role
+  select role into current_user_role
+  from user_profiles
+  where id = auth.uid();
+  
+  -- If the role is being changed and the user is not an admin, prevent it
+  if old.role is distinct from new.role and current_user_role != 'admin' then
+    raise exception 'Only admins can change user roles';
+  end if;
+  
+  return new;
+end;
+$$ language plpgsql security definer;
+
+-- Trigger to prevent non-admin role changes
+drop trigger if exists prevent_role_change_trigger on user_profiles;
+create trigger prevent_role_change_trigger
+  before update on user_profiles
+  for each row execute procedure public.prevent_role_change();
 
 -- Function to automatically create profile when user signs up
 create or replace function public.handle_new_user()
@@ -109,7 +141,7 @@ begin
     new.email,
     coalesce(new.raw_user_meta_data->>'username', null),
     coalesce(new.raw_user_meta_data->>'full_name', ''),
-    coalesce(new.raw_user_meta_data->>'role', 'usuario')
+    'usuario'  -- Always default to non-privileged role; admin roles must be assigned separately
   );
   return new;
 end;
