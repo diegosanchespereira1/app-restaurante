@@ -1,5 +1,5 @@
-import { useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { useState, useEffect } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { useStock } from "../context/StockContext"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
@@ -12,9 +12,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { ArrowLeft, Save, Plus } from "lucide-react"
 import { formatCurrency } from "../lib/utils"
 
-export function AddInventoryItem() {
+const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
+
+export function EditInventoryItem() {
+    const { id } = useParams<{ id: string }>()
     const navigate = useNavigate()
-    const { addInventoryItem, isLoading: isStockLoading } = useStock()
+    const { inventoryItems, updateInventoryItem, isLoading: isStockLoading, getInventoryItemById } = useStock()
     const { menuItems, categories, isLoading: isRestaurantLoading, addCategory } = useRestaurant()
     const { t } = useLanguage()
     const [isSubmitting, setIsSubmitting] = useState(false)
@@ -24,8 +27,13 @@ export function AddInventoryItem() {
     const [newCategoryName, setNewCategoryName] = useState("")
     const [isAddingCategory, setIsAddingCategory] = useState(false)
     const [categoryError, setCategoryError] = useState<string | null>(null)
-    const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
-    
+
+    const itemId = id ? parseInt(id) : null
+    const currentItem = itemId ? getInventoryItemById(itemId) : null
+
+    const safeMenuItems = menuItems || []
+    const safeCategories = categories || []
+
     const [formData, setFormData] = useState({
         menu_item_id: null as number | null,
         name: '',
@@ -45,9 +53,29 @@ export function AddInventoryItem() {
         ean_code: ''
     })
 
-    // Garantir que menuItems e categories sejam arrays válidos
-    const safeMenuItems = menuItems || []
-    const safeCategories = categories || []
+    // Carregar dados do item quando o componente montar ou o item mudar
+    useEffect(() => {
+        if (currentItem) {
+            setFormData({
+                menu_item_id: currentItem.menu_item_id,
+                name: currentItem.name,
+                unit: currentItem.unit,
+                min_stock: currentItem.min_stock,
+                current_stock: currentItem.current_stock,
+                cost_price: currentItem.cost_price,
+                selling_price: currentItem.selling_price,
+                category: currentItem.category || '',
+                image: currentItem.image || DEFAULT_IMAGE,
+                product_type: currentItem.product_type || '',
+                ncm: currentItem.ncm || '',
+                cst_icms: currentItem.cst_icms || '',
+                cfop: currentItem.cfop || '',
+                icms_rate: currentItem.icms_rate,
+                ipi_rate: currentItem.ipi_rate,
+                ean_code: currentItem.ean_code || ''
+            })
+        }
+    }, [currentItem])
 
     // Tipos de produto para cálculo de imposto
     const productTypes = [
@@ -106,10 +134,10 @@ export function AddInventoryItem() {
             setFormData(prev => ({
                 ...prev,
                 menu_item_id: menuItem.id,
-                name: menuItem.name,
-                selling_price: menuItem.price,
-                category: menuItem.category,
-                image: menuItem.image || DEFAULT_IMAGE
+                name: prev.name || menuItem.name,
+                selling_price: prev.selling_price || menuItem.price,
+                category: prev.category || menuItem.category || '',
+                image: prev.image === DEFAULT_IMAGE ? (menuItem.image || DEFAULT_IMAGE) : prev.image
             }))
         }
     }
@@ -134,10 +162,8 @@ export function AddInventoryItem() {
         try {
             const result = await addCategory(newCategoryName.trim())
             if (result.success) {
-                // Atualizar o formData com a nova categoria
                 setFormData({ ...formData, category: newCategoryName.trim() })
                 setNewCategoryName("")
-                setCategoryError(null)
                 setIsAddCategoryDialogOpen(false)
             } else {
                 setCategoryError(result.error || 'Erro ao criar categoria')
@@ -171,6 +197,11 @@ export function AddInventoryItem() {
         setError(null)
         setSuccess(false)
 
+        if (!itemId) {
+            setError('ID do item não encontrado')
+            return
+        }
+
         // Validações
         if (!formData.name.trim()) {
             setError('Nome do produto é obrigatório')
@@ -199,7 +230,7 @@ export function AddInventoryItem() {
 
         setIsSubmitting(true)
         try {
-            const result = await addInventoryItem({
+            const result = await updateInventoryItem(itemId, {
                 menu_item_id: formData.menu_item_id,
                 name: formData.name,
                 unit: formData.unit,
@@ -224,17 +255,17 @@ export function AddInventoryItem() {
                     navigate('/stock')
                 }, 1500)
             } else {
-                setError(result.error || 'Erro ao adicionar item')
+                setError(result.error || 'Erro ao atualizar item')
             }
         } catch (err: any) {
-            setError(err.message || 'Erro ao adicionar item')
+            setError(err.message || 'Erro ao atualizar item')
         } finally {
             setIsSubmitting(false)
         }
     }
 
     // Mostrar loading enquanto os dados estão carregando (depois de todos os hooks)
-    if (isStockLoading || isRestaurantLoading) {
+    if (isStockLoading || isRestaurantLoading || !currentItem) {
         return (
             <div className="flex items-center justify-center min-h-screen">
                 <div className="text-center">
@@ -258,10 +289,10 @@ export function AddInventoryItem() {
                 </Button>
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">
-                        {t("addInventoryItem") || "Adicionar Item ao Estoque"}
+                        {t("editInventoryItem") || "Editar Item do Estoque"}
                     </h2>
                     <p className="text-muted-foreground">
-                        {t("addInventoryItemDescription") || "Cadastre um novo item no estoque com informações fiscais completas"}
+                        {t("editInventoryItemDescription") || "Edite as informações do item de estoque"}
                     </p>
                 </div>
             </div>
@@ -270,7 +301,7 @@ export function AddInventoryItem() {
                 <Card className="border-green-200 bg-green-50">
                     <CardContent className="p-4">
                         <p className="text-green-800 font-semibold">
-                            Item adicionado com sucesso! Redirecionando...
+                            Item atualizado com sucesso! Redirecionando...
                         </p>
                     </CardContent>
                 </Card>
@@ -295,12 +326,12 @@ export function AddInventoryItem() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Nenhum (criar item independente)</SelectItem>
-                                        {safeMenuItems.map((item) => (
-                                            <SelectItem key={item.id} value={item.id.toString()}>
-                                                {item.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
+                                    {safeMenuItems.map((item) => (
+                                        <SelectItem key={item.id} value={item.id.toString()}>
+                                            {item.name}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
                             </Select>
                         </div>
 
@@ -452,13 +483,14 @@ export function AddInventoryItem() {
                             <div>
                                 <Label htmlFor="product_type">Tipo de Produto *</Label>
                                 <Select
-                                    value={formData.product_type}
-                                    onValueChange={(value) => setFormData({ ...formData, product_type: value })}
+                                    value={formData.product_type || 'none'}
+                                    onValueChange={(value) => setFormData({ ...formData, product_type: value === 'none' ? '' : value })}
                                 >
                                     <SelectTrigger id="product_type">
                                         <SelectValue placeholder="Selecione o tipo" />
                                     </SelectTrigger>
                                     <SelectContent>
+                                        <SelectItem value="none">Não informado</SelectItem>
                                         {productTypes.map((type) => (
                                             <SelectItem key={type.value} value={type.value}>
                                                 {type.label}
@@ -466,9 +498,6 @@ export function AddInventoryItem() {
                                         ))}
                                     </SelectContent>
                                 </Select>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Tipo determina a alíquota de imposto aplicável
-                                </p>
                             </div>
 
                             <div>
@@ -480,22 +509,19 @@ export function AddInventoryItem() {
                                     placeholder="Ex: 1006.30.21"
                                     maxLength={8}
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Código de 8 dígitos para classificação fiscal
-                                </p>
                             </div>
 
                             <div>
                                 <Label htmlFor="cst_icms">CST ICMS (Código de Situação Tributária)</Label>
-                            <Select
-                                value={formData.cst_icms || 'none'}
-                                onValueChange={(value) => setFormData({ ...formData, cst_icms: value === 'none' ? '' : value })}
-                            >
-                                <SelectTrigger id="cst_icms">
-                                    <SelectValue placeholder="Selecione o CST" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Não informado</SelectItem>
+                                <Select
+                                    value={formData.cst_icms || 'none'}
+                                    onValueChange={(value) => setFormData({ ...formData, cst_icms: value === 'none' ? '' : value })}
+                                >
+                                    <SelectTrigger id="cst_icms">
+                                        <SelectValue placeholder="Selecione o CST" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Não informado</SelectItem>
                                         {cstOptions.map((cst) => (
                                             <SelectItem key={cst.value} value={cst.value}>
                                                 {cst.label}
@@ -507,15 +533,15 @@ export function AddInventoryItem() {
 
                             <div>
                                 <Label htmlFor="cfop">CFOP (Código Fiscal de Operações)</Label>
-                            <Select
-                                value={formData.cfop || 'none'}
-                                onValueChange={(value) => setFormData({ ...formData, cfop: value === 'none' ? '' : value })}
-                            >
-                                <SelectTrigger id="cfop">
-                                    <SelectValue placeholder="Selecione o CFOP" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Não informado</SelectItem>
+                                <Select
+                                    value={formData.cfop || 'none'}
+                                    onValueChange={(value) => setFormData({ ...formData, cfop: value === 'none' ? '' : value })}
+                                >
+                                    <SelectTrigger id="cfop">
+                                        <SelectValue placeholder="Selecione o CFOP" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Não informado</SelectItem>
                                         {cfopOptions.map((cfop) => (
                                             <SelectItem key={cfop.value} value={cfop.value}>
                                                 {cfop.label}
@@ -527,15 +553,15 @@ export function AddInventoryItem() {
 
                             <div>
                                 <Label htmlFor="icms_rate">Alíquota de ICMS (%)</Label>
-                            <Select
-                                value={formData.icms_rate?.toString() || 'none'}
-                                onValueChange={(value) => setFormData({ ...formData, icms_rate: value === 'none' ? null : parseFloat(value) })}
-                            >
-                                <SelectTrigger id="icms_rate">
-                                    <SelectValue placeholder="Selecione a alíquota" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="none">Não informado</SelectItem>
+                                <Select
+                                    value={formData.icms_rate?.toString() || 'none'}
+                                    onValueChange={(value) => setFormData({ ...formData, icms_rate: value === 'none' ? null : parseFloat(value) })}
+                                >
+                                    <SelectTrigger id="icms_rate">
+                                        <SelectValue placeholder="Selecione a alíquota" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Não informado</SelectItem>
                                         {icmsRates.map((rate) => (
                                             <SelectItem key={rate.value} value={rate.value.toString()}>
                                                 {rate.label}
@@ -567,9 +593,6 @@ export function AddInventoryItem() {
                                     onChange={(e) => setFormData({ ...formData, ipi_rate: e.target.value ? parseFloat(e.target.value) : null })}
                                     placeholder="0.00 (opcional)"
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Apenas para produtos industrializados
-                                </p>
                             </div>
 
                             <div>
@@ -581,9 +604,6 @@ export function AddInventoryItem() {
                                     placeholder="7891234567890"
                                     maxLength={13}
                                 />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Código EAN-13 (13 dígitos)
-                                </p>
                             </div>
                         </div>
 
@@ -698,7 +718,7 @@ export function AddInventoryItem() {
                     </Button>
                     <Button type="submit" disabled={isSubmitting || isStockLoading}>
                         <Save className="w-4 h-4 mr-2" />
-                        {isSubmitting ? 'Salvando...' : 'Salvar Item'}
+                        {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
                     </Button>
                 </div>
             </form>

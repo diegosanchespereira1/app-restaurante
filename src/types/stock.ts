@@ -8,6 +8,7 @@ export interface InventoryItem {
   cost_price: number | null
   selling_price: number | null
   category: string | null
+  image: string | null
   product_type: string | null
   ncm: string | null
   cst_icms: string | null
@@ -72,6 +73,7 @@ export interface CreateInventoryItemInput {
   cost_price?: number | null
   selling_price?: number | null
   category?: string | null
+  image?: string | null
   product_type?: string | null
   ncm?: string | null
   cst_icms?: string | null

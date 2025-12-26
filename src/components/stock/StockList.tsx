@@ -1,9 +1,10 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { useStock } from "../../context/StockContext"
 import { Card, CardContent } from "../ui/card"
 import { Badge } from "../ui/badge"
 import { Button } from "../ui/button"
-import { Package, AlertTriangle, TrendingDown, History, Plus } from "lucide-react"
+import { Package, AlertTriangle, TrendingDown, History, Plus, Pencil } from "lucide-react"
 import { StockMovementHistory } from "./StockMovementHistory"
 import { AddStockEntryDialog } from "./AddStockEntryDialog"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../ui/dialog"
@@ -23,6 +24,7 @@ interface StockListProps {
 }
 
 export function StockList({ items }: StockListProps) {
+    const navigate = useNavigate()
     const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
     const [addEntryItemId, setAddEntryItemId] = useState<number | null>(null)
     const [isAddEntryOpen, setIsAddEntryOpen] = useState(false)
@@ -93,7 +95,7 @@ export function StockList({ items }: StockListProps) {
                             </div>
 
                             <div className="mt-4 pt-4 border-t space-y-2">
-                                <div className="grid grid-cols-2 gap-2">
+                                <div className="grid grid-cols-3 gap-2">
                                     <Button 
                                         variant="outline" 
                                         size="sm"
@@ -104,6 +106,14 @@ export function StockList({ items }: StockListProps) {
                                     >
                                         <Plus className="w-4 h-4 mr-2" />
                                         Adicionar
+                                    </Button>
+                                    <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => navigate(`/stock/edit/${item.id}`)}
+                                    >
+                                        <Pencil className="w-4 h-4 mr-2" />
+                                        Editar
                                     </Button>
                                     <Dialog>
                                         <DialogTrigger asChild>

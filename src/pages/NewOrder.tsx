@@ -6,6 +6,7 @@ import { Label } from "../components/ui/label"
 import { Plus, Minus, Search, ShoppingBag, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
+import { useStock } from "../context/StockContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
@@ -13,28 +14,87 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 
 import { formatCurrency } from "../lib/utils"
 
+// Tipo unificado para itens que podem aparecer no pedido
+interface UnifiedItem {
+    id: string // "menu-{id}" ou "stock-{id}"
+    name: string
+    price: number
+    category: string | null
+    description?: string
+    image?: string
+    type: 'menu' | 'stock'
+    originalId: number
+}
+
 export function NewOrder() {
     const navigate = useNavigate()
     const { menuItems, tables, addOrder, generateOrderId } = useRestaurant()
+    const { inventoryItems } = useStock()
     const { t } = useLanguage()
     const { isTablesEnabled } = useSettings()
 
-    const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
+    const [selectedItems, setSelectedItems] = useState<{ id: string; quantity: number }[]>([])
     const [selectedTable, setSelectedTable] = useState("")
     const [orderType, setOrderType] = useState<"dine_in" | "takeout" | "delivery">(isTablesEnabled ? "dine_in" : "takeout")
     const [customerName, setCustomerName] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
 
-    const categories = ["all", ...Array.from(new Set(menuItems.map(item => item.category)))]
+    // Combinar itens do menu e do estoque
+    const unifiedItems: UnifiedItem[] = [
+        // Itens do menu
+        ...menuItems.map(item => ({
+            id: `menu-${item.id}`,
+            name: item.name,
+            price: item.price,
+            category: item.category,
+            description: item.description,
+            image: item.image,
+            type: 'menu' as const,
+            originalId: item.id
+        })),
+        // Itens de estoque (todos os itens, mas apenas mostrar os que têm preço ou estão vinculados)
+        ...inventoryItems
+            .filter(item => {
+                // Incluir se tem preço de venda OU está vinculado a um item do menu OU tem categoria
+                return item.selling_price || item.menu_item_id || item.category
+            })
+            .map(item => {
+                // Se está vinculado a um item do menu, usar os dados do menu
+                const menuItem = item.menu_item_id ? menuItems.find(m => m.id === item.menu_item_id) : null
+                // Se tem menu item vinculado, usar o preço do menu; senão usar o selling_price; senão 0
+                const finalPrice = menuItem?.price || item.selling_price || 0
+                
+                return {
+                    id: `stock-${item.id}`,
+                    name: item.name,
+                    price: finalPrice,
+                    category: item.category || menuItem?.category || null,
+                    description: menuItem?.description || undefined,
+                    image: item.image || menuItem?.image || "materialApoio/imagem-nao-disponivel.gif",
+                    type: 'stock' as const,
+                    originalId: item.id
+                }
+            })
+            // Filtrar itens sem preço válido (preço > 0)
+            .filter(item => item.price > 0)
+    ]
 
-    const filteredItems = menuItems.filter(item => {
+    // Extrair categorias únicas de todos os itens
+    const allCategories = Array.from(new Set(
+        unifiedItems
+            .map(item => item.category)
+            .filter((cat): cat is string => cat !== null && cat !== undefined)
+    ))
+    const categories = ["all", ...allCategories]
+
+    const filteredItems = unifiedItems.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase())
         const matchesCategory = selectedCategory === "all" || item.category === selectedCategory
         return matchesSearch && matchesCategory
     })
 
-    const handleAddItem = (itemId: number) => {
+    const handleAddItem = (itemId: string) => {
         setSelectedItems(prev => {
             const existing = prev.find(i => i.id === itemId)
             if (existing) {
@@ -44,7 +104,7 @@ export function NewOrder() {
         })
     }
 
-    const handleRemoveItem = (itemId: number) => {
+    const handleRemoveItem = (itemId: string) => {
         setSelectedItems(prev => {
             const existing = prev.find(i => i.id === itemId)
             if (existing && existing.quantity > 1) {
@@ -56,8 +116,8 @@ export function NewOrder() {
 
     const calculateTotal = () => {
         return selectedItems.reduce((sum, item) => {
-            const menuItem = menuItems.find(i => i.id === item.id)
-            return sum + (menuItem?.price || 0) * item.quantity
+            const unifiedItem = unifiedItems.find(i => i.id === item.id)
+            return sum + (unifiedItem?.price || 0) * item.quantity
         }, 0)
     }
 
@@ -80,11 +140,16 @@ export function NewOrder() {
             customer: customerName || t("guest"),
             status: "Pending" as const,
             items: selectedItems.map(item => {
-                const menuItem = menuItems.find(i => i.id === item.id)!
+                const unifiedItem = unifiedItems.find(i => i.id === item.id)!
+                // Para itens de estoque, usar o ID do menu item vinculado se existir, senão usar um ID temporário
+                const menuItemId = unifiedItem.type === 'stock' 
+                    ? (inventoryItems.find(inv => inv.id === unifiedItem.originalId)?.menu_item_id || unifiedItem.originalId)
+                    : unifiedItem.originalId
+                
                 return {
-                    id: item.id,
-                    name: menuItem.name,
-                    price: menuItem.price,
+                    id: menuItemId,
+                    name: unifiedItem.name,
+                    price: unifiedItem.price,
                     quantity: item.quantity
                 }
             }),
@@ -150,37 +215,67 @@ export function NewOrder() {
                     </div>
 
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-2">
-                        {filteredItems.map((item) => (
-                            <Card
-                                key={item.id}
-                                className="cursor-pointer hover:border-primary transition-colors flex flex-col"
-                                onClick={() => handleAddItem(item.id)}
-                            >
-                                <div className="h-32 w-full relative shrink-0">
-                                    <img
-                                        src={item.image}
-                                        alt={item.name}
-                                        className="object-cover w-full h-full rounded-t-lg"
-                                    />
-                                </div>
-                                <div className="p-3 flex flex-col flex-1">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h3 className="font-semibold line-clamp-1">{item.name}</h3>
+                        {filteredItems.length === 0 ? (
+                            <div className="col-span-full text-center py-8 text-muted-foreground">
+                                <p>{t("noItemsFound") || "Nenhum item encontrado"}</p>
+                            </div>
+                        ) : (
+                            filteredItems.map((item) => (
+                                <Card
+                                    key={item.id}
+                                    className="cursor-pointer hover:border-primary transition-colors flex flex-col"
+                                    onClick={() => handleAddItem(item.id)}
+                                >
+                                    <div className="h-32 w-full relative shrink-0 bg-muted">
+                                        {item.image ? (
+                                            <img
+                                                src={item.image}
+                                                alt={item.name}
+                                                className="object-cover w-full h-full rounded-t-lg"
+                                                onError={(e) => {
+                                                    // Fallback para imagem padrão se houver erro
+                                                    e.currentTarget.src = "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60"
+                                                }}
+                                            />
+                                        ) : (
+                                            <div className="w-full h-full flex items-center justify-center bg-muted rounded-t-lg">
+                                                <ShoppingBag className="h-12 w-12 text-muted-foreground" />
+                                            </div>
+                                        )}
+                                        {item.type === 'stock' && (
+                                            <div className="absolute top-2 right-2">
+                                                <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
+                                                    Estoque
+                                                </span>
+                                            </div>
+                                        )}
                                     </div>
-                                    <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
-                                        {item.description}
-                                    </p>
-                                    <div className="mt-auto pt-2 border-t space-y-2">
-                                        <div className="flex justify-center">
-                                            <span className="font-bold text-base">{formatCurrency(item.price)}</span>
+                                    <div className="p-3 flex flex-col flex-1">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h3 className="font-semibold line-clamp-1">{item.name}</h3>
                                         </div>
-                                        <Button size="sm" variant="secondary" className="w-full">
-                                            <Plus className="h-4 w-4 mr-1" /> {t("addItem")}
-                                        </Button>
+                                        {item.description && (
+                                            <p className="text-sm text-muted-foreground line-clamp-2 mb-4 flex-1">
+                                                {item.description}
+                                            </p>
+                                        )}
+                                        {item.category && (
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                {item.category}
+                                            </p>
+                                        )}
+                                        <div className="mt-auto pt-2 border-t space-y-2">
+                                            <div className="flex justify-center">
+                                                <span className="font-bold text-base">{formatCurrency(item.price)}</span>
+                                            </div>
+                                            <Button size="sm" variant="secondary" className="w-full">
+                                                <Plus className="h-4 w-4 mr-1" /> {t("addItem")}
+                                            </Button>
+                                        </div>
                                     </div>
-                                </div>
-                            </Card>
-                        ))}
+                                </Card>
+                            ))
+                        )}
                     </div>
                 </div>
 
@@ -248,13 +343,13 @@ export function NewOrder() {
                                 ) : (
                                     <div className="space-y-4">
                                         {selectedItems.map((item) => {
-                                            const menuItem = menuItems.find(i => i.id === item.id)
+                                            const unifiedItem = unifiedItems.find(i => i.id === item.id)
                                             return (
                                                 <div key={item.id} className="flex items-center justify-between gap-4">
                                                     <div className="flex-1">
-                                                        <p className="font-medium">{menuItem?.name}</p>
+                                                        <p className="font-medium">{unifiedItem?.name}</p>
                                                         <div className="text-sm text-muted-foreground">
-                                                            {formatCurrency(menuItem?.price || 0)}
+                                                            {formatCurrency(unifiedItem?.price || 0)}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -277,7 +372,7 @@ export function NewOrder() {
                                                         </Button>
                                                     </div>
                                                     <div className="font-medium w-16 text-right">
-                                                        {formatCurrency((menuItem?.price || 0) * item.quantity)}
+                                                        {formatCurrency((unifiedItem?.price || 0) * item.quantity)}
                                                     </div>
                                                 </div>
                                             )

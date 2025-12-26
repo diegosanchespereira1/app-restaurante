@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS public.inventory_items (
   cost_price numeric,
   selling_price numeric,
   category text,
+  image text default 'materialApoio/imagem-nao-disponivel.gif',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -73,6 +74,18 @@ BEGIN
                    AND table_name = 'inventory_items' 
                    AND column_name = 'ean_code') THEN
         ALTER TABLE public.inventory_items ADD COLUMN ean_code text;
+    END IF;
+
+    -- Imagem do produto
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns 
+                   WHERE table_schema = 'public' 
+                   AND table_name = 'inventory_items' 
+                   AND column_name = 'image') THEN
+        ALTER TABLE public.inventory_items ADD COLUMN image text DEFAULT 'materialApoio/imagem-nao-disponivel.gif';
+        -- Atualizar itens existentes sem imagem
+        UPDATE public.inventory_items
+        SET image = 'materialApoio/imagem-nao-disponivel.gif'
+        WHERE image IS NULL OR image = '';
     END IF;
 END $$;
 

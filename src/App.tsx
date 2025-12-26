@@ -24,6 +24,7 @@ import { ProtectedRoute } from "./components/auth/ProtectedRoute"
 import { TableBill } from "./pages/TableBill"
 import { Stock } from "./pages/Stock"
 import { AddInventoryItem } from "./pages/AddInventoryItem"
+import { EditInventoryItem } from "./pages/EditInventoryItem"
 
 // Component to handle authenticated routes
 function AuthenticatedRoutes() {
@@ -93,6 +94,14 @@ function AuthenticatedRoutes() {
           element={
             <ProtectedRoute requiredRole="admin">
               <AddInventoryItem />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/stock/edit/:id" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <EditInventoryItem />
             </ProtectedRoute>
           } 
         />

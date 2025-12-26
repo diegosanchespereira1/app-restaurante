@@ -132,6 +132,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
           unit: item.unit || 'UN',
           min_stock: item.min_stock || 0,
           current_stock: item.current_stock || 0,
+          image: item.image || 'materialApoio/imagem-nao-disponivel.gif',
           product_type: item.product_type || null,
           ncm: item.ncm || null,
           cst_icms: item.cst_icms || null,

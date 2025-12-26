@@ -16,6 +16,7 @@ create table if not exists inventory_items (
   cost_price numeric,
   selling_price numeric,
   category text,
+  image text default 'materialApoio/imagem-nao-disponivel.gif',
   -- Campos para Nota Fiscal e Impostos
   product_type text, -- Tipo: 'alimento', 'bebida', 'limpeza', 'outros'
   ncm text, -- Nomenclatura Comum do Mercosul (código fiscal)
