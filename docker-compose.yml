@@ -9,3 +9,20 @@ services:
       - "8080:80"
     env_file:
       - .env
+    environment:
+      - VITE_BACKEND_URL=http://backend:3000
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: ./backend
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    environment:
+      - BACKEND_PORT=3000
+      - FRONTEND_URL=http://localhost:8080
+      - PRINTER_TIMEOUT=5000
+      - NODE_ENV=production
