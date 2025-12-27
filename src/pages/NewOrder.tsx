@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 
 import { formatCurrency } from "../lib/utils"
+import { MobileOrderSummaryCompact } from "../components/orders/MobileOrderSummaryCompact"
 
 // Tipo unificado para itens que podem aparecer no pedido
 interface UnifiedItem {
@@ -214,7 +215,7 @@ export function NewOrder() {
                         ))}
                     </div>
 
-                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-2">
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-3 overflow-y-auto pr-2 pb-24 md:pb-2">
                         {filteredItems.length === 0 ? (
                             <div className="col-span-full text-center py-8 text-muted-foreground">
                                 <p>{t("noItemsFound") || "Nenhum item encontrado"}</p>
@@ -279,8 +280,8 @@ export function NewOrder() {
                     </div>
                 </div>
 
-                {/* Right Side - Order Summary */}
-                <div className="w-full md:w-[480px] flex flex-col gap-6 shrink-0">
+                {/* Right Side - Order Summary (Desktop only) */}
+                <div className="hidden md:flex w-full md:w-[480px] flex-col gap-6 shrink-0">
                     <Card className="flex-1 flex flex-col overflow-hidden">
                         <CardHeader className="shrink-0">
                             <CardTitle>{t("orderSummary")}</CardTitle>
@@ -403,6 +404,25 @@ export function NewOrder() {
                     </Card>
                 </div>
             </div>
+
+            {/* Mobile Order Summary Compact */}
+            <MobileOrderSummaryCompact
+                selectedItems={selectedItems}
+                unifiedItems={unifiedItems}
+                total={calculateTotal()}
+                orderType={orderType}
+                selectedTable={selectedTable}
+                customerName={customerName}
+                isTablesEnabled={isTablesEnabled}
+                tables={tables}
+                handleAddItem={handleAddItem}
+                handleRemoveItem={handleRemoveItem}
+                setOrderType={setOrderType}
+                setSelectedTable={setSelectedTable}
+                setCustomerName={setCustomerName}
+                handleCreateOrder={handleCreateOrder}
+                calculateTotal={calculateTotal}
+            />
         </div>
     )
 }
