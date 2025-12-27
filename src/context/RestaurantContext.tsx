@@ -87,7 +87,7 @@ interface RestaurantContextType {
     closeTable: (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string }>
     updateMenuItem: (id: number, item: Partial<MenuItem>) => Promise<{ success: boolean; error?: string }>
-    deleteMenuItem: (id: number) => void
+    deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>
     expenses: Expense[]
     addExpense: (expense: Omit<Expense, "id">) => Promise<{ success: boolean; error?: string }>
     deleteExpense: (id: number) => void
@@ -662,14 +662,31 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
-    const deleteMenuItem = async (id: number) => {
+    const deleteMenuItem = async (id: number): Promise<{ success: boolean; error?: string }> => {
+        // Optimistic update
+        const previousItems = [...menuItems]
         setMenuItems(prev => prev.filter(i => i.id !== id))
+        
         // Demo mode: just use local state
         if (!isSupabaseConfigured) {
-            return
+            return { success: true }
         }
-        const { error } = await supabase.from('menu_items').delete().eq('id', id)
-        if (error) console.error("Error deleting menu item:", error)
+        
+        try {
+            const { error } = await supabase.from('menu_items').delete().eq('id', id)
+            if (error) {
+                // Revert optimistic update on error
+                setMenuItems(previousItems)
+                console.error("Error deleting menu item:", error)
+                return { success: false, error: error.message }
+            }
+            return { success: true }
+        } catch (err: any) {
+            // Revert optimistic update on error
+            setMenuItems(previousItems)
+            console.error("Error deleting menu item:", err)
+            return { success: false, error: err.message || 'Erro ao excluir item' }
+        }
     }
 
     // Expenses CRUD
