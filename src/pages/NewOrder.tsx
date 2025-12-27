@@ -360,13 +360,6 @@ export function NewOrder() {
                 setCustomerName={setCustomerName}
                 handleCreateOrder={handleCreateOrder}
                 calculateTotal={calculateTotal}
-                handleAddItem={handleAddItem}
-                handleRemoveItem={handleRemoveItem}
-                setOrderType={setOrderType}
-                setSelectedTable={setSelectedTable}
-                setCustomerName={setCustomerName}
-                handleCreateOrder={handleCreateOrder}
-                calculateTotal={calculateTotal}
             />
         </div>
     )
