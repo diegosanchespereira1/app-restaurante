@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
 import { Plus, Pencil, Trash2 } from "lucide-react"
 import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
+import { useStock } from "../context/StockContext"
 import { useLanguage } from "../context/LanguageContext"
 import { formatCurrency } from "../lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "../components/ui/dialog"
@@ -11,8 +12,22 @@ import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
+// Tipo unificado para itens que podem aparecer na página de Bebidas
+interface UnifiedItem {
+    id: string // "menu-{id}" ou "stock-{id}"
+    name: string
+    price: number
+    category: string | null
+    description?: string
+    image?: string
+    status?: string
+    type: 'menu' | 'stock'
+    originalId: number
+}
+
 export function Menu() {
     const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory } = useRestaurant()
+    const { inventoryItems, isLoading: isStockLoading } = useStock()
     const { t } = useLanguage()
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
@@ -27,6 +42,9 @@ export function Menu() {
         category: "",
         image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60"
     })
+    // Edit Item Logic
+    const [isEditOpen, setIsEditOpen] = useState(false)
+    const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
 
     // Set default category when categories load
     if (!newItem.category && categories.length > 0) {
@@ -102,14 +120,6 @@ export function Menu() {
         }
     }
 
-    // Edit Item Logic
-    const [isEditOpen, setIsEditOpen] = useState(false)
-    const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
-
-    const handleEditClick = (item: MenuItem) => {
-        setEditingItem(item)
-        setIsEditOpen(true)
-    }
 
     const handleUpdateItem = async () => {
         if (!editingItem) return
@@ -139,11 +149,17 @@ export function Menu() {
         }
     }
 
-    const handleDeleteItem = async (item: MenuItem) => {
+    const handleDeleteItem = async (item: UnifiedItem) => {
+        // Só pode deletar itens do menu
+        if (item.type !== 'menu') {
+            setError("Itens de estoque devem ser gerenciados na página de Estoque")
+            return
+        }
+        
         if (confirm(`Tem certeza que deseja excluir "${item.name}"?`)) {
             setIsLoading(true)
             try {
-                const result = await deleteMenuItem(item.id)
+                const result = await deleteMenuItem(item.originalId)
                 if (!result.success) {
                     setError(result.error || "Erro ao excluir item")
                 }
@@ -156,21 +172,78 @@ export function Menu() {
         }
     }
 
-    // Group items by category
-    const itemsByCategory = menuItems.reduce((acc, item) => {
-        if (!acc[item.category]) {
-            acc[item.category] = []
+    const handleEditClick = (item: UnifiedItem) => {
+        // Só pode editar itens do menu
+        if (item.type !== 'menu') {
+            setError("Itens de estoque devem ser editados na página de Estoque")
+            return
         }
-        acc[item.category].push(item)
-        return acc
-    }, {} as Record<string, typeof menuItems>)
+        
+        const menuItem = menuItems.find(m => m.id === item.originalId)
+        if (menuItem) {
+            setEditingItem(menuItem)
+            setIsEditOpen(true)
+        }
+    }
 
-    if (isMenuLoading) {
-        return <div className="flex justify-center items-center h-64">Loading menu...</div>
+    // Combinar itens do menu e do estoque (mesma lógica do NewOrder)
+    const unifiedItems: UnifiedItem[] = [
+        // Itens do menu
+        ...menuItems.map(item => ({
+            id: `menu-${item.id}`,
+            name: item.name,
+            price: item.price,
+            category: item.category,
+            description: item.description,
+            image: item.image,
+            status: item.status,
+            type: 'menu' as const,
+            originalId: item.id
+        })),
+        // Itens de estoque (apenas os que têm preço de venda ou estão vinculados)
+        ...inventoryItems
+            .filter(item => {
+                // Incluir se tem preço de venda OU está vinculado a um item do menu OU tem categoria
+                return item.selling_price || item.menu_item_id || item.category
+            })
+            .map(item => {
+                // Se está vinculado a um item do menu, usar os dados do menu
+                const menuItem = item.menu_item_id ? menuItems.find(m => m.id === item.menu_item_id) : null
+                // Se tem menu item vinculado, usar o preço do menu; senão usar o selling_price; senão 0
+                const finalPrice = menuItem?.price || item.selling_price || 0
+                
+                return {
+                    id: `stock-${item.id}`,
+                    name: item.name,
+                    price: finalPrice,
+                    category: item.category || menuItem?.category || null,
+                    description: menuItem?.description || undefined,
+                    image: item.image || menuItem?.image || "materialApoio/imagem-nao-disponivel.gif",
+                    status: menuItem?.status || "Available",
+                    type: 'stock' as const,
+                    originalId: item.id
+                }
+            })
+            // Filtrar itens sem preço válido (preço > 0)
+            .filter(item => item.price > 0)
+    ]
+
+    // Group items by category
+    const itemsByCategory = unifiedItems.reduce((acc, item) => {
+        const category = item.category || 'Sem categoria'
+        if (!acc[category]) {
+            acc[category] = []
+        }
+        acc[category].push(item)
+        return acc
+    }, {} as Record<string, UnifiedItem[]>)
+
+    if (isMenuLoading || isStockLoading) {
+        return <div className="flex justify-center items-center h-64">Carregando bebidas...</div>
     }
 
     if (menuError) {
-        return <div className="text-destructive text-center p-8">Error loading menu: {menuError}</div>
+        return <div className="text-destructive text-center p-8">Erro ao carregar: {menuError}</div>
     }
 
     return (
@@ -317,7 +390,7 @@ export function Menu() {
 
             {Object.keys(itemsByCategory).length === 0 && (
                 <div className="text-center text-muted-foreground p-8">
-                    No menu items found. Click "Add Item" to create one.
+                    Nenhuma bebida encontrada. Clique em "Adicionar Item" para criar uma nova.
                 </div>
             )}
 
@@ -338,38 +411,54 @@ export function Menu() {
                                 <Card key={item.id} className="overflow-hidden">
                                     <div className="aspect-video relative">
                                         <img
-                                            src={item.image}
+                                            src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
                                             alt={item.name}
                                             className="object-cover w-full h-full"
+                                            onError={(e) => {
+                                                e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
+                                            }}
                                         />
-                                        {/* ... rest of card ... */}
+                                        {item.type === 'stock' && (
+                                            <Badge className="absolute top-2 right-2 bg-blue-600">
+                                                Estoque
+                                            </Badge>
+                                        )}
                                     </div>
                                     <CardHeader>
                                         <CardTitle className="flex justify-between items-start">
                                             <span>{item.name}</span>
                                             <Badge variant={item.status === "Available" ? "success" : "destructive"}>
-                                                {t(item.status.toLowerCase() as any) || item.status}
+                                                {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                                            {item.description}
+                                            {item.description || "Sem descrição"}
                                         </p>
                                         <div className="flex items-center justify-between">
                                             <div className="text-2xl font-bold mb-2">{formatCurrency(item.price)}</div>
                                             <div className="flex gap-2">
-                                                <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon" 
-                                                    className="text-destructive hover:text-destructive"
-                                                    onClick={() => handleDeleteItem(item)}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                {item.type === 'menu' && (
+                                                    <>
+                                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="text-destructive hover:text-destructive"
+                                                            onClick={() => handleDeleteItem(item)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </>
+                                                )}
+                                                {item.type === 'stock' && (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Editar no Estoque
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </CardContent>
@@ -391,37 +480,54 @@ export function Menu() {
                                 <Card key={item.id} className="overflow-hidden">
                                     <div className="aspect-video relative">
                                         <img
-                                            src={item.image}
+                                            src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
                                             alt={item.name}
                                             className="object-cover w-full h-full"
+                                            onError={(e) => {
+                                                e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
+                                            }}
                                         />
+                                        {item.type === 'stock' && (
+                                            <Badge className="absolute top-2 right-2 bg-blue-600">
+                                                Estoque
+                                            </Badge>
+                                        )}
                                     </div>
                                     <CardHeader>
                                         <CardTitle className="flex justify-between items-start">
                                             <span>{item.name}</span>
                                             <Badge variant={item.status === "Available" ? "success" : "destructive"}>
-                                                {t(item.status.toLowerCase() as any) || item.status}
+                                                {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
                                         </CardTitle>
                                     </CardHeader>
                                     <CardContent>
                                         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
-                                            {item.description}
+                                            {item.description || "Sem descrição"}
                                         </p>
                                         <div className="flex items-center justify-between">
                                             <div className="text-2xl font-bold mb-2">{formatCurrency(item.price)}</div>
                                             <div className="flex gap-2">
-                                                <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
-                                                    <Pencil className="h-4 w-4" />
-                                                </Button>
-                                                <Button 
-                                                    variant="ghost" 
-                                                    size="icon" 
-                                                    className="text-destructive hover:text-destructive"
-                                                    onClick={() => handleDeleteItem(item)}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                {item.type === 'menu' && (
+                                                    <>
+                                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
+                                                            <Pencil className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button 
+                                                            variant="ghost" 
+                                                            size="icon" 
+                                                            className="text-destructive hover:text-destructive"
+                                                            onClick={() => handleDeleteItem(item)}
+                                                        >
+                                                            <Trash2 className="h-4 w-4" />
+                                                        </Button>
+                                                    </>
+                                                )}
+                                                {item.type === 'stock' && (
+                                                    <span className="text-xs text-muted-foreground">
+                                                        Editar no Estoque
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </CardContent>
