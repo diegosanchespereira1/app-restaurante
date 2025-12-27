@@ -187,12 +187,51 @@ export function StockProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Build update object, filtering out undefined values
+      const updateData: any = {}
+      
+      if (updates.name !== undefined) updateData.name = updates.name
+      if (updates.unit !== undefined) updateData.unit = updates.unit
+      if (updates.min_stock !== undefined) updateData.min_stock = updates.min_stock
+      if (updates.current_stock !== undefined) updateData.current_stock = updates.current_stock
+      if (updates.cost_price !== undefined) updateData.cost_price = updates.cost_price ?? null
+      if (updates.selling_price !== undefined) updateData.selling_price = updates.selling_price ?? null
+      if (updates.category !== undefined) updateData.category = updates.category || null
+      if (updates.menu_item_id !== undefined) updateData.menu_item_id = updates.menu_item_id || null
+      if (updates.product_type !== undefined) updateData.product_type = updates.product_type || null
+      if (updates.ncm !== undefined) updateData.ncm = updates.ncm || null
+      if (updates.cst_icms !== undefined) updateData.cst_icms = updates.cst_icms || null
+      if (updates.cfop !== undefined) updateData.cfop = updates.cfop || null
+      if (updates.icms_rate !== undefined) updateData.icms_rate = updates.icms_rate ?? null
+      if (updates.ipi_rate !== undefined) updateData.ipi_rate = updates.ipi_rate ?? null
+      if (updates.ean_code !== undefined) updateData.ean_code = updates.ean_code || null
+
+      // Only include image if it's provided (avoid schema cache issues)
+      if (updates.image !== undefined && updates.image !== null) {
+        updateData.image = updates.image
+      }
+
       const { error: updateError } = await supabase
         .from('inventory_items')
-        .update(updates)
+        .update(updateData)
         .eq('id', id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        // If error is about image column, try again without it
+        if (updateError.message?.includes("'image' column")) {
+          delete updateData.image
+          const { error: retryError } = await supabase
+            .from('inventory_items')
+            .update(updateData)
+            .eq('id', id)
+          
+          if (retryError) throw retryError
+          
+          await fetchInventoryItems()
+          return { success: true }
+        }
+        throw updateError
+      }
 
       await fetchInventoryItems()
       return { success: true }
