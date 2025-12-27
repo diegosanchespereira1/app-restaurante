@@ -28,7 +28,7 @@ export function NewOrder() {
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
 
     // Usar menuItems diretamente (já são produtos com price)
-    const availableItems = menuItems.filter(item => item.price > 0 && item.status === "Available")
+    const availableItems = menuItems.filter(item => item.price != null && item.price > 0 && item.status === "Available")
 
     // Extrair categorias únicas de todos os itens
     const allCategories = Array.from(new Set(
