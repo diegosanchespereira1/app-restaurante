@@ -12,7 +12,7 @@ import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
 export function Menu() {
-    const { menuItems, addMenuItem, updateMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory } = useRestaurant()
+    const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory } = useRestaurant()
     const { t } = useLanguage()
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
@@ -136,6 +136,23 @@ export function Menu() {
             setError("An unexpected error occurred")
         } finally {
             setIsLoading(false)
+        }
+    }
+
+    const handleDeleteItem = async (item: MenuItem) => {
+        if (confirm(`Tem certeza que deseja excluir "${item.name}"?`)) {
+            setIsLoading(true)
+            try {
+                const result = await deleteMenuItem(item.id)
+                if (!result.success) {
+                    setError(result.error || "Erro ao excluir item")
+                }
+            } catch (err) {
+                console.error(err)
+                setError("Erro ao excluir item")
+            } finally {
+                setIsLoading(false)
+            }
         }
     }
 
@@ -345,7 +362,12 @@ export function Menu() {
                                                 <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
                                                     <Pencil className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="text-destructive hover:text-destructive"
+                                                    onClick={() => handleDeleteItem(item)}
+                                                >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>
@@ -392,7 +414,12 @@ export function Menu() {
                                                 <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
                                                     <Pencil className="h-4 w-4" />
                                                 </Button>
-                                                <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="text-destructive hover:text-destructive"
+                                                    onClick={() => handleDeleteItem(item)}
+                                                >
                                                     <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>
