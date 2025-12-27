@@ -321,7 +321,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         // Insert Order Items
         const orderItems = order.items.map(item => ({
             order_id: order.id,
-            menu_item_id: item.id,
+            menu_item_id: item.id && item.id > 0 ? item.id : null, // null se não houver menu_item_id válido
             name: item.name,
             price: item.price,
             quantity: item.quantity
