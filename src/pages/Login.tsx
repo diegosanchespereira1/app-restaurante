@@ -6,7 +6,8 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Label } from '../components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
-import { UtensilsCrossed, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
+import { Logo } from '../components/ui/Logo'
 
 export function Login() {
   const [emailOrUsername, setEmailOrUsername] = useState('')
@@ -39,11 +40,8 @@ export function Login() {
       <Card className="w-full max-w-md">
         <CardHeader className="space-y-1 text-center">
           <div className="flex justify-center mb-4">
-            <div className="rounded-full bg-primary/10 p-3">
-              <UtensilsCrossed className="h-8 w-8 text-primary" />
-            </div>
+            <Logo size="md" showText={true} />
           </div>
-          <CardTitle className="text-2xl font-bold">{t('appTitle')}</CardTitle>
           <CardDescription>
             {t('loginDescription') || 'Entre com suas credenciais para acessar o sistema'}
           </CardDescription>
