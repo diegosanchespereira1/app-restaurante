@@ -20,7 +20,7 @@ export function Logo({ className, showText = true, size = "md" }: LogoProps) {
     }
 
     return (
-        <div className={cn("flex items-center gap-3", className)}>
+        <div className={cn("flex items-center gap-3 min-w-0", className)}>
             {/* Logo Graphic - Container with Arrow */}
             <div className={cn("relative flex-shrink-0", sizeClasses[size])}>
                 <svg
@@ -96,10 +96,10 @@ export function Logo({ className, showText = true, size = "md" }: LogoProps) {
 
             {/* Text */}
             {showText && (
-                <div className="flex flex-col">
-                    <h1 className={cn("font-bold tracking-tight uppercase", textSizeClasses[size])}>
+                <div className="flex flex-col min-w-0">
+                    <h1 className={cn("font-bold tracking-tight uppercase min-w-0", textSizeClasses[size])}>
                         <span 
-                            className="text-white relative"
+                            className="text-white relative block truncate"
                             style={{
                                 WebkitTextStroke: '3px #0066CC',
                                 WebkitTextFillColor: 'white',
@@ -110,7 +110,7 @@ export function Logo({ className, showText = true, size = "md" }: LogoProps) {
                             JE BEBIDAS
                         </span>
                     </h1>
-                    <span className={cn("font-bold text-[#0066CC] uppercase", size === "sm" ? "text-xs" : size === "md" ? "text-sm" : "text-base")}>
+                    <span className={cn("font-bold text-[#0066CC] uppercase truncate", size === "sm" ? "text-xs" : size === "md" ? "text-sm" : "text-base")}>
                         DISTRIBUIDORA
                     </span>
                 </div>
