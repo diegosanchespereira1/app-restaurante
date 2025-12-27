@@ -291,7 +291,7 @@ export function NewOrder() {
                 </div>
 
                 {/* Right Side - Order Summary (Desktop only) */}
-                <div className="hidden md:flex w-full md:w-[480px] flex-col gap-6 shrink-0">
+                <div className="hidden md:flex w-full md:w-[320px] lg:w-[400px] flex-col gap-6 shrink-0">
                     <Card className="flex-1 flex flex-col overflow-hidden">
                         <CardHeader className="shrink-0">
                             <CardTitle>{t("orderSummary")}</CardTitle>
