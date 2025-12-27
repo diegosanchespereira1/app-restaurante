@@ -1,6 +1,34 @@
 -- Fix: Permite que admins criem perfis de usuários
 -- Execute este SQL no Supabase SQL Editor
 
+-- Função para confirmar email de um usuário (para uso após criação via signUp)
+CREATE OR REPLACE FUNCTION public.admin_confirm_user_email(target_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth
+AS $$
+BEGIN
+    -- Verificar se o usuário atual é admin
+    IF NOT EXISTS (
+        SELECT 1 FROM user_profiles 
+        WHERE id = auth.uid() AND role = 'admin'
+    ) THEN
+        RAISE EXCEPTION 'Apenas administradores podem confirmar emails de usuários';
+    END IF;
+    
+    -- Confirmar email do usuário
+    UPDATE auth.users SET
+        email_confirmed_at = COALESCE(email_confirmed_at, now()),
+        confirmed_at = COALESCE(confirmed_at, now())
+    WHERE id = target_user_id;
+    
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Usuário não encontrado';
+    END IF;
+END;
+$$;
+
 -- Função para permitir admins inserir perfis de outros usuários
 CREATE OR REPLACE FUNCTION public.admin_insert_user_profile(
     target_user_id uuid,
@@ -66,6 +94,7 @@ END;
 $$;
 
 -- Comentários
+COMMENT ON FUNCTION public.admin_confirm_user_email IS 'Confirma o email de um usuário, permitindo login sem confirmação por email';
 COMMENT ON FUNCTION public.admin_insert_user_profile IS 'Permite que administradores criem perfis de usuários, bypassando RLS';
 COMMENT ON FUNCTION public.admin_update_user_profile IS 'Permite que administradores atualizem perfis de usuários, incluindo role';
 

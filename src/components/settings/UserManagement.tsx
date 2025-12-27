@@ -123,8 +123,7 @@ export function UserManagement({ className }: UserManagementProps) {
         }
 
         try {
-            // Criar usuário usando signUp normal (não requer admin)
-            // O perfil será criado automaticamente via trigger, mas vamos usar função SQL para definir role corretamente
+            // Criar usuário via signUp normal
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: formData.email,
                 password: formData.password,
@@ -140,41 +139,54 @@ export function UserManagement({ className }: UserManagementProps) {
                 throw authError
             }
 
-            if (authData?.user) {
-                // Usar função SQL para criar/atualizar perfil com role correto
-                // Isso bypassa RLS e permite que admins definam o role
-                const { error: profileError } = await supabase.rpc('admin_insert_user_profile', {
-                    target_user_id: authData.user.id,
-                    target_email: formData.email,
-                    target_username: formData.username || null,
-                    target_full_name: formData.full_name || null,
-                    target_role: formData.role
-                })
-
-                if (profileError) {
-                    console.error('Error creating profile:', profileError)
-                    // Se a função não existir, tentar atualizar normalmente (pode falhar por RLS)
-                    const { error: updateError } = await supabase
-                        .from('user_profiles')
-                        .update({
-                            username: formData.username || null,
-                            full_name: formData.full_name || null,
-                            role: formData.role,
-                        })
-                        .eq('id', authData.user.id)
-                    
-                    if (updateError) {
-                        setError(`Erro ao criar perfil: ${updateError.message}. Execute o SQL fix_admin_create_user_profile.sql no Supabase para habilitar criação de usuários por administradores.`)
-                        return
-                    }
-                }
-
-                // Aguardar um pouco para garantir que o perfil foi criado/atualizado
-                await new Promise(resolve => setTimeout(resolve, 500))
-                
-                await fetchUsers()
-                handleCloseDialog()
+            if (!authData?.user) {
+                throw new Error('Usuário não foi criado')
             }
+
+            const userId = authData.user.id
+
+            // Confirmar email do usuário usando função SQL
+            const { error: confirmError } = await supabase.rpc('admin_confirm_user_email', {
+                target_user_id: userId
+            })
+
+            if (confirmError) {
+                console.warn('Não foi possível confirmar email automaticamente:', confirmError)
+                // Continuar mesmo assim, o usuário poderá confirmar depois
+            }
+
+            // Criar/atualizar perfil com role correto usando função SQL
+            const { error: profileError } = await supabase.rpc('admin_insert_user_profile', {
+                target_user_id: userId,
+                target_email: formData.email,
+                target_username: formData.username || null,
+                target_full_name: formData.full_name || null,
+                target_role: formData.role
+            })
+
+            if (profileError) {
+                // Se a função não existir, tentar atualizar normalmente (pode falhar por RLS)
+                console.warn('Function admin_insert_user_profile not found, trying direct update:', profileError)
+                const { error: updateError } = await supabase
+                    .from('user_profiles')
+                    .update({
+                        username: formData.username || null,
+                        full_name: formData.full_name || null,
+                        role: formData.role,
+                    })
+                    .eq('id', userId)
+                
+                if (updateError) {
+                    setError(`Erro ao criar perfil: ${updateError.message}. Execute o SQL fix_admin_create_user_profile.sql no Supabase.`)
+                    return
+                }
+            }
+
+            // Aguardar um pouco para garantir que tudo foi criado
+            await new Promise(resolve => setTimeout(resolve, 500))
+            
+            await fetchUsers()
+            handleCloseDialog()
         } catch (err: any) {
             console.error('Error creating user:', err)
             setError(err.message || 'Erro ao criar usuário')
