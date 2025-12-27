@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import type { Product } from '../types/product'
 
-// Types
+// Types - MenuItem mantido para compatibilidade durante transição
 export interface MenuItem {
     id: number
     name: string
@@ -52,13 +53,26 @@ export interface Category {
     name: string
 }
 
+// Helper function to convert Product to MenuItem (for compatibility)
+const productToMenuItem = (p: Product): MenuItem => ({
+    id: p.id,
+    name: p.name,
+    price: p.price ?? 0,
+    description: p.description ?? '',
+    category: p.category ?? '',
+    status: (p.status ?? 'Available') as "Available" | "Sold Out",
+    image: p.image ?? ''
+})
+
 // Demo data for when Supabase is not configured
-const demoMenuItems: MenuItem[] = [
-    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "" },
-    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "" },
-    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "" },
-    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "" },
+const demoProducts: Product[] = [
+    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ]
+
+const demoMenuItems: MenuItem[] = demoProducts.map(productToMenuItem)
 
 const demoTables: Table[] = [
     { id: 1, number: "1", status: "Available" },
@@ -132,13 +146,19 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-            // Fetch Menu Items
-            console.log("Fetching menu items...")
-            const { data: menuData, error: menuError } = await supabase.from('menu_items').select('*').order('id')
-            if (menuError) throw menuError
-            if (menuData) {
-                console.log("Menu items fetched:", menuData)
-                setMenuItems(menuData)
+            // Fetch Products (filtering for products with price - sellable items)
+            console.log("Fetching products (menu items)...")
+            const { data: productsData, error: productsError } = await supabase
+                .from('products')
+                .select('*')
+                .not('price', 'is', null)
+                .order('id')
+            if (productsError) throw productsError
+            if (productsData) {
+                console.log("Products fetched:", productsData)
+                // Convert products to MenuItems for compatibility
+                const menuItemsFromProducts = productsData.map(productToMenuItem)
+                setMenuItems(menuItemsFromProducts)
             }
 
             // Fetch Tables
@@ -167,7 +187,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     notes: o.notes,
                     paymentMethod: o.payment_method,
                     items: o.items.map((i: any) => ({
-                        id: i.menu_item_id,
+                        id: i.product_id || i.menu_item_id, // suporta ambos durante transição
                         name: i.name,
                         price: i.price,
                         quantity: i.quantity
@@ -238,10 +258,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 )
                 .on(
                     'postgres_changes',
-                    { event: '*', schema: 'public', table: 'menu_items' },
+                    { event: '*', schema: 'public', table: 'products' },
                     (payload) => {
-                        console.log('Real-time menu update detected:', payload)
-                        fetchData() // Refresh data when menu changes
+                        console.log('Real-time products update detected:', payload)
+                        fetchData() // Refresh data when products change
                     }
                 )
                 .on(
@@ -321,7 +341,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         // Insert Order Items
         const orderItems = order.items.map(item => ({
             order_id: order.id,
-            menu_item_id: item.id && item.id > 0 ? item.id : null, // null se não houver menu_item_id válido
+            product_id: item.id && item.id > 0 ? item.id : null, // usar product_id
+            menu_item_id: item.id && item.id > 0 ? item.id : null, // manter para backward compatibility durante transição
             name: item.name,
             price: item.price,
             quantity: item.quantity
@@ -460,21 +481,21 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 // Get current user for stock movement
                 const { data: { user } } = await supabase.auth.getUser()
 
-                // For each item in the order, find matching inventory item and reduce stock
+                // For each item in the order, find matching product and reduce stock
                 for (const orderItem of order.items) {
-                    // Try to find inventory item by menu_item_id or by name
-                    const { data: inventoryItems } = await supabase
-                        .from('inventory_items')
+                    // Try to find product by id (product_id) or by name
+                    const { data: products } = await supabase
+                        .from('products')
                         .select('id')
-                        .or(`menu_item_id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                        .or(`id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
                         .limit(1)
 
-                    if (inventoryItems && inventoryItems.length > 0) {
-                        const inventoryItemId = inventoryItems[0].id
+                    if (products && products.length > 0) {
+                        const productId = products[0].id
 
                         // Create stock movement (exit)
                         await supabase.from('stock_movements').insert({
-                            inventory_item_id: inventoryItemId,
+                            product_id: productId,
                             movement_type: 'exit',
                             quantity: orderItem.quantity,
                             reference_id: parseInt(orderId.replace(/\D/g, '')) || null,
@@ -579,7 +600,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                         notes: o.notes,
                         paymentMethod: o.payment_method,
                         items: o.items.map((i: any) => ({
-                            id: i.menu_item_id,
+                            id: i.product_id || i.menu_item_id, // suporta ambos durante transição
                             name: i.name,
                             price: i.price,
                             quantity: i.quantity
@@ -588,19 +609,19 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
                     for (const order of tableOrders) {
                         for (const orderItem of order.items) {
-                            // Try to find inventory item by menu_item_id or by name
-                            const { data: inventoryItems } = await supabase
-                                .from('inventory_items')
+                            // Try to find product by id (product_id) or by name
+                            const { data: products } = await supabase
+                                .from('products')
                                 .select('id')
-                                .or(`menu_item_id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                                .or(`id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
                                 .limit(1)
 
-                            if (inventoryItems && inventoryItems.length > 0) {
-                                const inventoryItemId = inventoryItems[0].id
+                            if (products && products.length > 0) {
+                                const productId = products[0].id
 
                                 // Create stock movement (exit)
                                 await supabase.from('stock_movements').insert({
-                                    inventory_item_id: inventoryItemId,
+                                    product_id: productId,
                                     movement_type: 'exit',
                                     quantity: orderItem.quantity,
                                     reference_id: parseInt(order.id.replace(/\D/g, '')) || null,
@@ -622,7 +643,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
-    // Menu CRUD
+    // Menu CRUD (agora usando products)
     const addMenuItem = async (item: Omit<MenuItem, "id">): Promise<{ success: boolean; error?: string; data?: MenuItem }> => {
         // Demo mode: just use local state
         if (!isSupabaseConfigured) {
@@ -631,13 +652,24 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: true, data: newItem }
         }
 
-        const { data, error } = await supabase.from('menu_items').insert(item).select().single()
+        // Converter MenuItem para Product e inserir
+        const productData = {
+            name: item.name,
+            price: item.price,
+            description: item.description,
+            category: item.category,
+            status: item.status,
+            image: item.image
+        }
+
+        const { data, error } = await supabase.from('products').insert(productData).select().single()
         if (data) {
-            setMenuItems(prev => [...prev, data])
-            return { success: true, data }
+            const menuItem = productToMenuItem(data)
+            setMenuItems(prev => [...prev, menuItem])
+            return { success: true, data: menuItem }
         }
         if (error) {
-            console.error("Error adding menu item:", error)
+            console.error("Error adding product:", error)
             return { success: false, error: error.message }
         }
         return { success: false, error: "Unknown error occurred" }
@@ -653,10 +685,19 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         }
 
         try {
-            const { error } = await supabase.from('menu_items').update(item).eq('id', id)
+            // Converter para formato Product
+            const productUpdate: any = {}
+            if (item.name !== undefined) productUpdate.name = item.name
+            if (item.price !== undefined) productUpdate.price = item.price
+            if (item.description !== undefined) productUpdate.description = item.description
+            if (item.category !== undefined) productUpdate.category = item.category
+            if (item.status !== undefined) productUpdate.status = item.status
+            if (item.image !== undefined) productUpdate.image = item.image
+
+            const { error } = await supabase.from('products').update(productUpdate).eq('id', id)
 
             if (error) {
-                console.error("Error updating menu item:", error)
+                console.error("Error updating product:", error)
                 setMenuItems(previousItems) // Revert optimistic update
                 
                 // Tratar erro de foreign key de forma mais amigável
@@ -673,7 +714,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: true }
         } catch (err: any) {
             setMenuItems(previousItems) // Revert optimistic update
-            console.error("Error updating menu item:", err)
+            console.error("Error updating product:", err)
             
             if (err.message?.includes('foreign key constraint') || 
                 err.message?.includes('violates foreign key')) {
@@ -698,18 +739,18 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         }
         
         try {
-            const { error } = await supabase.from('menu_items').delete().eq('id', id)
+            const { error } = await supabase.from('products').delete().eq('id', id)
             if (error) {
                 // Revert optimistic update on error
                 setMenuItems(previousItems)
-                console.error("Error deleting menu item:", error)
+                console.error("Error deleting product:", error)
                 return { success: false, error: error.message }
             }
             return { success: true }
         } catch (err: any) {
             // Revert optimistic update on error
             setMenuItems(previousItems)
-            console.error("Error deleting menu item:", err)
+            console.error("Error deleting product:", err)
             return { success: false, error: err.message || 'Erro ao excluir item' }
         }
     }
@@ -798,9 +839,9 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: false, error: catError.message }
         }
 
-        // Update menu items to use new category name
+        // Update products to use new category name
         const { error: menuError } = await supabase
-            .from('menu_items')
+            .from('products')
             .update({ category: newName })
             .eq('category', oldCategory.name)
 

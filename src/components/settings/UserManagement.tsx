@@ -356,12 +356,12 @@ export function UserManagement({ className }: UserManagementProps) {
                             return (
                                 <div
                                     key={user.id}
-                                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border border-[#0066CC] rounded-lg hover:bg-muted/50 transition-colors"
                                 >
                                     <div className="flex-1 min-w-0">
                                         <div className="flex flex-wrap items-center gap-2">
                                             <p className="font-medium break-words">{user.full_name || user.email}</p>
-                                            <span className="text-xs px-2 py-1 bg-secondary rounded flex-shrink-0">
+                                            <span className="text-xs px-2 py-1 bg-[#0066CC] text-white rounded flex-shrink-0">
                                                 {user.role}
                                             </span>
                                             {!userEnabled && (

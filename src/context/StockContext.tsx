@@ -1,13 +1,37 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type {
-  InventoryItem,
+  Product,
   PurchaseInvoice,
   StockMovement,
-  CreateInventoryItemInput,
+  CreateProductInput,
   CreatePurchaseInvoiceInput,
   CreateStockMovementInput
-} from '../types/stock'
+} from '../types/product'
+import type { InventoryItem, CreateInventoryItemInput } from '../types/stock'
+
+// Helper function to convert Product to InventoryItem (for compatibility)
+const productToInventoryItem = (p: Product): InventoryItem => ({
+  id: p.id,
+  menu_item_id: null, // não é mais necessário na nova estrutura
+  name: p.name,
+  unit: p.unit ?? 'UN',
+  min_stock: p.min_stock ?? 0,
+  current_stock: p.current_stock ?? 0,
+  cost_price: p.cost_price,
+  selling_price: p.price, // usar price como selling_price
+  category: p.category,
+  image: p.image,
+  product_type: p.product_type,
+  ncm: p.ncm,
+  cst_icms: p.cst_icms,
+  cfop: p.cfop,
+  icms_rate: p.icms_rate,
+  ipi_rate: p.ipi_rate,
+  ean_code: p.ean_code,
+  created_at: p.created_at,
+  updated_at: p.updated_at
+})
 
 interface StockContextType {
   // State
@@ -47,7 +71,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch Inventory Items
+  // Fetch Inventory Items (agora usando products)
   const fetchInventoryItems = useCallback(async () => {
     if (!isSupabaseConfigured) {
       setInventoryItems([])
@@ -56,15 +80,18 @@ export function StockProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Buscar produtos que têm controle de estoque (current_stock não é null ou unit não é null)
       const { data, error: fetchError } = await supabase
-        .from('inventory_items')
+        .from('products')
         .select('*')
         .order('name')
 
       if (fetchError) throw fetchError
-      setInventoryItems(data || [])
+      // Converter products para InventoryItems para compatibilidade
+      const inventoryItems = (data || []).map(productToInventoryItem)
+      setInventoryItems(inventoryItems)
     } catch (err: any) {
-      console.error('Error fetching inventory items:', err)
+      console.error('Error fetching products:', err)
       setError(err.message || 'Erro ao carregar itens de estoque')
     }
   }, [])
@@ -104,7 +131,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
         .order('created_at', { ascending: false })
 
       if (itemId) {
-        query = query.eq('inventory_item_id', itemId)
+        query = query.eq('product_id', itemId) // usar product_id
       }
 
       const { data, error: fetchError } = await query
@@ -124,16 +151,15 @@ export function StockProvider({ children }: { children: ReactNode }) {
     }
 
     try {
-      // Build insert object, only including defined values
+      // Build insert object for products
       const insertData: any = {
         name: item.name,
         unit: item.unit || 'UN',
         min_stock: item.min_stock ?? 0,
         current_stock: item.current_stock ?? 0,
         cost_price: item.cost_price ?? null,
-        selling_price: item.selling_price ?? null,
+        price: item.selling_price ?? null, // usar price ao invés de selling_price
         category: item.category || null,
-        menu_item_id: item.menu_item_id || null,
         product_type: item.product_type || null,
         ncm: item.ncm || null,
         cst_icms: item.cst_icms || null,
@@ -149,7 +175,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
       }
 
       const { data, error: insertError } = await supabase
-        .from('inventory_items')
+        .from('products')
         .insert(insertData)
         .select()
         .single()
@@ -159,21 +185,23 @@ export function StockProvider({ children }: { children: ReactNode }) {
         if (insertError.message?.includes("'image' column")) {
           delete insertData.image
           const { data: retryData, error: retryError } = await supabase
-            .from('inventory_items')
+            .from('products')
             .insert(insertData)
             .select()
             .single()
           
           if (retryError) throw retryError
           
-          setInventoryItems(prev => [...prev, retryData])
-          return { success: true, data: retryData }
+          const inventoryItem = productToInventoryItem(retryData)
+          setInventoryItems(prev => [...prev, inventoryItem])
+          return { success: true, data: inventoryItem }
         }
         throw insertError
       }
 
-      setInventoryItems(prev => [...prev, data])
-      return { success: true, data }
+      const inventoryItem = productToInventoryItem(data)
+      setInventoryItems(prev => [...prev, inventoryItem])
+      return { success: true, data: inventoryItem }
     } catch (err: any) {
       console.error('Error adding inventory item:', err)
       return { success: false, error: err.message || 'Erro ao adicionar item' }
@@ -195,9 +223,9 @@ export function StockProvider({ children }: { children: ReactNode }) {
       if (updates.min_stock !== undefined) updateData.min_stock = updates.min_stock
       if (updates.current_stock !== undefined) updateData.current_stock = updates.current_stock
       if (updates.cost_price !== undefined) updateData.cost_price = updates.cost_price ?? null
-      if (updates.selling_price !== undefined) updateData.selling_price = updates.selling_price ?? null
+      if (updates.selling_price !== undefined) updateData.price = updates.selling_price ?? null // usar price
       if (updates.category !== undefined) updateData.category = updates.category || null
-      if (updates.menu_item_id !== undefined) updateData.menu_item_id = updates.menu_item_id || null
+      // menu_item_id não é mais usado na nova estrutura
       if (updates.product_type !== undefined) updateData.product_type = updates.product_type || null
       if (updates.ncm !== undefined) updateData.ncm = updates.ncm || null
       if (updates.cst_icms !== undefined) updateData.cst_icms = updates.cst_icms || null
@@ -212,7 +240,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
       }
 
       const { error: updateError } = await supabase
-        .from('inventory_items')
+        .from('products')
         .update(updateData)
         .eq('id', id)
 
@@ -221,7 +249,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
         if (updateError.message?.includes("'image' column")) {
           delete updateData.image
           const { error: retryError } = await supabase
-            .from('inventory_items')
+            .from('products')
             .update(updateData)
             .eq('id', id)
           
@@ -249,7 +277,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
 
     try {
       const { error: deleteError } = await supabase
-        .from('inventory_items')
+        .from('products')
         .delete()
         .eq('id', id)
 
@@ -258,7 +286,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
       setInventoryItems(prev => prev.filter(item => item.id !== id))
       return { success: true }
     } catch (err: any) {
-      console.error('Error deleting inventory item:', err)
+      console.error('Error deleting product:', err)
       return { success: false, error: err.message || 'Erro ao deletar item' }
     }
   }
@@ -298,7 +326,8 @@ export function StockProvider({ children }: { children: ReactNode }) {
       // Insert invoice items
       const invoiceItems = invoice.items.map(item => ({
         invoice_id: invoiceData.id,
-        inventory_item_id: item.inventory_item_id,
+        product_id: item.product_id, // usar product_id
+        inventory_item_id: item.product_id, // manter para backward compatibility durante transição
         product_name: item.product_name,
         quantity: item.quantity,
         unit: item.unit || 'UN',
@@ -312,28 +341,28 @@ export function StockProvider({ children }: { children: ReactNode }) {
 
       if (itemsError) throw itemsError
 
-      // Create stock movements for each item that has inventory_item_id
-      // Try to match items by name if inventory_item_id is null
+      // Create stock movements for each item that has product_id
+      // Try to match items by name if product_id is null
       for (const item of invoice.items) {
-        let inventoryItemId = item.inventory_item_id
+        let productId = item.product_id
 
-        // If no inventory_item_id, try to find by product name
-        if (!inventoryItemId) {
-          const { data: matchingItems } = await supabase
-            .from('inventory_items')
+        // If no product_id, try to find by product name
+        if (!productId) {
+          const { data: matchingProducts } = await supabase
+            .from('products')
             .select('id')
             .ilike('name', `%${item.product_name}%`)
             .limit(1)
 
-          if (matchingItems && matchingItems.length > 0) {
-            inventoryItemId = matchingItems[0].id
+          if (matchingProducts && matchingProducts.length > 0) {
+            productId = matchingProducts[0].id
           }
         }
 
-        // Only create movement if we have a valid inventory_item_id
-        if (inventoryItemId) {
+        // Only create movement if we have a valid product_id
+        if (productId) {
           await addStockMovement({
-            inventory_item_id: inventoryItemId,
+            product_id: productId,
             movement_type: 'entry',
             quantity: item.quantity,
             reference_id: invoiceData.id,
@@ -415,9 +444,9 @@ export function StockProvider({ children }: { children: ReactNode }) {
 
       if (insertError) throw insertError
 
-      // Update inventory item stock (trigger handles this, but we refresh to get updated data)
+      // Update product stock (trigger handles this, but we refresh to get updated data)
       await fetchInventoryItems()
-      await fetchStockMovements(movement.inventory_item_id)
+      await fetchStockMovements(movement.product_id)
 
       return { success: true, data }
     } catch (err: any) {
@@ -459,7 +488,7 @@ export function StockProvider({ children }: { children: ReactNode }) {
       .channel('stock-changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'inventory_items' },
+        { event: '*', schema: 'public', table: 'products' },
         () => {
           fetchInventoryItems()
         }

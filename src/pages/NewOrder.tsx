@@ -6,7 +6,6 @@ import { Label } from "../components/ui/label"
 import { Plus, Minus, Search, ShoppingBag, ArrowLeft } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
-import { useStock } from "../context/StockContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
@@ -15,87 +14,37 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 import { formatCurrency } from "../lib/utils"
 import { MobileOrderSummaryCompact } from "../components/orders/MobileOrderSummaryCompact"
 
-// Tipo unificado para itens que podem aparecer no pedido
-interface UnifiedItem {
-    id: string // "menu-{id}" ou "stock-{id}"
-    name: string
-    price: number
-    category: string | null
-    description?: string
-    image?: string
-    type: 'menu' | 'stock'
-    originalId: number
-}
-
 export function NewOrder() {
     const navigate = useNavigate()
     const { menuItems, tables, addOrder, generateOrderId } = useRestaurant()
-    const { inventoryItems } = useStock()
     const { t } = useLanguage()
     const { isTablesEnabled } = useSettings()
 
-    const [selectedItems, setSelectedItems] = useState<{ id: string; quantity: number }[]>([])
+    const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [selectedTable, setSelectedTable] = useState("")
     const [orderType, setOrderType] = useState<"dine_in" | "takeout" | "delivery">(isTablesEnabled ? "dine_in" : "takeout")
     const [customerName, setCustomerName] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
 
-    // Combinar itens do menu e do estoque
-    const unifiedItems: UnifiedItem[] = [
-        // Itens do menu
-        ...menuItems.map(item => ({
-            id: `menu-${item.id}`,
-            name: item.name,
-            price: item.price,
-            category: item.category,
-            description: item.description,
-            image: item.image,
-            type: 'menu' as const,
-            originalId: item.id
-        })),
-        // Itens de estoque (todos os itens, mas apenas mostrar os que têm preço ou estão vinculados)
-        ...inventoryItems
-            .filter(item => {
-                // Incluir se tem preço de venda OU está vinculado a um item do menu OU tem categoria
-                return item.selling_price || item.menu_item_id || item.category
-            })
-            .map(item => {
-                // Se está vinculado a um item do menu, usar os dados do menu
-                const menuItem = item.menu_item_id ? menuItems.find(m => m.id === item.menu_item_id) : null
-                // Se tem menu item vinculado, usar o preço do menu; senão usar o selling_price; senão 0
-                const finalPrice = menuItem?.price || item.selling_price || 0
-                
-                return {
-                    id: `stock-${item.id}`,
-                    name: item.name,
-                    price: finalPrice,
-                    category: item.category || menuItem?.category || null,
-                    description: menuItem?.description || undefined,
-                    image: item.image || menuItem?.image || "materialApoio/imagem-nao-disponivel.gif",
-                    type: 'stock' as const,
-                    originalId: item.id
-                }
-            })
-            // Filtrar itens sem preço válido (preço > 0)
-            .filter(item => item.price > 0)
-    ]
+    // Usar menuItems diretamente (já são produtos com price)
+    const availableItems = menuItems.filter(item => item.price > 0 && item.status === "Available")
 
     // Extrair categorias únicas de todos os itens
     const allCategories = Array.from(new Set(
-        unifiedItems
+        availableItems
             .map(item => item.category)
-            .filter((cat): cat is string => cat !== null && cat !== undefined)
+            .filter((cat): cat is string => cat !== null && cat !== undefined && cat !== '')
     ))
     const categories = ["all", ...allCategories]
 
-    const filteredItems = unifiedItems.filter(item => {
+    const filteredItems = availableItems.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase())
         const matchesCategory = selectedCategory === "all" || item.category === selectedCategory
         return matchesSearch && matchesCategory
     })
 
-    const handleAddItem = (itemId: string) => {
+    const handleAddItem = (itemId: number) => {
         setSelectedItems(prev => {
             const existing = prev.find(i => i.id === itemId)
             if (existing) {
@@ -105,7 +54,7 @@ export function NewOrder() {
         })
     }
 
-    const handleRemoveItem = (itemId: string) => {
+    const handleRemoveItem = (itemId: number) => {
         setSelectedItems(prev => {
             const existing = prev.find(i => i.id === itemId)
             if (existing && existing.quantity > 1) {
@@ -117,8 +66,8 @@ export function NewOrder() {
 
     const calculateTotal = () => {
         return selectedItems.reduce((sum, item) => {
-            const unifiedItem = unifiedItems.find(i => i.id === item.id)
-            return sum + (unifiedItem?.price || 0) * item.quantity
+            const menuItem = menuItems.find(m => m.id === item.id)
+            return sum + (menuItem?.price || 0) * item.quantity
         }, 0)
     }
 
@@ -143,24 +92,11 @@ export function NewOrder() {
             customer: customerName || t("guest"),
             status: "Pending" as const,
             items: selectedItems.map(item => {
-                const unifiedItem = unifiedItems.find(i => i.id === item.id)!
-                // Para itens de estoque, usar o ID do menu item vinculado se existir, senão null
-                // Para itens do menu, usar o ID do menu item
-                let menuItemId: number | null = null
-                
-                if (unifiedItem.type === 'stock') {
-                    // Item de estoque: usar menu_item_id se existir, senão null
-                    const inventoryItem = inventoryItems.find(inv => inv.id === unifiedItem.originalId)
-                    menuItemId = inventoryItem?.menu_item_id || null
-                } else {
-                    // Item do menu: usar o ID diretamente
-                    menuItemId = unifiedItem.originalId
-                }
-                
+                const menuItem = menuItems.find(m => m.id === item.id)!
                 return {
-                    id: menuItemId ?? 0, // Usar 0 como fallback para compatibilidade com OrderItem interface
-                    name: unifiedItem.name,
-                    price: unifiedItem.price,
+                    id: menuItem.id,
+                    name: menuItem.name,
+                    price: menuItem.price,
                     quantity: item.quantity
                 }
             }),
@@ -251,13 +187,6 @@ export function NewOrder() {
                                         ) : (
                                             <div className="w-full h-full flex items-center justify-center bg-muted rounded-t-lg">
                                                 <ShoppingBag className="h-12 w-12 text-muted-foreground" />
-                                            </div>
-                                        )}
-                                        {item.type === 'stock' && (
-                                            <div className="absolute top-2 right-2">
-                                                <span className="bg-primary text-primary-foreground text-xs px-2 py-1 rounded">
-                                                    Estoque
-                                                </span>
                                             </div>
                                         )}
                                     </div>
@@ -354,13 +283,13 @@ export function NewOrder() {
                                 ) : (
                                     <div className="space-y-4">
                                         {selectedItems.map((item) => {
-                                            const unifiedItem = unifiedItems.find(i => i.id === item.id)
+                                            const menuItem = menuItems.find(m => m.id === item.id)
                                             return (
                                                 <div key={item.id} className="flex items-center justify-between gap-4">
                                                     <div className="flex-1">
-                                                        <p className="font-medium">{unifiedItem?.name}</p>
+                                                        <p className="font-medium">{menuItem?.name}</p>
                                                         <div className="text-sm text-muted-foreground">
-                                                            {formatCurrency(unifiedItem?.price || 0)}
+                                                            {formatCurrency(menuItem?.price || 0)}
                                                         </div>
                                                     </div>
                                                     <div className="flex items-center gap-2">
@@ -383,7 +312,7 @@ export function NewOrder() {
                                                         </Button>
                                                     </div>
                                                     <div className="font-medium w-16 text-right">
-                                                        {formatCurrency((unifiedItem?.price || 0) * item.quantity)}
+                                                        {formatCurrency((menuItem?.price || 0) * item.quantity)}
                                                     </div>
                                                 </div>
                                             )
@@ -417,13 +346,20 @@ export function NewOrder() {
 
             {/* Mobile Order Summary Compact */}
             <MobileOrderSummaryCompact
-                selectedItems={selectedItems}
-                unifiedItems={unifiedItems}
+                selectedItems={selectedItems.map(item => ({ id: item.id.toString(), quantity: item.quantity }))}
+                menuItems={menuItems}
                 orderType={orderType}
                 selectedTable={selectedTable}
                 customerName={customerName}
                 isTablesEnabled={isTablesEnabled}
                 tables={tables}
+                handleAddItem={(id) => handleAddItem(parseInt(id))}
+                handleRemoveItem={(id) => handleRemoveItem(parseInt(id))}
+                setOrderType={setOrderType}
+                setSelectedTable={setSelectedTable}
+                setCustomerName={setCustomerName}
+                handleCreateOrder={handleCreateOrder}
+                calculateTotal={calculateTotal}
                 handleAddItem={handleAddItem}
                 handleRemoveItem={handleRemoveItem}
                 setOrderType={setOrderType}
