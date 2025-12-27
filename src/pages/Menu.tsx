@@ -758,7 +758,7 @@ export function Menu() {
             })}
             {/* Resumo do Pedido - Fixo na parte inferior */}
             {selectedItems.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-card border-t shadow-lg z-50 p-3 md:p-4 print:hidden overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-card border-t shadow-lg z-50 p-3 md:p-4 print:hidden overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
                     <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4 w-full min-w-0">
                         <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto min-w-0">
                             <div className="flex items-center gap-2 min-w-0">

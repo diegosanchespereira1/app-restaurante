@@ -25,7 +25,7 @@ export function MobileBottomNav() {
     })
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t md:hidden print:hidden mobile-bottom-nav">
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-card border-t lg:hidden print:hidden mobile-bottom-nav">
             <div className="grid gap-1 px-2 py-2" style={{
                 gridTemplateColumns: `repeat(${links.length}, minmax(0, 1fr))`
             }}>
