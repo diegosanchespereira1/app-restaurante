@@ -404,13 +404,13 @@ export function Menu() {
     }
 
     return (
-        <div className="space-y-8" style={{ paddingBottom: selectedItems.length > 0 ? '120px' : '0' }}>
-            <div className="flex items-center justify-between">
-                <div>
-                    <h2 className="text-3xl font-bold tracking-tight">{t("menu")}</h2>
-                    <p className="text-muted-foreground">{t("manageMenu")}</p>
+        <div className="space-y-8 w-full max-w-full overflow-x-hidden" style={{ paddingBottom: selectedItems.length > 0 ? '120px' : '0' }}>
+            <div className="flex items-center justify-between gap-4 w-full min-w-0">
+                <div className="min-w-0 flex-1">
+                    <h2 className="text-3xl font-bold tracking-tight truncate">{t("menu")}</h2>
+                    <p className="text-muted-foreground truncate">{t("manageMenu")}</p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 shrink-0">
                     <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
                         <DialogTrigger asChild>
                             <Button variant="outline">
@@ -561,12 +561,12 @@ export function Menu() {
                 if (items.length === 0) return null // Optional: remove this line to show empty categories
 
                 return (
-                    <div key={category.id} className="space-y-3 md:space-y-4">
-                        <h3 className="text-lg md:text-xl font-semibold capitalize">{category.name}</h3>
-                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div key={category.id} className="space-y-3 md:space-y-4 w-full">
+                        <h3 className="text-lg md:text-xl font-semibold capitalize truncate">{category.name}</h3>
+                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
                             {items.map((item) => (
-                                <Card key={item.id} className="overflow-hidden flex flex-col">
-                                    <div className="aspect-square md:aspect-video relative">
+                                <Card key={item.id} className="overflow-hidden flex flex-col w-full min-w-0">
+                                    <div className="aspect-square md:aspect-video relative w-full overflow-hidden">
                                         <img
                                             src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
                                             alt={item.name}
@@ -576,40 +576,40 @@ export function Menu() {
                                             }}
                                         />
                                         {item.type === 'stock' && (
-                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5">
+                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5 whitespace-nowrap">
                                                 Estoque
                                             </Badge>
                                         )}
                                     </div>
-                                    <CardHeader className="p-2 md:p-6">
-                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1">
-                                            <span className="text-xs md:text-base font-semibold line-clamp-2">{item.name}</span>
-                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit">
+                                    <CardHeader className="p-2 md:p-6 min-w-0">
+                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
+                                            <span className="text-xs md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
+                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit shrink-0">
                                                 {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col">
-                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block">
+                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col min-w-0">
+                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block break-words">
                                             {item.description || "Sem descrição"}
                                         </p>
-                                        <div className="space-y-2 md:space-y-3 mt-auto">
-                                            <div className="flex items-center justify-between">
-                                                <div className="text-base md:text-2xl font-bold">{formatCurrency(item.price)}</div>
+                                        <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
+                                            <div className="flex items-center justify-between gap-2 min-w-0">
+                                                <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
                                                 {item.type === 'menu' && (
-                                                    <div className="flex gap-1">
+                                                    <div className="flex gap-1 shrink-0">
                                                         <Button 
                                                             variant="outline" 
                                                             size="sm" 
                                                             onClick={() => handleEditClick(item)}
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
                                                         >
                                                             <Pencil className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                         <Button 
                                                             variant="ghost" 
                                                             size="sm"
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation shrink-0"
                                                             onClick={() => handleDeleteItem(item)}
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
@@ -619,31 +619,31 @@ export function Menu() {
                                             </div>
                                             
                                             {/* Controles de quantidade */}
-                                            <div className="flex items-center justify-between gap-1 md:gap-2">
-                                                <div className="flex items-center gap-1 md:gap-2 flex-1">
+                                            <div className="flex items-center justify-between gap-1 md:gap-2 min-w-0">
+                                                <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
                                                         onClick={() => handleRemoveFromOrder(item.id)}
                                                         disabled={getItemQuantity(item.id) === 0}
                                                     >
                                                         <Minus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
-                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center">
+                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center shrink-0">
                                                         {getItemQuantity(item.id) || 0}
                                                     </span>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
                                                         onClick={() => handleAddToOrder(item.id)}
                                                     >
                                                         <Plus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
                                                 </div>
                                                 {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-xs md:text-sm font-semibold text-primary">
+                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate shrink-0">
                                                         {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
@@ -661,12 +661,12 @@ export function Menu() {
             {Object.entries(itemsByCategory).map(([catName, items]) => {
                 if (categories.some(c => c.name === catName)) return null; // Already handled
                 return (
-                    <div key={catName} className="space-y-3 md:space-y-4">
-                        <h3 className="text-lg md:text-xl font-semibold capitalize">{catName} (Uncategorized)</h3>
-                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div key={catName} className="space-y-3 md:space-y-4 w-full">
+                        <h3 className="text-lg md:text-xl font-semibold capitalize truncate">{catName} (Uncategorized)</h3>
+                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
                             {items.map(item => (
-                                <Card key={item.id} className="overflow-hidden flex flex-col">
-                                    <div className="aspect-square md:aspect-video relative">
+                                <Card key={item.id} className="overflow-hidden flex flex-col w-full min-w-0">
+                                    <div className="aspect-square md:aspect-video relative w-full overflow-hidden">
                                         <img
                                             src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
                                             alt={item.name}
@@ -676,40 +676,40 @@ export function Menu() {
                                             }}
                                         />
                                         {item.type === 'stock' && (
-                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5">
+                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5 whitespace-nowrap">
                                                 Estoque
                                             </Badge>
                                         )}
                                     </div>
-                                    <CardHeader className="p-2 md:p-6">
-                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1">
-                                            <span className="text-xs md:text-base font-semibold line-clamp-2">{item.name}</span>
-                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit">
+                                    <CardHeader className="p-2 md:p-6 min-w-0">
+                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
+                                            <span className="text-xs md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
+                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit shrink-0">
                                                 {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col">
-                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block">
+                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col min-w-0">
+                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block break-words">
                                             {item.description || "Sem descrição"}
                                         </p>
-                                        <div className="space-y-2 md:space-y-3 mt-auto">
-                                            <div className="flex items-center justify-between">
-                                                <div className="text-base md:text-2xl font-bold">{formatCurrency(item.price)}</div>
+                                        <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
+                                            <div className="flex items-center justify-between gap-2 min-w-0">
+                                                <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
                                                 {item.type === 'menu' && (
-                                                    <div className="flex gap-1">
+                                                    <div className="flex gap-1 shrink-0">
                                                         <Button 
                                                             variant="outline" 
                                                             size="sm" 
                                                             onClick={() => handleEditClick(item)}
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
                                                         >
                                                             <Pencil className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                         <Button 
                                                             variant="ghost" 
                                                             size="sm"
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation shrink-0"
                                                             onClick={() => handleDeleteItem(item)}
                                                         >
                                                             <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
@@ -719,31 +719,31 @@ export function Menu() {
                                             </div>
                                             
                                             {/* Controles de quantidade */}
-                                            <div className="flex items-center justify-between gap-1 md:gap-2">
-                                                <div className="flex items-center gap-1 md:gap-2 flex-1">
+                                            <div className="flex items-center justify-between gap-1 md:gap-2 min-w-0">
+                                                <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
                                                         onClick={() => handleRemoveFromOrder(item.id)}
                                                         disabled={getItemQuantity(item.id) === 0}
                                                     >
                                                         <Minus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
-                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center">
+                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center shrink-0">
                                                         {getItemQuantity(item.id) || 0}
                                                     </span>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
                                                         onClick={() => handleAddToOrder(item.id)}
                                                     >
                                                         <Plus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
                                                 </div>
                                                 {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-xs md:text-sm font-semibold text-primary">
+                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate shrink-0">
                                                         {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
@@ -758,25 +758,25 @@ export function Menu() {
             })}
             {/* Resumo do Pedido - Fixo na parte inferior */}
             {selectedItems.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-card border-t shadow-lg z-50 p-3 md:p-4 print:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
-                        <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto">
-                            <div className="flex items-center gap-2">
-                                <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-primary" />
-                                <span className="text-sm md:text-base font-semibold">
+                <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-card border-t shadow-lg z-50 p-3 md:p-4 print:hidden overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4 w-full min-w-0">
+                        <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto min-w-0">
+                            <div className="flex items-center gap-2 min-w-0">
+                                <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-primary shrink-0" />
+                                <span className="text-sm md:text-base font-semibold truncate">
                                     {selectedItems.reduce((sum, item) => sum + item.quantity, 0)} {selectedItems.reduce((sum, item) => sum + item.quantity, 0) === 1 ? 'item' : 'itens'}
                                 </span>
                             </div>
-                            <div className="text-base md:text-lg font-bold text-primary">
+                            <div className="text-base md:text-lg font-bold text-primary truncate">
                                 Total: {formatCurrency(calculateTotal())}
                             </div>
                         </div>
-                        <div className="flex gap-2 w-full md:w-auto">
+                        <div className="flex gap-2 w-full md:w-auto shrink-0">
                             <Button
                                 variant="outline"
                                 onClick={() => setSelectedItems([])}
                                 disabled={isLoading}
-                                className="flex-1 md:flex-none h-11 md:h-10 touch-manipulation"
+                                className="flex-1 md:flex-none h-11 md:h-10 touch-manipulation min-w-0"
                             >
                                 Limpar
                             </Button>
@@ -785,8 +785,8 @@ export function Menu() {
                                 disabled={isLoading || selectedItems.length === 0}
                                 className="min-w-[140px] md:min-w-[150px] flex-1 md:flex-none h-11 md:h-10 touch-manipulation"
                             >
-                                <ShoppingCart className="mr-2 h-4 w-4" />
-                                Criar Pedido
+                                <ShoppingCart className="mr-2 h-4 w-4 shrink-0" />
+                                <span className="truncate">Criar Pedido</span>
                             </Button>
                         </div>
                     </div>
@@ -826,21 +826,21 @@ export function Menu() {
                                 autoFocus
                             />
                         </div>
-                        <div className="bg-muted p-3 rounded-md">
+                        <div className="bg-muted p-3 rounded-md overflow-hidden">
                             <div className="text-sm font-semibold mb-2">Resumo do Pedido:</div>
-                            <div className="space-y-1 text-sm">
+                            <div className="space-y-1 text-sm min-w-0">
                                 {selectedItems.map(item => {
                                     const unifiedItem = unifiedItems.find(i => i.id === item.id)!
                                     return (
-                                        <div key={item.id} className="flex justify-between">
-                                            <span>{unifiedItem.name} x {item.quantity}</span>
-                                            <span>{formatCurrency(unifiedItem.price * item.quantity)}</span>
+                                        <div key={item.id} className="flex justify-between gap-2 min-w-0">
+                                            <span className="truncate min-w-0">{unifiedItem.name} x {item.quantity}</span>
+                                            <span className="shrink-0">{formatCurrency(unifiedItem.price * item.quantity)}</span>
                                         </div>
                                     )
                                 })}
-                                <div className="flex justify-between font-bold pt-2 border-t mt-2">
-                                    <span>Total:</span>
-                                    <span>{formatCurrency(calculateTotal())}</span>
+                                <div className="flex justify-between font-bold pt-2 border-t mt-2 gap-2 min-w-0">
+                                    <span className="shrink-0">Total:</span>
+                                    <span className="shrink-0">{formatCurrency(calculateTotal())}</span>
                                 </div>
                             </div>
                         </div>

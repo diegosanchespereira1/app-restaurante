@@ -32,7 +32,7 @@ export function Orders() {
             case "preparing":
                 return {
                     label: "Pendente",
-                    className: "bg-red-100 text-red-700 border-red-200",
+                    className: "bg-destructive/10 text-destructive border-destructive/20",
                     icon: Clock
                 }
             case "ready":
@@ -51,7 +51,7 @@ export function Orders() {
             default:
                 return {
                     label: status,
-                    className: "bg-gray-100 text-gray-700 border-gray-200",
+                    className: "bg-muted text-muted-foreground border-border",
                     icon: Clock
                 }
         }
@@ -84,12 +84,12 @@ export function Orders() {
             {/* Header */}
             <header className="flex justify-between items-center mb-8">
                 <div>
-                    <h1 className="text-4xl font-bold text-gray-800">Pedidos</h1>
-                    <p className="text-gray-500 mt-1">Gerenciar pedidos desta mesa</p>
+                    <h1 className="text-4xl font-bold text-foreground">Pedidos</h1>
+                    <p className="text-muted-foreground mt-1">Gerenciar pedidos desta mesa</p>
                 </div>
                 <Button 
                     onClick={() => navigate("/orders/new")}
-                    className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-6 rounded-lg flex items-center shadow-sm"
+                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-6 rounded-lg flex items-center shadow-sm"
                 >
                     <span className="text-2xl font-light mr-2">+</span>
                     Novo Pedido
@@ -101,10 +101,10 @@ export function Orders() {
                 {/* Search Input - First Line */}
                 <div className="relative mb-4">
                     <span className="absolute inset-y-0 left-0 flex items-center pl-3">
-                        <Search className="w-5 h-5 text-gray-400" />
+                        <Search className="w-5 h-5 text-muted-foreground" />
                     </span>
                     <Input
-                        className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition"
+                        className="w-full pl-10 pr-4 py-3 border border-input rounded-lg focus:ring-primary focus:border-primary transition"
                         placeholder="Buscar por nome ou código..."
                         type="text"
                         value={searchQuery}
@@ -113,13 +113,13 @@ export function Orders() {
                 </div>
 
                 {/* Filter Buttons - Second Line */}
-                <div className="flex justify-between items-center gap-2 border border-gray-300 rounded-lg p-2 bg-white">
+                <div className="flex justify-between items-center gap-2 border border-border rounded-lg p-2 bg-card">
                     <Button
                         variant={statusFilter === "all" ? "default" : "ghost"}
                         className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
                             statusFilter === "all"
-                                ? "text-blue-600 bg-blue-50 border border-blue-200"
-                                : "text-gray-600 hover:bg-gray-100"
+                                ? "text-primary bg-primary/10 border border-primary/20"
+                                : "text-muted-foreground hover:bg-accent"
                         }`}
                         onClick={() => setStatusFilter("all")}
                     >
@@ -129,8 +129,8 @@ export function Orders() {
                         variant={statusFilter === "delivery" ? "default" : "ghost"}
                         className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
                             statusFilter === "delivery"
-                                ? "text-blue-600 bg-blue-50 border border-blue-200"
-                                : "text-gray-600 hover:bg-gray-100"
+                                ? "text-primary bg-primary/10 border border-primary/20"
+                                : "text-muted-foreground hover:bg-accent"
                         }`}
                         onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
                     >
@@ -141,8 +141,8 @@ export function Orders() {
                         variant={statusFilter === "pickup" ? "default" : "ghost"}
                         className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
                             statusFilter === "pickup"
-                                ? "text-blue-600 bg-blue-50 border border-blue-200"
-                                : "text-gray-600 hover:bg-gray-100"
+                                ? "text-primary bg-primary/10 border border-primary/20"
+                                : "text-muted-foreground hover:bg-accent"
                         }`}
                         onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
                     >
@@ -153,8 +153,8 @@ export function Orders() {
                         variant={statusFilter === "mesa" ? "default" : "ghost"}
                         className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
                             statusFilter === "mesa"
-                                ? "text-blue-600 bg-blue-50 border border-blue-200"
-                                : "text-gray-600 hover:bg-gray-100"
+                                ? "text-primary bg-primary/10 border border-primary/20"
+                                : "text-muted-foreground hover:bg-accent"
                         }`}
                         onClick={() => setStatusFilter(statusFilter === "mesa" ? "all" : "mesa")}
                     >
@@ -179,26 +179,26 @@ export function Orders() {
                         return (
                             <article
                                 key={order.id}
-                                className="bg-white rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)] cursor-pointer hover:shadow-lg transition-shadow"
+                                className="bg-card rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)] cursor-pointer hover:shadow-lg transition-shadow"
                                 onClick={() => navigate(`/orders/${order.id}`)}
                             >
                                 {/* Order ID - Highlighted */}
-                                <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-lg p-3">
+                                <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
-                                        <span className="text-sm font-medium text-orange-700">ID do Pedido</span>
-                                        <div className="bg-orange-500 text-white px-3 py-1 rounded-full">
+                                        <span className="text-sm font-medium text-primary">ID do Pedido</span>
+                                        <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full">
                                             <span className="font-mono font-bold text-sm tracking-wider">{order.id}</span>
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <div className="space-y-4 my-2.5">
-                                    <div className="space-y-3 text-gray-600">
-                                        <div className="flex justify-between items-start mb-4 mb-6">
-                                            <h2 className="text-2xl font-bold text-gray-800">{order.customer}</h2>
-                                            <span className={`flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full border ${statusInfo.className}`}>
-                                                <StatusIcon className="w-4 h-4" />
-                                                {statusInfo.label}
+                                    <div className="space-y-3 text-muted-foreground">
+                                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-4 mb-6">
+                                            <h2 className="text-2xl font-bold text-foreground truncate">{order.customer}</h2>
+                                            <span className={`flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full border w-fit ${statusInfo.className}`}>
+                                                <StatusIcon className="w-4 h-4 shrink-0" />
+                                                <span className="whitespace-nowrap">{statusInfo.label}</span>
                                             </span>
                                         </div>
                                         <div className="flex justify-between items-center">
@@ -225,9 +225,9 @@ export function Orders() {
                                     </div>
                                 </div>
                                 
-                                <div className="border-t pt-4 flex justify-between items-center">
-                                    <span className="text-lg font-bold text-gray-800">Total:</span>
-                                    <span className="text-2xl font-bold text-gray-900">{formatCurrency(order.total)}</span>
+                                <div className="border-t border-border pt-4 flex justify-between items-center">
+                                    <span className="text-lg font-bold text-foreground">Total:</span>
+                                    <span className="text-2xl font-bold text-primary">{formatCurrency(order.total)}</span>
                                 </div>
                             </article>
                         )

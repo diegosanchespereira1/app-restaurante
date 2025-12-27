@@ -42,9 +42,9 @@ export function Sidebar({ className, onClose }: SidebarProps) {
     return (
         <div className={cn("pb-12 min-h-screen border-r bg-card flex flex-col", className)}>
             <div className="space-y-4 py-4 flex-1">
-                <div className="px-3 py-2">
-                    <div className="px-4 mb-6">
-                        <Logo size="sm" showText={false} />
+                <div className="px-3 py-2 min-w-0">
+                    <div className="px-4 mb-6 py-2 min-w-0 overflow-hidden">
+                        <Logo size="sm" showText={true} className="min-w-0" />
                     </div>
                     <div className="space-y-1">
                         {links.map((link) => (
