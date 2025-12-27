@@ -20,3 +20,5 @@ EXPOSE 3000
 # Comando para iniciar
 CMD ["npm", "start"]
 
+
+

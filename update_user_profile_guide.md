@@ -195,3 +195,5 @@ SELECT * FROM user_profiles WHERE email = 'usuario@example.com';
 - Ou faça logout e login novamente
 - Ou recarregue a página (F5)
 
+
+

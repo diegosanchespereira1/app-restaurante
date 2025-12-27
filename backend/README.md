@@ -92,3 +92,5 @@ Envia trabalho de impressão.
 
 O backend está configurado para rodar no Docker através do `docker-compose.yml` na raiz do projeto.
 
+
+

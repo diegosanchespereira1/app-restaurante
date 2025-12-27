@@ -83,3 +83,5 @@ WHERE u.email = 'admin@example.com'
 ON CONFLICT (id) DO UPDATE
 SET role = 'admin';
 
+
+

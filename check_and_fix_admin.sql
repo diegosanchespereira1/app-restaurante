@@ -86,3 +86,5 @@ SELECT
 FROM user_profiles
 WHERE LOWER(role) = 'admin';
 
+
+

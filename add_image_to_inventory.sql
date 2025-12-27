@@ -25,3 +25,5 @@ COMMENT ON COLUMN public.inventory_items.image IS 'URL ou caminho da imagem do p
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+
+

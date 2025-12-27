@@ -19,7 +19,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from '../ui/dialog'
-import { supabase, isSupabaseConfigured } from '../../lib/supabase'
+import { supabase, isSupabaseConfigured, changeUserPassword } from '../../lib/supabase'
 import type { UserProfile, UserRole } from '../../context/AuthContext'
 import { Users, Plus, Edit, Trash2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -227,10 +227,12 @@ export function UserManagement({ className }: UserManagementProps) {
                 }
             }
 
-            // Nota: Alterar email e senha requer acesso admin do Supabase
-            // Por enquanto, apenas atualizamos o perfil. Email/senha devem ser alterados no painel do Supabase
+            // Alterar senha se fornecida
             if (formData.password) {
-                setError('Alteração de senha requer configuração adicional. Por favor, altere a senha no painel do Supabase ou configure o Service Role Key.')
+                const passwordResult = await changeUserPassword(editingUser.id, formData.password)
+                if (!passwordResult.success) {
+                    throw new Error(passwordResult.error || 'Erro ao alterar senha')
+                }
             }
 
             await fetchUsers()

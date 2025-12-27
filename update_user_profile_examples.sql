@@ -115,3 +115,5 @@ WHERE email != (
   SELECT email FROM auth.users WHERE id = user_profiles.id
 );
 
+
+

@@ -61,3 +61,5 @@ app.listen(PORT, () => {
   console.log(`⏱️  Timeout de impressora: ${process.env.PRINTER_TIMEOUT || '5000'}ms`)
 })
 
+
+
