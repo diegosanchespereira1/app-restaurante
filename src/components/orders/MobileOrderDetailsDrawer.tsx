@@ -8,18 +8,7 @@ import { Minus, Plus, ShoppingBag, X } from "lucide-react"
 import { formatCurrency } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
 import { cn } from "../../lib/utils"
-import type { Table } from "../../context/RestaurantContext"
-
-interface UnifiedItem {
-    id: string
-    name: string
-    price: number
-    category: string | null
-    description?: string
-    image?: string
-    type: 'menu' | 'stock'
-    originalId: number
-}
+import type { Table, MenuItem } from "../../context/RestaurantContext"
 
 interface SelectedItem {
     id: string
@@ -30,7 +19,7 @@ interface MobileOrderDetailsDrawerProps {
     isOpen: boolean
     onClose: () => void
     selectedItems: SelectedItem[]
-    unifiedItems: UnifiedItem[]
+    menuItems: MenuItem[]
     orderType: "dine_in" | "takeout" | "delivery"
     selectedTable: string
     customerName: string
@@ -49,7 +38,7 @@ export function MobileOrderDetailsDrawer({
     isOpen,
     onClose,
     selectedItems,
-    unifiedItems,
+    menuItems,
     orderType,
     selectedTable,
     customerName,
@@ -159,12 +148,12 @@ export function MobileOrderDetailsDrawer({
                         ) : (
                             <div className="space-y-4">
                                 {selectedItems.map((item) => {
-                                    const unifiedItem = unifiedItems.find(i => i.id === item.id)
+                                    const menuItem = menuItems.find(m => m.id.toString() === item.id)
                                     return (
                                         <div key={item.id} className="p-3 bg-muted/50 rounded-lg space-y-2">
-                                            <p className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{unifiedItem?.name}</p>
+                                            <p className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{menuItem?.name}</p>
                                             <div className="text-sm text-muted-foreground">
-                                                {formatCurrency(unifiedItem?.price || 0)}
+                                                {formatCurrency(menuItem?.price || 0)}
                                             </div>
                                             <div className="flex items-center justify-between">
                                                 <div className="flex items-center gap-2">
@@ -187,7 +176,7 @@ export function MobileOrderDetailsDrawer({
                                                     </Button>
                                                 </div>
                                                 <div className="font-medium text-right">
-                                                    {formatCurrency((unifiedItem?.price || 0) * item.quantity)}
+                                                    {formatCurrency((menuItem?.price || 0) * item.quantity)}
                                                 </div>
                                             </div>
                                         </div>

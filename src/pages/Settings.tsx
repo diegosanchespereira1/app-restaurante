@@ -12,12 +12,14 @@ import {
 } from "../components/ui/select"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
-import { Save, RotateCcw, ExternalLink, Printer, TestTube } from "lucide-react"
+import { Save, RotateCcw, ExternalLink, Printer, TestTube, Package2 } from "lucide-react"
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { testNetworkPrinter } from "../lib/printer"
 import { UserManagement } from "../components/settings/UserManagement"
 
 export function Settings() {
+    const navigate = useNavigate()
     const { language, setLanguage, t } = useLanguage()
     const { 
         updateSettings, 
@@ -151,6 +153,31 @@ export function Settings() {
                     </CardContent>
                 </Card>
             )}
+
+            {/* Items Management Card */}
+            <Card>
+                <CardHeader>
+                    <div className="flex items-center gap-2">
+                        <Package2 className="w-5 h-5" />
+                        <CardTitle>Gestão de Itens Cadastrados</CardTitle>
+                    </div>
+                    <CardDescription>
+                        Gerencie todos os itens do menu e do estoque em um único lugar
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Button 
+                        onClick={() => navigate('/items-management')}
+                        className="flex items-center justify-center gap-2 w-full sm:w-auto"
+                    >
+                        <Package2 className="w-4 h-4" />
+                        Acessar Gestão de Itens
+                    </Button>
+                    <p className="text-sm text-muted-foreground mt-2 break-words">
+                        Visualize, edite e gerencie todos os itens cadastrados no sistema
+                    </p>
+                </CardContent>
+            </Card>
 
             <div className="grid gap-6">
                 <Card>

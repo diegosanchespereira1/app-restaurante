@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
 import { Plus, Pencil, Trash2, Minus, ShoppingCart } from "lucide-react"
 import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
-import { useStock } from "../context/StockContext"
 import { useLanguage } from "../context/LanguageContext"
 import { formatCurrency } from "../lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "../components/ui/dialog"
@@ -13,25 +12,11 @@ import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
-// Tipo unificado para itens que podem aparecer na página de Bebidas
-interface UnifiedItem {
-    id: string // "menu-{id}" ou "stock-{id}"
-    name: string
-    price: number
-    category: string | null
-    description?: string
-    image?: string
-    status?: string
-    type: 'menu' | 'stock'
-    originalId: number
-}
-
 export function Menu() {
     const navigate = useNavigate()
     const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory, addOrder, generateOrderId } = useRestaurant()
-    const { inventoryItems, isLoading: isStockLoading } = useStock()
     const { t } = useLanguage()
-    const [selectedItems, setSelectedItems] = useState<{ id: string; quantity: number }[]>([])
+    const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [isCreateOrderDialogOpen, setIsCreateOrderDialogOpen] = useState(false)
     const [customerName, setCustomerName] = useState("")
     const [showSuccessMessage, setShowSuccessMessage] = useState(false)
@@ -155,17 +140,11 @@ export function Menu() {
         }
     }
 
-    const handleDeleteItem = async (item: UnifiedItem) => {
-        // Só pode deletar itens do menu
-        if (item.type !== 'menu') {
-            setError("Itens de estoque devem ser gerenciados na página de Estoque")
-            return
-        }
-        
+    const handleDeleteItem = async (item: MenuItem) => {
         if (confirm(`Tem certeza que deseja excluir "${item.name}"?`)) {
             setIsLoading(true)
             try {
-                const result = await deleteMenuItem(item.originalId)
+                const result = await deleteMenuItem(item.id)
                 if (!result.success) {
                     setError(result.error || "Erro ao excluir item")
                 }
@@ -178,64 +157,16 @@ export function Menu() {
         }
     }
 
-    const handleEditClick = (item: UnifiedItem) => {
-        // Só pode editar itens do menu
-        if (item.type !== 'menu') {
-            setError("Itens de estoque devem ser editados na página de Estoque")
-            return
-        }
-        
-        const menuItem = menuItems.find(m => m.id === item.originalId)
-        if (menuItem) {
-            setEditingItem(menuItem)
-            setIsEditOpen(true)
-        }
+    const handleEditClick = (item: MenuItem) => {
+        setEditingItem(item)
+        setIsEditOpen(true)
     }
 
-    // Combinar itens do menu e do estoque (mesma lógica do NewOrder)
-    const unifiedItems: UnifiedItem[] = [
-        // Itens do menu
-        ...menuItems.map(item => ({
-            id: `menu-${item.id}`,
-            name: item.name,
-            price: item.price,
-            category: item.category,
-            description: item.description,
-            image: item.image,
-            status: item.status,
-            type: 'menu' as const,
-            originalId: item.id
-        })),
-        // Itens de estoque (apenas os que têm preço de venda ou estão vinculados)
-        ...inventoryItems
-            .filter(item => {
-                // Incluir se tem preço de venda OU está vinculado a um item do menu OU tem categoria
-                return item.selling_price || item.menu_item_id || item.category
-            })
-            .map(item => {
-                // Se está vinculado a um item do menu, usar os dados do menu
-                const menuItem = item.menu_item_id ? menuItems.find(m => m.id === item.menu_item_id) : null
-                // Se tem menu item vinculado, usar o preço do menu; senão usar o selling_price; senão 0
-                const finalPrice = menuItem?.price || item.selling_price || 0
-                
-                return {
-                    id: `stock-${item.id}`,
-                    name: item.name,
-                    price: finalPrice,
-                    category: item.category || menuItem?.category || null,
-                    description: menuItem?.description || undefined,
-                    image: item.image || menuItem?.image || "materialApoio/imagem-nao-disponivel.gif",
-                    status: menuItem?.status || "Available",
-                    type: 'stock' as const,
-                    originalId: item.id
-                }
-            })
-            // Filtrar itens sem preço válido (preço > 0)
-            .filter(item => item.price > 0)
-    ]
+    // Usar menuItems diretamente (já são produtos com price)
+    const availableItems = menuItems.filter(item => item.price > 0 && item.status === "Available")
 
     // Funções para gerenciar quantidade no pedido
-    const handleAddToOrder = (itemId: string) => {
+    const handleAddToOrder = (itemId: number) => {
         setSelectedItems(prev => {
             const existing = prev.find(i => i.id === itemId)
             if (existing) {
@@ -245,7 +176,7 @@ export function Menu() {
         })
     }
 
-    const handleRemoveFromOrder = (itemId: string) => {
+    const handleRemoveFromOrder = (itemId: number) => {
         setSelectedItems(prev => {
             const existing = prev.find(i => i.id === itemId)
             if (existing && existing.quantity > 1) {
@@ -255,15 +186,15 @@ export function Menu() {
         })
     }
 
-    const getItemQuantity = (itemId: string) => {
+    const getItemQuantity = (itemId: number) => {
         const item = selectedItems.find(i => i.id === itemId)
         return item?.quantity || 0
     }
 
     const calculateTotal = () => {
         return selectedItems.reduce((sum, item) => {
-            const unifiedItem = unifiedItems.find(i => i.id === item.id)
-            return sum + (unifiedItem?.price || 0) * item.quantity
+            const menuItem = menuItems.find(m => m.id === item.id)
+            return sum + (menuItem?.price || 0) * item.quantity
         }, 0)
     }
 
@@ -293,52 +224,17 @@ export function Menu() {
         try {
             const orderId = await generateOrderId()
 
-            // Processar itens e criar menu items dinamicamente se necessário
-            const processedItems = await Promise.all(
-                selectedItems.map(async (item) => {
-                    const unifiedItem = unifiedItems.find(i => i.id === item.id)!
-                    
-                    let menuItemId: number
-                    
-                    if (unifiedItem.type === 'stock') {
-                        const inventoryItem = inventoryItems.find(inv => inv.id === unifiedItem.originalId)
-                        
-                        // Se tem menu_item_id vinculado, usar ele
-                        if (inventoryItem?.menu_item_id) {
-                            menuItemId = inventoryItem.menu_item_id
-                        } else {
-                            // Criar um item de menu dinamicamente
-                            const newMenuItemResult = await addMenuItem({
-                                name: unifiedItem.name,
-                                description: unifiedItem.description || "",
-                                price: unifiedItem.price,
-                                category: unifiedItem.category || "Outros",
-                                status: "Available",
-                                image: unifiedItem.image || "materialApoio/imagem-nao-disponivel.gif"
-                            })
-                            
-                            if (!newMenuItemResult.success) {
-                                throw new Error(`Erro ao criar item de menu para ${unifiedItem.name}: ${newMenuItemResult.error}`)
-                            }
-                            
-                            // O item criado está no retorno
-                            if (!newMenuItemResult.data) {
-                                throw new Error(`Item de menu criado mas não retornado: ${unifiedItem.name}`)
-                            }
-                            menuItemId = newMenuItemResult.data.id
-                        }
-                    } else {
-                        menuItemId = unifiedItem.originalId
-                    }
-                    
-                    return {
-                        id: menuItemId,
-                        name: unifiedItem.name,
-                        price: unifiedItem.price,
-                        quantity: item.quantity
-                    }
-                })
-            )
+            // Processar itens diretamente (não precisa mais criar menu items dinamicamente)
+            const processedItems = selectedItems.map((item) => {
+                const menuItem = menuItems.find(m => m.id === item.id)!
+                
+                return {
+                    id: menuItem.id,
+                    name: menuItem.name,
+                    price: menuItem.price,
+                    quantity: item.quantity
+                }
+            })
 
             const newOrder = {
                 id: orderId,
@@ -386,16 +282,16 @@ export function Menu() {
     }, [selectedItems.length])
 
     // Group items by category
-    const itemsByCategory = unifiedItems.reduce((acc, item) => {
+    const itemsByCategory = availableItems.reduce((acc, item) => {
         const category = item.category || 'Sem categoria'
         if (!acc[category]) {
             acc[category] = []
         }
         acc[category].push(item)
         return acc
-    }, {} as Record<string, UnifiedItem[]>)
+    }, {} as Record<string, MenuItem[]>)
 
-    if (isMenuLoading || isStockLoading) {
+    if (isMenuLoading) {
         return <div className="flex justify-center items-center h-64">Carregando bebidas...</div>
     }
 
@@ -830,11 +726,11 @@ export function Menu() {
                             <div className="text-sm font-semibold mb-2">Resumo do Pedido:</div>
                             <div className="space-y-1 text-sm min-w-0">
                                 {selectedItems.map(item => {
-                                    const unifiedItem = unifiedItems.find(i => i.id === item.id)!
+                                    const menuItem = menuItems.find(m => m.id === item.id)!
                                     return (
                                         <div key={item.id} className="flex justify-between gap-2 min-w-0">
-                                            <span className="truncate min-w-0">{unifiedItem.name} x {item.quantity}</span>
-                                            <span className="shrink-0">{formatCurrency(unifiedItem.price * item.quantity)}</span>
+                                            <span className="truncate min-w-0">{menuItem.name} x {item.quantity}</span>
+                                            <span className="shrink-0">{formatCurrency(menuItem.price * item.quantity)}</span>
                                         </div>
                                     )
                                 })}

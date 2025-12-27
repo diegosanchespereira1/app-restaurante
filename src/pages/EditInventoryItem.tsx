@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { useStock } from "../context/StockContext"
 import { useRestaurant } from "../context/RestaurantContext"
@@ -9,8 +9,9 @@ import { Label } from "../components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog"
-import { ArrowLeft, Save, Plus } from "lucide-react"
+import { ArrowLeft, Save, Plus, Upload, Loader2 } from "lucide-react"
 import { formatCurrency } from "../lib/utils"
+import { supabase, isSupabaseConfigured } from "../lib/supabase"
 
 const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
 
@@ -27,6 +28,9 @@ export function EditInventoryItem() {
     const [newCategoryName, setNewCategoryName] = useState("")
     const [isAddingCategory, setIsAddingCategory] = useState(false)
     const [categoryError, setCategoryError] = useState<string | null>(null)
+    const [isUploadingImage, setIsUploadingImage] = useState(false)
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
 
     const itemId = id ? parseInt(id) : null
     const currentItem = itemId ? getInventoryItemById(itemId) : null
@@ -139,6 +143,80 @@ export function EditInventoryItem() {
                 category: prev.category || menuItem.category || '',
                 image: prev.image === DEFAULT_IMAGE ? (menuItem.image || DEFAULT_IMAGE) : prev.image
             }))
+        }
+    }
+
+    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        // Validar tipo de arquivo
+        if (!file.type.startsWith('image/')) {
+            setUploadError('Por favor, selecione apenas arquivos de imagem')
+            return
+        }
+
+        // Validar tamanho (max 5MB)
+        if (file.size > 5 * 1024 * 1024) {
+            setUploadError('A imagem deve ter no máximo 5MB')
+            return
+        }
+
+        if (!isSupabaseConfigured) {
+            setUploadError('Supabase não está configurado. Use uma URL de imagem.')
+            return
+        }
+
+        setIsUploadingImage(true)
+        setUploadError(null)
+
+        try {
+            // Gerar nome único para o arquivo
+            const fileExt = file.name.split('.').pop()
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+            const filePath = `product-images/${fileName}`
+
+            // Fazer upload para o Supabase Storage
+            const { data, error } = await supabase.storage
+                .from('product-images')
+                .upload(filePath, file, {
+                    cacheControl: '3600',
+                    upsert: false
+                })
+
+            if (error) {
+                // Se o bucket não existir, tentar criar e fazer upload novamente
+                if (error.message.includes('Bucket not found')) {
+                    setUploadError('Bucket de imagens não encontrado. Por favor, crie um bucket chamado "product-images" no Supabase Storage.')
+                } else {
+                    setUploadError(`Erro ao fazer upload: ${error.message}`)
+                }
+                return
+            }
+
+            // Obter URL pública da imagem
+            const { data: urlData } = supabase.storage
+                .from('product-images')
+                .getPublicUrl(filePath)
+
+            if (urlData?.publicUrl) {
+                setFormData(prev => ({ ...prev, image: urlData.publicUrl }))
+                setUploadError(null)
+                // Limpar mensagem de erro após 3 segundos se houver sucesso
+                setTimeout(() => setUploadError(null), 3000)
+            } else {
+                setUploadError('Erro ao obter URL da imagem')
+            }
+        } catch (err: any) {
+            setUploadError(err.message || 'Erro ao fazer upload da imagem')
+            // Limpar mensagem de erro após 5 segundos
+            setTimeout(() => setUploadError(null), 5000)
+        } finally {
+            setIsUploadingImage(false)
+            // Limpar o input para permitir selecionar o mesmo arquivo novamente
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
         }
     }
 
@@ -348,7 +426,50 @@ export function EditInventoryItem() {
                             </div>
 
                             <div className="md:col-span-2">
-                                <Label htmlFor="image">URL da Imagem</Label>
+                                <Label htmlFor="image">Imagem do Produto</Label>
+                                
+                                {/* Botão de Upload */}
+                                <div className="flex gap-2 mb-2">
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        onClick={() => fileInputRef.current?.click()}
+                                        disabled={isUploadingImage || !isSupabaseConfigured}
+                                        className="w-auto"
+                                    >
+                                        {isUploadingImage ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                Enviando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Upload className="w-4 h-4 mr-2" />
+                                                Upload de Imagem
+                                            </>
+                                        )}
+                                    </Button>
+                                    <Input
+                                        ref={fileInputRef}
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={handleImageUpload}
+                                        className="hidden"
+                                        disabled={isUploadingImage}
+                                    />
+                                    {!isSupabaseConfigured && (
+                                        <p className="text-xs text-muted-foreground self-center">
+                                            Supabase não configurado. Use URL abaixo.
+                                        </p>
+                                    )}
+                                </div>
+
+                                {/* Erro de upload */}
+                                {uploadError && (
+                                    <p className="text-sm text-destructive mb-2">{uploadError}</p>
+                                )}
+
+                                {/* Campo de URL */}
                                 <Input
                                     id="image"
                                     value={formData.image}
@@ -356,8 +477,10 @@ export function EditInventoryItem() {
                                     placeholder="URL da imagem ou caminho do arquivo"
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
-                                    Deixe em branco para usar a imagem padrão. Se vincular a um item do menu, a imagem será copiada automaticamente.
+                                    Faça upload de uma imagem ou cole uma URL. Se vincular a um item do menu, a imagem será copiada automaticamente.
                                 </p>
+                                
+                                {/* Preview da imagem */}
                                 {formData.image && (
                                     <div className="mt-2">
                                         <img

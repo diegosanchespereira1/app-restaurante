@@ -4,18 +4,7 @@ import { ShoppingBag } from "lucide-react"
 import { formatCurrency } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
 import { MobileOrderDetailsDrawer } from "./MobileOrderDetailsDrawer"
-import type { Table } from "../../context/RestaurantContext"
-
-interface UnifiedItem {
-    id: string
-    name: string
-    price: number
-    category: string | null
-    description?: string
-    image?: string
-    type: 'menu' | 'stock'
-    originalId: number
-}
+import type { Table, MenuItem } from "../../context/RestaurantContext"
 
 interface SelectedItem {
     id: string
@@ -24,7 +13,7 @@ interface SelectedItem {
 
 interface MobileOrderSummaryCompactProps {
     selectedItems: SelectedItem[]
-    unifiedItems: UnifiedItem[]
+    menuItems: MenuItem[]
     orderType: "dine_in" | "takeout" | "delivery"
     selectedTable: string
     customerName: string
@@ -41,7 +30,7 @@ interface MobileOrderSummaryCompactProps {
 
 export function MobileOrderSummaryCompact({
     selectedItems,
-    unifiedItems,
+    menuItems,
     orderType,
     selectedTable,
     customerName,
@@ -101,7 +90,7 @@ export function MobileOrderSummaryCompact({
                 isOpen={isDrawerOpen}
                 onClose={() => setIsDrawerOpen(false)}
                 selectedItems={selectedItems}
-                unifiedItems={unifiedItems}
+                menuItems={menuItems}
                 orderType={orderType}
                 selectedTable={selectedTable}
                 customerName={customerName}
