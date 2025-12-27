@@ -123,41 +123,55 @@ export function UserManagement({ className }: UserManagementProps) {
         }
 
         try {
-            // Criar usuário no auth
-            const { data: authData, error: authError } = await supabase.auth.admin?.createUser({
+            // Criar usuário usando signUp normal (não requer admin)
+            // O perfil será criado automaticamente via trigger, mas vamos usar função SQL para definir role corretamente
+            const { data: authData, error: authError } = await supabase.auth.signUp({
                 email: formData.email,
                 password: formData.password,
-                email_confirm: true,
-                user_metadata: {
-                    username: formData.username || null,
-                    full_name: formData.full_name || null,
+                options: {
+                    data: {
+                        username: formData.username || null,
+                        full_name: formData.full_name || null,
+                    }
                 }
             })
 
             if (authError) {
-                // Se não temos admin access, informar ao usuário
-                if (authError.message.includes('admin') || authError.message.includes('service_role')) {
-                    setError('Criação de usuários requer acesso de administrador do Supabase. Para habilitar, configure o Service Role Key no backend ou use o painel do Supabase para criar usuários manualmente.')
-                    return
-                }
                 throw authError
             }
 
             if (authData?.user) {
-                // Atualizar perfil do usuário
-                const { error: profileError } = await supabase
-                    .from('user_profiles')
-                    .update({
-                        username: formData.username || null,
-                        full_name: formData.full_name || null,
-                        role: formData.role,
-                    })
-                    .eq('id', authData.user.id)
+                // Usar função SQL para criar/atualizar perfil com role correto
+                // Isso bypassa RLS e permite que admins definam o role
+                const { error: profileError } = await supabase.rpc('admin_insert_user_profile', {
+                    target_user_id: authData.user.id,
+                    target_email: formData.email,
+                    target_username: formData.username || null,
+                    target_full_name: formData.full_name || null,
+                    target_role: formData.role
+                })
 
                 if (profileError) {
-                    console.error('Error updating profile:', profileError)
+                    console.error('Error creating profile:', profileError)
+                    // Se a função não existir, tentar atualizar normalmente (pode falhar por RLS)
+                    const { error: updateError } = await supabase
+                        .from('user_profiles')
+                        .update({
+                            username: formData.username || null,
+                            full_name: formData.full_name || null,
+                            role: formData.role,
+                        })
+                        .eq('id', authData.user.id)
+                    
+                    if (updateError) {
+                        setError(`Erro ao criar perfil: ${updateError.message}. Execute o SQL fix_admin_create_user_profile.sql no Supabase para habilitar criação de usuários por administradores.`)
+                        return
+                    }
                 }
 
+                // Aguardar um pouco para garantir que o perfil foi criado/atualizado
+                await new Promise(resolve => setTimeout(resolve, 500))
+                
                 await fetchUsers()
                 handleCloseDialog()
             }
@@ -179,44 +193,33 @@ export function UserManagement({ className }: UserManagementProps) {
                 role: formData.role,
             }
 
-            // Atualizar email se necessário
-            if (formData.email !== editingUser.email) {
-                const { error: emailError } = await supabase.auth.admin?.updateUserById(
-                    editingUser.id,
-                    { email: formData.email }
-                )
-                if (emailError) {
-                    if (emailError.message.includes('admin')) {
-                        setError('Não é possível alterar o email sem acesso de administrador do Supabase.')
-                        return
-                    }
-                    throw emailError
+            // Usar função SQL para atualizar perfil (permite alterar role e outros campos)
+            const { error: updateError } = await supabase.rpc('admin_update_user_profile', {
+                target_user_id: editingUser.id,
+                target_email: formData.email,
+                target_username: formData.username || null,
+                target_full_name: formData.full_name || null,
+                target_role: formData.role
+            })
+
+            if (updateError) {
+                // Se a função não existir, tentar atualizar normalmente
+                console.warn('Function not found, trying direct update:', updateError)
+                const { error: directUpdateError } = await supabase
+                    .from('user_profiles')
+                    .update(updates)
+                    .eq('id', editingUser.id)
+
+                if (directUpdateError) {
+                    throw directUpdateError
                 }
-                updates.email = formData.email
             }
 
-            // Atualizar senha se fornecida
+            // Nota: Alterar email e senha requer acesso admin do Supabase
+            // Por enquanto, apenas atualizamos o perfil. Email/senha devem ser alterados no painel do Supabase
             if (formData.password) {
-                const { error: passwordError } = await supabase.auth.admin?.updateUserById(
-                    editingUser.id,
-                    { password: formData.password }
-                )
-                if (passwordError) {
-                    if (passwordError.message.includes('admin')) {
-                        setError('Não é possível alterar a senha sem acesso de administrador do Supabase.')
-                        return
-                    }
-                    throw passwordError
-                }
+                setError('Alteração de senha requer configuração adicional. Por favor, altere a senha no painel do Supabase ou configure o Service Role Key.')
             }
-
-            // Atualizar perfil
-            const { error: updateError } = await supabase
-                .from('user_profiles')
-                .update(updates)
-                .eq('id', editingUser.id)
-
-            if (updateError) throw updateError
 
             await fetchUsers()
             handleCloseDialog()
