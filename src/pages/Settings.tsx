@@ -15,6 +15,7 @@ import { useSettings } from "../context/SettingsContext"
 import { Save, RotateCcw, ExternalLink, Printer, TestTube } from "lucide-react"
 import { useState } from "react"
 import { testNetworkPrinter } from "../lib/printer"
+import { UserManagement } from "../components/settings/UserManagement"
 
 export function Settings() {
     const { language, setLanguage, t } = useLanguage()
@@ -372,6 +373,9 @@ export function Settings() {
                         )}
                     </CardContent>
                 </Card>
+
+                {/* User Management */}
+                <UserManagement />
             </div>
 
             {/* Current Settings Display */}

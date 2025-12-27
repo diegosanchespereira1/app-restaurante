@@ -381,6 +381,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (data.user) {
         const userProfile = await fetchUserProfile(data.user.id, data.user.email)
+        
+        // Verificar se o usuário está habilitado
+        if (userProfile && (userProfile as any).enabled === false) {
+          // Fazer logout do usuário
+          await supabase.auth.signOut()
+          setError('Usuário desabilitado. Entre em contato com o administrador.')
+          return { success: false, error: 'Usuário desabilitado. Entre em contato com o administrador.' }
+        }
+        
         setProfile(userProfile)
       }
 
