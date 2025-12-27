@@ -151,14 +151,27 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             const { data: productsData, error: productsError } = await supabase
                 .from('products')
                 .select('*')
-                .not('price', 'is', null)
                 .order('id')
-            if (productsError) throw productsError
+            
+            if (productsError) {
+                console.error("Error fetching products:", productsError)
+                throw productsError
+            }
+            
+            console.log("All products fetched:", productsData?.length || 0)
+            
             if (productsData) {
-                console.log("Products fetched:", productsData)
+                // Filter products with price (sellable items)
+                const sellableProducts = productsData.filter(p => p.price != null && p.price > 0)
+                console.log("Sellable products (with price):", sellableProducts.length)
+                
                 // Convert products to MenuItems for compatibility
-                const menuItemsFromProducts = productsData.map(productToMenuItem)
+                const menuItemsFromProducts = sellableProducts.map(productToMenuItem)
+                console.log("Menu items converted:", menuItemsFromProducts.length)
                 setMenuItems(menuItemsFromProducts)
+            } else {
+                console.warn("No products data returned")
+                setMenuItems([])
             }
 
             // Fetch Tables
