@@ -652,14 +652,39 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: true }
         }
 
-        const { error } = await supabase.from('menu_items').update(item).eq('id', id)
+        try {
+            const { error } = await supabase.from('menu_items').update(item).eq('id', id)
 
-        if (error) {
-            console.error("Error updating menu item:", error)
+            if (error) {
+                console.error("Error updating menu item:", error)
+                setMenuItems(previousItems) // Revert optimistic update
+                
+                // Tratar erro de foreign key de forma mais amigável
+                if (error.message?.includes('foreign key constraint') || 
+                    error.message?.includes('violates foreign key')) {
+                    return { 
+                        success: false, 
+                        error: 'Não é possível editar este item porque ele está sendo usado em pedidos existentes. Você pode criar um novo item ou aguardar que os pedidos sejam finalizados.' 
+                    }
+                }
+                
+                return { success: false, error: error.message }
+            }
+            return { success: true }
+        } catch (err: any) {
             setMenuItems(previousItems) // Revert optimistic update
-            return { success: false, error: error.message }
+            console.error("Error updating menu item:", err)
+            
+            if (err.message?.includes('foreign key constraint') || 
+                err.message?.includes('violates foreign key')) {
+                return { 
+                    success: false, 
+                    error: 'Não é possível editar este item porque ele está sendo usado em pedidos existentes. Você pode criar um novo item ou aguardar que os pedidos sejam finalizados.' 
+                }
+            }
+            
+            return { success: false, error: err.message || 'Erro ao atualizar item' }
         }
-        return { success: true }
     }
 
     const deleteMenuItem = async (id: number): Promise<{ success: boolean; error?: string }> => {
