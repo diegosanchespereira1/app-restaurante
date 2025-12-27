@@ -134,8 +134,10 @@ export function NewOrder() {
         const minutes = String(now.getMinutes()).padStart(2, '0')
         const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`
 
+        const orderId = await generateOrderId()
+
         const newOrder = {
-            id: generateOrderId(),
+            id: orderId,
             table: orderType === "dine_in" && isTablesEnabled ? selectedTable : undefined,
             orderType,
             customer: customerName || t("guest"),
