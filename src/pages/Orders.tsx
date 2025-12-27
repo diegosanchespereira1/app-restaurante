@@ -165,7 +165,7 @@ export function Orders() {
             </section>
 
             {/* Orders Grid */}
-            <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <main className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredOrders.length === 0 ? (
                     <div className="col-span-full text-center text-muted-foreground py-8">
                         Nenhum pedido encontrado
@@ -194,7 +194,7 @@ export function Orders() {
                                 
                                 <div className="space-y-4 my-2.5">
                                     <div className="space-y-3 text-muted-foreground">
-                                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-6">
+                                        <div className="flex flex-col gap-2 mb-6">
                                             <h2 className="text-2xl font-bold text-foreground truncate">{order.customer}</h2>
                                             <span className={`flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full border w-fit ${statusInfo.className}`}>
                                                 <StatusIcon className="w-4 h-4 shrink-0" />

@@ -318,17 +318,17 @@ export function UserManagement({ className }: UserManagementProps) {
     return (
         <Card className={className}>
             <CardHeader>
-                <div className="flex items-center justify-between">
-                    <div>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div className="flex-1 min-w-0">
                         <CardTitle className="flex items-center gap-2">
-                            <Users className="w-5 h-5" />
-                            Gerenciamento de Usuários
+                            <Users className="w-5 h-5 flex-shrink-0" />
+                            <span className="break-words">Gerenciamento de Usuários</span>
                         </CardTitle>
-                        <CardDescription>
+                        <CardDescription className="break-words">
                             Cadastre, edite e gerencie usuários do sistema
                         </CardDescription>
                     </div>
-                    <Button onClick={() => handleOpenDialog()}>
+                    <Button onClick={() => handleOpenDialog()} className="w-full sm:w-auto flex-shrink-0">
                         <Plus className="w-4 h-4 mr-2" />
                         Novo Usuário
                     </Button>
@@ -356,28 +356,28 @@ export function UserManagement({ className }: UserManagementProps) {
                             return (
                                 <div
                                     key={user.id}
-                                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors"
+                                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 border rounded-lg hover:bg-muted/50 transition-colors"
                                 >
-                                    <div className="flex-1">
-                                        <div className="flex items-center gap-2">
-                                            <p className="font-medium">{user.full_name || user.email}</p>
-                                            <span className="text-xs px-2 py-1 bg-secondary rounded">
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex flex-wrap items-center gap-2">
+                                            <p className="font-medium break-words">{user.full_name || user.email}</p>
+                                            <span className="text-xs px-2 py-1 bg-secondary rounded flex-shrink-0">
                                                 {user.role}
                                             </span>
                                             {!userEnabled && (
-                                                <span className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded">
+                                                <span className="text-xs px-2 py-1 bg-red-100 text-red-700 rounded flex-shrink-0">
                                                     Desabilitado
                                                 </span>
                                             )}
                                         </div>
-                                        <div className="text-sm text-muted-foreground mt-1">
+                                        <div className="text-sm text-muted-foreground mt-1 break-words">
                                             <p>{user.email}</p>
                                             {user.username && <p>@{user.username}</p>}
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-2">
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-2 flex-shrink-0">
                                         <div className="flex items-center gap-2">
-                                            <Label htmlFor={`enabled-${user.id}`} className="text-sm">
+                                            <Label htmlFor={`enabled-${user.id}`} className="text-sm whitespace-nowrap">
                                                 {userEnabled ? 'Ativo' : 'Inativo'}
                                             </Label>
                                             <Switch
@@ -385,24 +385,29 @@ export function UserManagement({ className }: UserManagementProps) {
                                                 checked={userEnabled}
                                                 onCheckedChange={(checked) => handleToggleEnabled(user, checked)}
                                                 disabled={user.id === currentUserProfile?.id}
+                                                className="flex-shrink-0"
                                             />
                                         </div>
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => handleOpenDialog(user)}
-                                        >
-                                            <Edit className="w-4 h-4" />
-                                        </Button>
-                                        {user.id !== currentUserProfile?.id && (
+                                        <div className="flex gap-2">
                                             <Button
                                                 variant="outline"
                                                 size="sm"
-                                                onClick={() => handleDeleteUser(user)}
+                                                onClick={() => handleOpenDialog(user)}
+                                                className="flex-shrink-0"
                                             >
-                                                <Trash2 className="w-4 h-4" />
+                                                <Edit className="w-4 h-4" />
                                             </Button>
-                                        )}
+                                            {user.id !== currentUserProfile?.id && (
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => handleDeleteUser(user)}
+                                                    className="flex-shrink-0"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                             )
@@ -412,7 +417,7 @@ export function UserManagement({ className }: UserManagementProps) {
 
                 {/* Dialog para criar/editar usuário */}
                 <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-                    <DialogContent className="max-w-md">
+                    <DialogContent className="max-w-md w-[calc(100vw-2rem)] sm:w-full">
                         <DialogHeader>
                             <DialogTitle>
                                 {editingUser ? 'Editar Usuário' : 'Novo Usuário'}

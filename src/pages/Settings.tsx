@@ -91,10 +91,10 @@ export function Settings() {
     }
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h2 className="text-3xl font-bold tracking-tight">{t("settingsTitle")}</h2>
-                <p className="text-muted-foreground">{t("settingsDescription")}</p>
+        <div className="space-y-6 w-full min-w-0">
+            <div className="w-full min-w-0">
+                <h2 className="text-2xl sm:text-3xl font-bold tracking-tight break-words">{t("settingsTitle")}</h2>
+                <p className="text-muted-foreground break-words mt-1">{t("settingsDescription")}</p>
             </div>
 
             {/* Save/Reset Actions */}
@@ -106,15 +106,15 @@ export function Settings() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="flex gap-4">
-                        <Button onClick={handleSave} className="flex items-center gap-2">
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        <Button onClick={handleSave} className="flex items-center justify-center gap-2 w-full sm:w-auto">
                             <Save className="w-4 h-4" />
                             Salvar Configurações
                         </Button>
                         <Button 
                             variant="outline" 
                             onClick={handleReset}
-                            className="flex items-center gap-2"
+                            className="flex items-center justify-center gap-2 w-full sm:w-auto"
                         >
                             <RotateCcw className="w-4 h-4" />
                             Reset para Padrão
@@ -140,12 +140,12 @@ export function Settings() {
                     <CardContent>
                         <Button 
                             onClick={openOrderDisplayInNewWindow}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700"
+                            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
                         >
-                            <ExternalLink className="w-4 h-4" />
-                            Abrir Tela de Pedidos em Nova Janela
+                            <ExternalLink className="w-4 h-4 flex-shrink-0" />
+                            <span className="break-words text-center sm:text-left">Abrir Tela de Pedidos em Nova Janela</span>
                         </Button>
-                        <p className="text-sm text-muted-foreground mt-2">
+                        <p className="text-sm text-muted-foreground mt-2 break-words">
                             A tela será aberta em uma nova janela sem menus, otimizada para monitoramento de cozinha
                         </p>
                     </CardContent>
@@ -162,7 +162,7 @@ export function Settings() {
                         <div className="grid gap-2">
                             <Label htmlFor="language">{t("language")}</Label>
                             <Select value={language} onValueChange={(val: any) => setLanguage(val)}>
-                                <SelectTrigger id="language" className="w-[200px]">
+                                <SelectTrigger id="language" className="w-full sm:w-[200px]">
                                     <SelectValue placeholder="Select language" />
                                 </SelectTrigger>
                                 <SelectContent>
@@ -180,10 +180,10 @@ export function Settings() {
                         <CardDescription>{t("enableTablesDescription")}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="space-y-0.5 flex-1 min-w-0">
                                 <Label htmlFor="enable-tables">{t("enableTables")}</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-sm text-muted-foreground break-words">
                                     Status atual: {isTablesEnabled ? "Ativado" : "Desativado"}
                                 </p>
                             </div>
@@ -191,6 +191,7 @@ export function Settings() {
                                 id="enable-tables"
                                 checked={isTablesEnabled}
                                 onCheckedChange={(checked) => updateSettings({ enableTables: checked })}
+                                className="flex-shrink-0"
                             />
                         </div>
                     </CardContent>
@@ -205,10 +206,10 @@ export function Settings() {
                         </CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="space-y-0.5 flex-1 min-w-0">
                                 <Label htmlFor="enable-order-display">Habilitar Tela de Pedidos</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-sm text-muted-foreground break-words">
                                     Disponível em: /order-display • Status atual: {isOrderDisplayEnabled ? "Ativado" : "Desativado"}
                                 </p>
                             </div>
@@ -216,6 +217,7 @@ export function Settings() {
                                 id="enable-order-display"
                                 checked={isOrderDisplayEnabled}
                                 onCheckedChange={(checked) => updateSettings({ enableOrderDisplay: checked })}
+                                className="flex-shrink-0"
                             />
                         </div>
                     </CardContent>
@@ -230,10 +232,10 @@ export function Settings() {
                         <CardDescription>{t("printerSettingsDescription")}</CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <div className="space-y-0.5">
+                        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                            <div className="space-y-0.5 flex-1 min-w-0">
                                 <Label htmlFor="enable-printer">{t("enablePrinter")}</Label>
-                                <p className="text-sm text-muted-foreground">
+                                <p className="text-sm text-muted-foreground break-words">
                                     Status atual: {printerSettings.enabled ? "Ativado" : "Desativado"}
                                 </p>
                             </div>
@@ -241,6 +243,7 @@ export function Settings() {
                                 id="enable-printer"
                                 checked={printerSettings.enabled}
                                 onCheckedChange={(checked) => updatePrinterSettings({ enabled: checked })}
+                                className="flex-shrink-0"
                             />
                         </div>
 
@@ -356,10 +359,10 @@ export function Settings() {
                                     </Select>
                                 </div>
 
-                                <div className="flex items-center justify-between">
-                                    <div className="space-y-0.5">
+                                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                    <div className="space-y-0.5 flex-1 min-w-0">
                                         <Label htmlFor="auto-print">{t("autoPrint")}</Label>
-                                        <p className="text-sm text-muted-foreground">
+                                        <p className="text-sm text-muted-foreground break-words">
                                             Imprimir automaticamente ao criar pedidos
                                         </p>
                                     </div>
@@ -367,6 +370,7 @@ export function Settings() {
                                         id="auto-print"
                                         checked={printerSettings.autoPrint}
                                         onCheckedChange={(checked) => updatePrinterSettings({ autoPrint: checked })}
+                                        className="flex-shrink-0"
                                     />
                                 </div>
                             </div>
@@ -387,32 +391,28 @@ export function Settings() {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    <div className="space-y-2 text-sm">
-                        <div className="flex justify-between">
-                            <span>Idioma:</span>
-                            <span className="font-medium">{language === 'pt' ? 'Português' : 'English'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span>Gestão de Mesas:</span>
-                            <span className="font-medium">{isTablesEnabled ? 'Ativado' : 'Desativado'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span>Tela de Pedidos:</span>
-                            <span className="font-medium">{isOrderDisplayEnabled ? 'Ativado' : 'Desativado'}</span>
-                        </div>
-                        <div className="flex justify-between">
-                            <span>Impressora:</span>
-                            <span className="font-medium">
-                                {printerSettings.enabled 
-                                    ? `${printerSettings.name || 'Sem nome'} (${printerSettings.type})` 
-                                    : 'Desativado'}
-                            </span>
-                        </div>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                        <span className="text-muted-foreground">Idioma:</span>
+                        <span className="font-medium text-right">{language === 'pt' ? 'Português' : 'English'}</span>
+                        
+                        <span className="text-muted-foreground">Gestão de Mesas:</span>
+                        <span className="font-medium text-right">{isTablesEnabled ? 'Ativado' : 'Desativado'}</span>
+                        
+                        <span className="text-muted-foreground">Tela de Pedidos:</span>
+                        <span className="font-medium text-right">{isOrderDisplayEnabled ? 'Ativado' : 'Desativado'}</span>
+                        
+                        <span className="text-muted-foreground">Impressora:</span>
+                        <span className="font-medium text-right break-words">
+                            {printerSettings.enabled 
+                                ? `${printerSettings.name || 'Sem nome'} (${printerSettings.type})` 
+                                : 'Desativado'}
+                        </span>
+                        
                         {isLoading && (
-                            <div className="flex justify-between">
-                                <span>Estado:</span>
-                                <span className="font-medium text-orange-600">Carregando...</span>
-                            </div>
+                            <>
+                                <span className="text-muted-foreground">Estado:</span>
+                                <span className="font-medium text-orange-600 text-right">Carregando...</span>
+                            </>
                         )}
                     </div>
                 </CardContent>
