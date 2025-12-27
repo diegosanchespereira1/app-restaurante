@@ -471,11 +471,6 @@ export function Menu() {
                                                 e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
                                             }}
                                         />
-                                        {item.type === 'stock' && (
-                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5 whitespace-nowrap">
-                                                Estoque
-                                            </Badge>
-                                        )}
                                     </div>
                                     <CardHeader className="p-2 md:p-6 min-w-0">
                                         <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
@@ -492,8 +487,7 @@ export function Menu() {
                                         <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
                                             <div className="flex items-center justify-between gap-2 min-w-0">
                                                 <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
-                                                {item.type === 'menu' && (
-                                                    <div className="flex gap-1 shrink-0">
+                                                <div className="flex gap-1 shrink-0">
                                                         <Button 
                                                             variant="outline" 
                                                             size="sm" 
@@ -511,7 +505,6 @@ export function Menu() {
                                                             <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                     </div>
-                                                )}
                                             </div>
                                             
                                             {/* Controles de quantidade */}
@@ -571,11 +564,6 @@ export function Menu() {
                                                 e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
                                             }}
                                         />
-                                        {item.type === 'stock' && (
-                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5 whitespace-nowrap">
-                                                Estoque
-                                            </Badge>
-                                        )}
                                     </div>
                                     <CardHeader className="p-2 md:p-6 min-w-0">
                                         <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
@@ -592,8 +580,7 @@ export function Menu() {
                                         <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
                                             <div className="flex items-center justify-between gap-2 min-w-0">
                                                 <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
-                                                {item.type === 'menu' && (
-                                                    <div className="flex gap-1 shrink-0">
+                                                <div className="flex gap-1 shrink-0">
                                                         <Button 
                                                             variant="outline" 
                                                             size="sm" 
@@ -611,7 +598,6 @@ export function Menu() {
                                                             <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                     </div>
-                                                )}
                                             </div>
                                             
                                             {/* Controles de quantidade */}

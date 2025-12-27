@@ -4,7 +4,6 @@ import type {
   Product,
   PurchaseInvoice,
   StockMovement,
-  CreateProductInput,
   CreatePurchaseInvoiceInput,
   CreateStockMovementInput
 } from '../types/product'

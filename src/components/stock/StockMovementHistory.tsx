@@ -10,14 +10,14 @@ interface StockMovementHistoryProps {
 
 export function StockMovementHistory({ itemId }: StockMovementHistoryProps) {
     const { stockMovements, fetchStockMovements, isLoading } = useStock()
-    const [movements, setMovements] = useState(stockMovements.filter(m => m.inventory_item_id === itemId))
+    const [movements, setMovements] = useState(stockMovements.filter(m => m.product_id === itemId))
 
     useEffect(() => {
         fetchStockMovements(itemId)
     }, [itemId, fetchStockMovements])
 
     useEffect(() => {
-        setMovements(stockMovements.filter(m => m.inventory_item_id === itemId))
+        setMovements(stockMovements.filter(m => m.product_id === itemId))
     }, [stockMovements, itemId])
 
     const getMovementIcon = (type: string) => {

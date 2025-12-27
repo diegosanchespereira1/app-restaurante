@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../components/ui/tabs"
 import { ArrowLeft, Pencil, Trash2, Search, Package, UtensilsCrossed } from "lucide-react"
 import { formatCurrency } from "../lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog"
-import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
 const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
@@ -19,7 +18,7 @@ const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
 export function ItemsManagement() {
     const navigate = useNavigate()
     const { t } = useLanguage()
-    const { menuItems, updateMenuItem, deleteMenuItem, categories, isLoading: isMenuLoading } = useRestaurant()
+    const { menuItems, deleteMenuItem, isLoading: isMenuLoading } = useRestaurant()
     const { inventoryItems, isLoading: isStockLoading } = useStock()
     
     const [searchTerm, setSearchTerm] = useState("")
@@ -46,9 +45,9 @@ export function ItemsManagement() {
         return matchesSearch && matchesCategory
     })
 
-    // Obter categorias únicas
-    const menuCategories = Array.from(new Set(menuItems.map(item => item.category).filter(Boolean)))
-    const stockCategories = Array.from(new Set(inventoryItems.map(item => item.category).filter(Boolean)))
+    // Obter categorias únicas (filtrar null/undefined e garantir que são strings)
+    const menuCategories = Array.from(new Set(menuItems.map(item => item.category).filter((cat): cat is string => Boolean(cat))))
+    const stockCategories = Array.from(new Set(inventoryItems.map(item => item.category).filter((cat): cat is string => Boolean(cat))))
 
     const handleDeleteMenuItem = async () => {
         if (!menuItemToDelete) return
@@ -246,8 +245,8 @@ export function ItemsManagement() {
                                     <SelectContent>
                                         <SelectItem value="all">Todas as categorias</SelectItem>
                                         {stockCategories.map((cat) => (
-                                            <SelectItem key={cat} value={cat}>
-                                                {cat}
+                                            <SelectItem key={cat || 'undefined'} value={cat || ''}>
+                                                {cat || 'Sem categoria'}
                                             </SelectItem>
                                         ))}
                                     </SelectContent>
