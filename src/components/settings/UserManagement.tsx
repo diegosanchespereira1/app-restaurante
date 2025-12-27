@@ -20,7 +20,7 @@ import {
     DialogTitle,
 } from '../ui/dialog'
 import { supabase, isSupabaseConfigured } from '../../lib/supabase'
-import { UserProfile, UserRole } from '../../context/AuthContext'
+import type { UserProfile, UserRole } from '../../context/AuthContext'
 import { Users, Plus, Edit, Trash2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 
