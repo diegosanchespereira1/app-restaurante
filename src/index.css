@@ -29,12 +29,29 @@
   body {
     @apply bg-background text-foreground font-sans antialiased;
   }
+  
+  /* Touch optimization for mobile */
+  button, a, [role="button"] {
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* Touch manipulation utility */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* Mobile Bottom Navigation Styles */
 @layer components {
   .mobile-bottom-nav {
     padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Hide mobile nav when creating order */
+  body.hide-mobile-nav .mobile-bottom-nav {
+    display: none;
   }
   
   /* Ensure proper spacing for mobile content */
@@ -45,6 +62,11 @@
     
     .mb-safe {
       margin-bottom: calc(77px + env(safe-area-inset-bottom));
+    }
+    
+    /* Adjust padding when nav is hidden */
+    body.hide-mobile-nav .mobile-content {
+      padding-bottom: calc(20px + env(safe-area-inset-bottom));
     }
   }
 }
