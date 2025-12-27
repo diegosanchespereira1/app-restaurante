@@ -94,7 +94,7 @@ interface RestaurantContextType {
     addCategory: (name: string) => Promise<{ success: boolean; error?: string }>
     updateCategory: (id: number, newName: string) => Promise<{ success: boolean; error?: string }>
     deleteCategory: (id: number) => Promise<{ success: boolean; error?: string }>
-    generateOrderId: () => string
+    generateOrderId: () => Promise<string>
     isLoading: boolean
     error: string | null
     isDemoMode: boolean
@@ -174,6 +174,19 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     }))
                 }))
                 setOrders(formattedOrders)
+                
+                // Calcular o próximo número de pedido baseado no maior ID existente
+                const numericIds = formattedOrders
+                    .map(o => {
+                        const num = parseInt(o.id, 10)
+                        return isNaN(num) ? 0 : num
+                    })
+                    .filter(id => id > 0)
+                
+                if (numericIds.length > 0) {
+                    const maxId = Math.max(...numericIds)
+                    setNextOrderNumber(maxId + 1)
+                }
             }
 
             // Fetch Expenses
@@ -772,7 +785,46 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
-    const generateOrderId = () => {
+    const generateOrderId = async (): Promise<string> => {
+        // Se Supabase está configurado, buscar o próximo ID do banco
+        if (isSupabaseConfigured) {
+            try {
+                // Buscar o maior ID numérico existente
+                const { data: orderData, error } = await supabase
+                    .from('orders')
+                    .select('id')
+                    .order('created_at', { ascending: false })
+                    .limit(1000) // Limitar para performance
+                
+                if (!error && orderData && orderData.length > 0) {
+                    const numericIds = orderData
+                        .map(o => {
+                            const num = parseInt(o.id, 10)
+                            return isNaN(num) ? 0 : num
+                        })
+                        .filter(id => id > 0)
+                    
+                    if (numericIds.length > 0) {
+                        const maxId = Math.max(...numericIds)
+                        const nextId = maxId + 1
+                        setNextOrderNumber(nextId + 1) // Atualizar para próximo
+                        return nextId.toString().padStart(4, '0')
+                    }
+                }
+                
+                // Se não há pedidos ou nenhum ID numérico, começar do 1
+                setNextOrderNumber(2)
+                return "0001"
+            } catch (err) {
+                console.error('Error generating order ID:', err)
+                // Fallback: usar timestamp + random para garantir unicidade
+                const timestamp = Date.now().toString().slice(-8) // Últimos 8 dígitos
+                const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
+                return `${timestamp}${random}`
+            }
+        }
+        
+        // Demo mode ou fallback: usar contador local
         const orderNumber = nextOrderNumber.toString().padStart(4, '0')
         setNextOrderNumber(prev => prev + 1)
         return orderNumber
