@@ -1,8 +1,9 @@
 import { useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
-import { Plus, Pencil, Trash2 } from "lucide-react"
+import { Plus, Pencil, Trash2, Minus, ShoppingCart } from "lucide-react"
 import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
 import { useStock } from "../context/StockContext"
 import { useLanguage } from "../context/LanguageContext"
@@ -26,9 +27,11 @@ interface UnifiedItem {
 }
 
 export function Menu() {
-    const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory } = useRestaurant()
+    const navigate = useNavigate()
+    const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory, addOrder, generateOrderId } = useRestaurant()
     const { inventoryItems, isLoading: isStockLoading } = useStock()
     const { t } = useLanguage()
+    const [selectedItems, setSelectedItems] = useState<{ id: string; quantity: number }[]>([])
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
@@ -228,6 +231,95 @@ export function Menu() {
             .filter(item => item.price > 0)
     ]
 
+    // Funções para gerenciar quantidade no pedido
+    const handleAddToOrder = (itemId: string) => {
+        setSelectedItems(prev => {
+            const existing = prev.find(i => i.id === itemId)
+            if (existing) {
+                return prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity + 1 } : i)
+            }
+            return [...prev, { id: itemId, quantity: 1 }]
+        })
+    }
+
+    const handleRemoveFromOrder = (itemId: string) => {
+        setSelectedItems(prev => {
+            const existing = prev.find(i => i.id === itemId)
+            if (existing && existing.quantity > 1) {
+                return prev.map(i => i.id === itemId ? { ...i, quantity: i.quantity - 1 } : i)
+            }
+            return prev.filter(i => i.id !== itemId)
+        })
+    }
+
+    const getItemQuantity = (itemId: string) => {
+        const item = selectedItems.find(i => i.id === itemId)
+        return item?.quantity || 0
+    }
+
+    const calculateTotal = () => {
+        return selectedItems.reduce((sum, item) => {
+            const unifiedItem = unifiedItems.find(i => i.id === item.id)
+            return sum + (unifiedItem?.price || 0) * item.quantity
+        }, 0)
+    }
+
+    const handleCreateOrder = async () => {
+        if (selectedItems.length === 0) {
+            setError("Adicione pelo menos um item ao pedido")
+            return
+        }
+
+        const now = new Date()
+        const day = String(now.getDate()).padStart(2, '0')
+        const month = String(now.getMonth() + 1).padStart(2, '0')
+        const year = now.getFullYear()
+        const hours = String(now.getHours()).padStart(2, '0')
+        const minutes = String(now.getMinutes()).padStart(2, '0')
+        const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`
+
+        setIsLoading(true)
+        try {
+            const orderId = await generateOrderId()
+
+            const newOrder = {
+                id: orderId,
+                table: undefined,
+                orderType: "takeout" as const,
+                customer: t("guest"),
+                status: "Pending" as const,
+                items: selectedItems.map(item => {
+                    const unifiedItem = unifiedItems.find(i => i.id === item.id)!
+                    // Para itens de estoque, usar o ID do menu item vinculado se existir, senão usar um ID temporário
+                    const menuItemId = unifiedItem.type === 'stock' 
+                        ? (inventoryItems.find(inv => inv.id === unifiedItem.originalId)?.menu_item_id || unifiedItem.originalId)
+                        : unifiedItem.originalId
+                    
+                    return {
+                        id: menuItemId,
+                        name: unifiedItem.name,
+                        price: unifiedItem.price,
+                        quantity: item.quantity
+                    }
+                }),
+                total: calculateTotal(),
+                time: formattedDate
+            }
+
+            const result = await addOrder(newOrder)
+            if (result.success) {
+                setSelectedItems([])
+                navigate("/orders")
+            } else {
+                setError(result.error || "Erro ao criar pedido")
+            }
+        } catch (err: any) {
+            setError(err.message || "Erro ao criar pedido")
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
     // Group items by category
     const itemsByCategory = unifiedItems.reduce((acc, item) => {
         const category = item.category || 'Sem categoria'
@@ -247,7 +339,7 @@ export function Menu() {
     }
 
     return (
-        <div className="space-y-8">
+        <div className="space-y-8" style={{ paddingBottom: selectedItems.length > 0 ? '120px' : '0' }}>
             <div className="flex items-center justify-between">
                 <div>
                     <h2 className="text-3xl font-bold tracking-tight">{t("menu")}</h2>
@@ -436,27 +528,58 @@ export function Menu() {
                                         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
                                             {item.description || "Sem descrição"}
                                         </p>
-                                        <div className="flex items-center justify-between">
-                                            <div className="text-2xl font-bold mb-2">{formatCurrency(item.price)}</div>
-                                            <div className="flex gap-2">
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-2xl font-bold">{formatCurrency(item.price)}</div>
                                                 {item.type === 'menu' && (
-                                                    <>
-                                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
-                                                            <Pencil className="h-4 w-4" />
+                                                    <div className="flex gap-1">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => handleEditClick(item)}
+                                                            className="h-8 w-8 p-0"
+                                                        >
+                                                            <Pencil className="h-3 w-3" />
                                                         </Button>
                                                         <Button 
                                                             variant="ghost" 
-                                                            size="icon" 
-                                                            className="text-destructive hover:text-destructive"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                                             onClick={() => handleDeleteItem(item)}
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <Trash2 className="h-3 w-3" />
                                                         </Button>
-                                                    </>
+                                                    </div>
                                                 )}
-                                                {item.type === 'stock' && (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Editar no Estoque
+                                            </div>
+                                            
+                                            {/* Controles de quantidade */}
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => handleRemoveFromOrder(item.id)}
+                                                        disabled={getItemQuantity(item.id) === 0}
+                                                    >
+                                                        <Minus className="h-4 w-4" />
+                                                    </Button>
+                                                    <span className="text-sm font-medium min-w-[2rem] text-center">
+                                                        {getItemQuantity(item.id) || 0}
+                                                    </span>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => handleAddToOrder(item.id)}
+                                                    >
+                                                        <Plus className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                                {getItemQuantity(item.id) > 0 && (
+                                                    <span className="text-sm font-semibold text-primary">
+                                                        {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
                                             </div>
@@ -505,27 +628,58 @@ export function Menu() {
                                         <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
                                             {item.description || "Sem descrição"}
                                         </p>
-                                        <div className="flex items-center justify-between">
-                                            <div className="text-2xl font-bold mb-2">{formatCurrency(item.price)}</div>
-                                            <div className="flex gap-2">
+                                        <div className="space-y-3">
+                                            <div className="flex items-center justify-between">
+                                                <div className="text-2xl font-bold">{formatCurrency(item.price)}</div>
                                                 {item.type === 'menu' && (
-                                                    <>
-                                                        <Button variant="outline" size="sm" onClick={() => handleEditClick(item)}>
-                                                            <Pencil className="h-4 w-4" />
+                                                    <div className="flex gap-1">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => handleEditClick(item)}
+                                                            className="h-8 w-8 p-0"
+                                                        >
+                                                            <Pencil className="h-3 w-3" />
                                                         </Button>
                                                         <Button 
                                                             variant="ghost" 
-                                                            size="icon" 
-                                                            className="text-destructive hover:text-destructive"
+                                                            size="sm"
+                                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
                                                             onClick={() => handleDeleteItem(item)}
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <Trash2 className="h-3 w-3" />
                                                         </Button>
-                                                    </>
+                                                    </div>
                                                 )}
-                                                {item.type === 'stock' && (
-                                                    <span className="text-xs text-muted-foreground">
-                                                        Editar no Estoque
+                                            </div>
+                                            
+                                            {/* Controles de quantidade */}
+                                            <div className="flex items-center justify-between gap-2">
+                                                <div className="flex items-center gap-2 flex-1">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => handleRemoveFromOrder(item.id)}
+                                                        disabled={getItemQuantity(item.id) === 0}
+                                                    >
+                                                        <Minus className="h-4 w-4" />
+                                                    </Button>
+                                                    <span className="text-sm font-medium min-w-[2rem] text-center">
+                                                        {getItemQuantity(item.id) || 0}
+                                                    </span>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        className="h-8 w-8 p-0"
+                                                        onClick={() => handleAddToOrder(item.id)}
+                                                    >
+                                                        <Plus className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                                {getItemQuantity(item.id) > 0 && (
+                                                    <span className="text-sm font-semibold text-primary">
+                                                        {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
                                             </div>
@@ -537,6 +691,49 @@ export function Menu() {
                     </div>
                 )
             })}
+            {/* Resumo do Pedido - Fixo na parte inferior */}
+            {selectedItems.length > 0 && (
+                <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-card border-t shadow-lg z-50 p-4 print:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
+                        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+                            <div className="flex items-center gap-2">
+                                <ShoppingCart className="h-5 w-5 text-primary" />
+                                <span className="font-semibold">
+                                    {selectedItems.reduce((sum, item) => sum + item.quantity, 0)} {selectedItems.reduce((sum, item) => sum + item.quantity, 0) === 1 ? 'item' : 'itens'}
+                                </span>
+                            </div>
+                            <div className="text-lg font-bold text-primary">
+                                Total: {formatCurrency(calculateTotal())}
+                            </div>
+                        </div>
+                        <div className="flex gap-2 w-full md:w-auto">
+                            <Button
+                                variant="outline"
+                                onClick={() => setSelectedItems([])}
+                                disabled={isLoading}
+                                className="flex-1 md:flex-none"
+                            >
+                                Limpar
+                            </Button>
+                            <Button
+                                onClick={handleCreateOrder}
+                                disabled={isLoading || selectedItems.length === 0}
+                                className="min-w-[150px] flex-1 md:flex-none"
+                            >
+                                {isLoading ? (
+                                    <>Criando pedido...</>
+                                ) : (
+                                    <>
+                                        <ShoppingCart className="mr-2 h-4 w-4" />
+                                        Criar Pedido
+                                    </>
+                                )}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Edit Item Dialog */}
             <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
                 <DialogContent>
