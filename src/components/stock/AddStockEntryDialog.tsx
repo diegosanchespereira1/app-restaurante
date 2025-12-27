@@ -20,7 +20,7 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
     const [error, setError] = useState<string | null>(null)
 
     const [formData, setFormData] = useState({
-        inventory_item_id: itemId || null as number | null,
+        product_id: itemId || null as number | null,
         quantity: 0,
         notes: ''
     })
@@ -29,7 +29,7 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
     useEffect(() => {
         if (open) {
             setFormData({
-                inventory_item_id: itemId || null,
+                product_id: itemId || null,
                 quantity: 0,
                 notes: ''
             })
@@ -42,7 +42,7 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
         setError(null)
 
         // Validações
-        if (!formData.inventory_item_id) {
+        if (!formData.product_id) {
             setError('Selecione um item do estoque')
             return
         }
@@ -55,7 +55,7 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
         setIsSubmitting(true)
         try {
             const result = await addStockMovement({
-                inventory_item_id: formData.inventory_item_id,
+                product_id: formData.product_id,
                 movement_type: 'entry',
                 quantity: formData.quantity,
                 reference_id: null,
@@ -66,7 +66,7 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
             if (result.success) {
                 // Reset form
                 setFormData({
-                    inventory_item_id: itemId || null,
+                    product_id: itemId || null,
                     quantity: 0,
                     notes: ''
                 })
@@ -81,8 +81,8 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
         }
     }
 
-    const selectedItem = formData.inventory_item_id 
-        ? inventoryItems.find(item => item.id === formData.inventory_item_id)
+    const selectedItem = formData.product_id 
+        ? inventoryItems.find(item => item.id === formData.product_id)
         : null
 
     return (
@@ -96,8 +96,8 @@ export function AddStockEntryDialog({ open, onOpenChange, itemId }: AddStockEntr
                     <div>
                         <Label htmlFor="inventory_item">Item do Estoque *</Label>
                         <Select
-                            value={formData.inventory_item_id?.toString() || ''}
-                            onValueChange={(value) => setFormData({ ...formData, inventory_item_id: value ? parseInt(value) : null })}
+                            value={formData.product_id?.toString() || ''}
+                            onValueChange={(value) => setFormData({ ...formData, product_id: value ? parseInt(value) : null })}
                         >
                             <SelectTrigger id="inventory_item">
                                 <SelectValue placeholder="Selecione um item" />
