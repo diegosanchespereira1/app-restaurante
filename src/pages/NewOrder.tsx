@@ -144,13 +144,21 @@ export function NewOrder() {
             status: "Pending" as const,
             items: selectedItems.map(item => {
                 const unifiedItem = unifiedItems.find(i => i.id === item.id)!
-                // Para itens de estoque, usar o ID do menu item vinculado se existir, senão usar um ID temporário
-                const menuItemId = unifiedItem.type === 'stock' 
-                    ? (inventoryItems.find(inv => inv.id === unifiedItem.originalId)?.menu_item_id || unifiedItem.originalId)
-                    : unifiedItem.originalId
+                // Para itens de estoque, usar o ID do menu item vinculado se existir, senão null
+                // Para itens do menu, usar o ID do menu item
+                let menuItemId: number | null = null
+                
+                if (unifiedItem.type === 'stock') {
+                    // Item de estoque: usar menu_item_id se existir, senão null
+                    const inventoryItem = inventoryItems.find(inv => inv.id === unifiedItem.originalId)
+                    menuItemId = inventoryItem?.menu_item_id || null
+                } else {
+                    // Item do menu: usar o ID diretamente
+                    menuItemId = unifiedItem.originalId
+                }
                 
                 return {
-                    id: menuItemId,
+                    id: menuItemId ?? 0, // Usar 0 como fallback para compatibilidade com OrderItem interface
                     name: unifiedItem.name,
                     price: unifiedItem.price,
                     quantity: item.quantity
