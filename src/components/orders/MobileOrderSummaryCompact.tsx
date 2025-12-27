@@ -4,6 +4,7 @@ import { ShoppingBag } from "lucide-react"
 import { formatCurrency } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
 import { MobileOrderDetailsDrawer } from "./MobileOrderDetailsDrawer"
+import type { Table } from "../../context/RestaurantContext"
 
 interface UnifiedItem {
     id: string
@@ -24,12 +25,11 @@ interface SelectedItem {
 interface MobileOrderSummaryCompactProps {
     selectedItems: SelectedItem[]
     unifiedItems: UnifiedItem[]
-    total: number
     orderType: "dine_in" | "takeout" | "delivery"
     selectedTable: string
     customerName: string
     isTablesEnabled: boolean
-    tables: Array<{ id: string; number: string; status: string }>
+    tables: Table[]
     handleAddItem: (itemId: string) => void
     handleRemoveItem: (itemId: string) => void
     setOrderType: (type: "dine_in" | "takeout" | "delivery") => void
@@ -42,7 +42,6 @@ interface MobileOrderSummaryCompactProps {
 export function MobileOrderSummaryCompact({
     selectedItems,
     unifiedItems,
-    total,
     orderType,
     selectedTable,
     customerName,
@@ -89,7 +88,7 @@ export function MobileOrderSummaryCompact({
                                 <span className="text-sm font-medium">
                                     {totalItems} {totalItems === 1 ? t("item") : t("items") || "itens"}
                                 </span>
-                                <span className="text-lg font-bold">{formatCurrency(total)}</span>
+                                <span className="text-lg font-bold">{formatCurrency(calculateTotal())}</span>
                             </div>
                         </div>
                         <span className="text-sm font-medium">{t("viewDetails")}</span>
@@ -103,7 +102,6 @@ export function MobileOrderSummaryCompact({
                 onClose={() => setIsDrawerOpen(false)}
                 selectedItems={selectedItems}
                 unifiedItems={unifiedItems}
-                total={total}
                 orderType={orderType}
                 selectedTable={selectedTable}
                 customerName={customerName}

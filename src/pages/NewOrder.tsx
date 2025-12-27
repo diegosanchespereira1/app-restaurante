@@ -409,7 +409,6 @@ export function NewOrder() {
             <MobileOrderSummaryCompact
                 selectedItems={selectedItems}
                 unifiedItems={unifiedItems}
-                total={calculateTotal()}
                 orderType={orderType}
                 selectedTable={selectedTable}
                 customerName={customerName}
