@@ -194,7 +194,7 @@ export function Orders() {
                                 
                                 <div className="space-y-4 my-2.5">
                                     <div className="space-y-3 text-muted-foreground">
-                                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-4 mb-6">
+                                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2 mb-6">
                                             <h2 className="text-2xl font-bold text-foreground truncate">{order.customer}</h2>
                                             <span className={`flex items-center gap-2 text-sm font-medium px-3 py-1 rounded-full border w-fit ${statusInfo.className}`}>
                                                 <StatusIcon className="w-4 h-4 shrink-0" />
