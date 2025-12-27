@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
@@ -8,7 +8,7 @@ import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
 import { useStock } from "../context/StockContext"
 import { useLanguage } from "../context/LanguageContext"
 import { formatCurrency } from "../lib/utils"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "../components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
@@ -32,6 +32,9 @@ export function Menu() {
     const { inventoryItems, isLoading: isStockLoading } = useStock()
     const { t } = useLanguage()
     const [selectedItems, setSelectedItems] = useState<{ id: string; quantity: number }[]>([])
+    const [isCreateOrderDialogOpen, setIsCreateOrderDialogOpen] = useState(false)
+    const [customerName, setCustomerName] = useState("")
+    const [showSuccessMessage, setShowSuccessMessage] = useState(false)
     const [isAddOpen, setIsAddOpen] = useState(false)
     const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
@@ -264,9 +267,17 @@ export function Menu() {
         }, 0)
     }
 
-    const handleCreateOrder = async () => {
+    const handleCreateOrderClick = () => {
         if (selectedItems.length === 0) {
             setError("Adicione pelo menos um item ao pedido")
+            return
+        }
+        setIsCreateOrderDialogOpen(true)
+    }
+
+    const handleCreateOrder = async () => {
+        if (!customerName.trim()) {
+            setError("Por favor, informe o nome do cliente")
             return
         }
 
@@ -282,18 +293,43 @@ export function Menu() {
         try {
             const orderId = await generateOrderId()
 
-            const newOrder = {
-                id: orderId,
-                table: undefined,
-                orderType: "takeout" as const,
-                customer: t("guest"),
-                status: "Pending" as const,
-                items: selectedItems.map(item => {
+            // Processar itens e criar menu items dinamicamente se necessário
+            const processedItems = await Promise.all(
+                selectedItems.map(async (item) => {
                     const unifiedItem = unifiedItems.find(i => i.id === item.id)!
-                    // Para itens de estoque, usar o ID do menu item vinculado se existir, senão usar um ID temporário
-                    const menuItemId = unifiedItem.type === 'stock' 
-                        ? (inventoryItems.find(inv => inv.id === unifiedItem.originalId)?.menu_item_id || unifiedItem.originalId)
-                        : unifiedItem.originalId
+                    
+                    let menuItemId: number
+                    
+                    if (unifiedItem.type === 'stock') {
+                        const inventoryItem = inventoryItems.find(inv => inv.id === unifiedItem.originalId)
+                        
+                        // Se tem menu_item_id vinculado, usar ele
+                        if (inventoryItem?.menu_item_id) {
+                            menuItemId = inventoryItem.menu_item_id
+                        } else {
+                            // Criar um item de menu dinamicamente
+                            const newMenuItemResult = await addMenuItem({
+                                name: unifiedItem.name,
+                                description: unifiedItem.description || "",
+                                price: unifiedItem.price,
+                                category: unifiedItem.category || "Outros",
+                                status: "Available",
+                                image: unifiedItem.image || "materialApoio/imagem-nao-disponivel.gif"
+                            })
+                            
+                            if (!newMenuItemResult.success) {
+                                throw new Error(`Erro ao criar item de menu para ${unifiedItem.name}: ${newMenuItemResult.error}`)
+                            }
+                            
+                            // O item criado está no retorno
+                            if (!newMenuItemResult.data) {
+                                throw new Error(`Item de menu criado mas não retornado: ${unifiedItem.name}`)
+                            }
+                            menuItemId = newMenuItemResult.data.id
+                        }
+                    } else {
+                        menuItemId = unifiedItem.originalId
+                    }
                     
                     return {
                         id: menuItemId,
@@ -301,15 +337,32 @@ export function Menu() {
                         price: unifiedItem.price,
                         quantity: item.quantity
                     }
-                }),
+                })
+            )
+
+            const newOrder = {
+                id: orderId,
+                table: undefined,
+                orderType: "takeout" as const,
+                customer: customerName.trim() || t("guest"),
+                status: "Pending" as const,
+                items: processedItems,
                 total: calculateTotal(),
                 time: formattedDate
             }
 
             const result = await addOrder(newOrder)
             if (result.success) {
+                setIsCreateOrderDialogOpen(false)
+                setShowSuccessMessage(true)
+                setCustomerName("")
                 setSelectedItems([])
-                navigate("/orders")
+                
+                // Redirecionar após 2 segundos
+                setTimeout(() => {
+                    setShowSuccessMessage(false)
+                    navigate("/orders")
+                }, 2000)
             } else {
                 setError(result.error || "Erro ao criar pedido")
             }
@@ -319,6 +372,18 @@ export function Menu() {
             setIsLoading(false)
         }
     }
+
+    // Ocultar menu inferior quando houver itens selecionados
+    useEffect(() => {
+        if (selectedItems.length > 0) {
+            document.body.classList.add('hide-mobile-nav')
+        } else {
+            document.body.classList.remove('hide-mobile-nav')
+        }
+        return () => {
+            document.body.classList.remove('hide-mobile-nav')
+        }
+    }, [selectedItems.length])
 
     // Group items by category
     const itemsByCategory = unifiedItems.reduce((acc, item) => {
@@ -496,12 +561,12 @@ export function Menu() {
                 if (items.length === 0) return null // Optional: remove this line to show empty categories
 
                 return (
-                    <div key={category.id} className="space-y-4">
-                        <h3 className="text-xl font-semibold capitalize">{category.name}</h3>
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div key={category.id} className="space-y-3 md:space-y-4">
+                        <h3 className="text-lg md:text-xl font-semibold capitalize">{category.name}</h3>
+                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {items.map((item) => (
-                                <Card key={item.id} className="overflow-hidden">
-                                    <div className="aspect-video relative">
+                                <Card key={item.id} className="overflow-hidden flex flex-col">
+                                    <div className="aspect-square md:aspect-video relative">
                                         <img
                                             src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
                                             alt={item.name}
@@ -511,74 +576,74 @@ export function Menu() {
                                             }}
                                         />
                                         {item.type === 'stock' && (
-                                            <Badge className="absolute top-2 right-2 bg-blue-600">
+                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5">
                                                 Estoque
                                             </Badge>
                                         )}
                                     </div>
-                                    <CardHeader>
-                                        <CardTitle className="flex justify-between items-start">
-                                            <span>{item.name}</span>
-                                            <Badge variant={item.status === "Available" ? "success" : "destructive"}>
+                                    <CardHeader className="p-2 md:p-6">
+                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1">
+                                            <span className="text-xs md:text-base font-semibold line-clamp-2">{item.name}</span>
+                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit">
                                                 {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col">
+                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block">
                                             {item.description || "Sem descrição"}
                                         </p>
-                                        <div className="space-y-3">
+                                        <div className="space-y-2 md:space-y-3 mt-auto">
                                             <div className="flex items-center justify-between">
-                                                <div className="text-2xl font-bold">{formatCurrency(item.price)}</div>
+                                                <div className="text-base md:text-2xl font-bold">{formatCurrency(item.price)}</div>
                                                 {item.type === 'menu' && (
                                                     <div className="flex gap-1">
                                                         <Button 
                                                             variant="outline" 
                                                             size="sm" 
                                                             onClick={() => handleEditClick(item)}
-                                                            className="h-8 w-8 p-0"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation"
                                                         >
-                                                            <Pencil className="h-3 w-3" />
+                                                            <Pencil className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                         <Button 
                                                             variant="ghost" 
                                                             size="sm"
-                                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation"
                                                             onClick={() => handleDeleteItem(item)}
                                                         >
-                                                            <Trash2 className="h-3 w-3" />
+                                                            <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                     </div>
                                                 )}
                                             </div>
                                             
                                             {/* Controles de quantidade */}
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2 flex-1">
+                                            <div className="flex items-center justify-between gap-1 md:gap-2">
+                                                <div className="flex items-center gap-1 md:gap-2 flex-1">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-8 w-8 p-0"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
                                                         onClick={() => handleRemoveFromOrder(item.id)}
                                                         disabled={getItemQuantity(item.id) === 0}
                                                     >
-                                                        <Minus className="h-4 w-4" />
+                                                        <Minus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
-                                                    <span className="text-sm font-medium min-w-[2rem] text-center">
+                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center">
                                                         {getItemQuantity(item.id) || 0}
                                                     </span>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-8 w-8 p-0"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
                                                         onClick={() => handleAddToOrder(item.id)}
                                                     >
-                                                        <Plus className="h-4 w-4" />
+                                                        <Plus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
                                                 </div>
                                                 {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-sm font-semibold text-primary">
+                                                    <span className="text-xs md:text-sm font-semibold text-primary">
                                                         {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
@@ -596,12 +661,12 @@ export function Menu() {
             {Object.entries(itemsByCategory).map(([catName, items]) => {
                 if (categories.some(c => c.name === catName)) return null; // Already handled
                 return (
-                    <div key={catName} className="space-y-4">
-                        <h3 className="text-xl font-semibold capitalize">{catName} (Uncategorized)</h3>
-                        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                    <div key={catName} className="space-y-3 md:space-y-4">
+                        <h3 className="text-lg md:text-xl font-semibold capitalize">{catName} (Uncategorized)</h3>
+                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {items.map(item => (
-                                <Card key={item.id} className="overflow-hidden">
-                                    <div className="aspect-video relative">
+                                <Card key={item.id} className="overflow-hidden flex flex-col">
+                                    <div className="aspect-square md:aspect-video relative">
                                         <img
                                             src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
                                             alt={item.name}
@@ -611,74 +676,74 @@ export function Menu() {
                                             }}
                                         />
                                         {item.type === 'stock' && (
-                                            <Badge className="absolute top-2 right-2 bg-blue-600">
+                                            <Badge className="absolute top-1 right-1 md:top-2 md:right-2 bg-blue-600 text-[10px] md:text-xs px-1 md:px-2 py-0.5">
                                                 Estoque
                                             </Badge>
                                         )}
                                     </div>
-                                    <CardHeader>
-                                        <CardTitle className="flex justify-between items-start">
-                                            <span>{item.name}</span>
-                                            <Badge variant={item.status === "Available" ? "success" : "destructive"}>
+                                    <CardHeader className="p-2 md:p-6">
+                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1">
+                                            <span className="text-xs md:text-base font-semibold line-clamp-2">{item.name}</span>
+                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit">
                                                 {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
                                         </CardTitle>
                                     </CardHeader>
-                                    <CardContent>
-                                        <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col">
+                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block">
                                             {item.description || "Sem descrição"}
                                         </p>
-                                        <div className="space-y-3">
+                                        <div className="space-y-2 md:space-y-3 mt-auto">
                                             <div className="flex items-center justify-between">
-                                                <div className="text-2xl font-bold">{formatCurrency(item.price)}</div>
+                                                <div className="text-base md:text-2xl font-bold">{formatCurrency(item.price)}</div>
                                                 {item.type === 'menu' && (
                                                     <div className="flex gap-1">
                                                         <Button 
                                                             variant="outline" 
                                                             size="sm" 
                                                             onClick={() => handleEditClick(item)}
-                                                            className="h-8 w-8 p-0"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation"
                                                         >
-                                                            <Pencil className="h-3 w-3" />
+                                                            <Pencil className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                         <Button 
                                                             variant="ghost" 
                                                             size="sm"
-                                                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation"
                                                             onClick={() => handleDeleteItem(item)}
                                                         >
-                                                            <Trash2 className="h-3 w-3" />
+                                                            <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
                                                         </Button>
                                                     </div>
                                                 )}
                                             </div>
                                             
                                             {/* Controles de quantidade */}
-                                            <div className="flex items-center justify-between gap-2">
-                                                <div className="flex items-center gap-2 flex-1">
+                                            <div className="flex items-center justify-between gap-1 md:gap-2">
+                                                <div className="flex items-center gap-1 md:gap-2 flex-1">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-8 w-8 p-0"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
                                                         onClick={() => handleRemoveFromOrder(item.id)}
                                                         disabled={getItemQuantity(item.id) === 0}
                                                     >
-                                                        <Minus className="h-4 w-4" />
+                                                        <Minus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
-                                                    <span className="text-sm font-medium min-w-[2rem] text-center">
+                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center">
                                                         {getItemQuantity(item.id) || 0}
                                                     </span>
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
-                                                        className="h-8 w-8 p-0"
+                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation"
                                                         onClick={() => handleAddToOrder(item.id)}
                                                     >
-                                                        <Plus className="h-4 w-4" />
+                                                        <Plus className="h-4 w-4 md:h-4 md:w-4" />
                                                     </Button>
                                                 </div>
                                                 {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-sm font-semibold text-primary">
+                                                    <span className="text-xs md:text-sm font-semibold text-primary">
                                                         {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
@@ -693,16 +758,16 @@ export function Menu() {
             })}
             {/* Resumo do Pedido - Fixo na parte inferior */}
             {selectedItems.length > 0 && (
-                <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-card border-t shadow-lg z-50 p-4 print:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+                <div className="fixed bottom-0 left-0 right-0 md:left-64 bg-card border-t shadow-lg z-50 p-3 md:p-4 print:hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
+                    <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-3 md:gap-4">
+                        <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 w-full md:w-auto">
                             <div className="flex items-center gap-2">
-                                <ShoppingCart className="h-5 w-5 text-primary" />
-                                <span className="font-semibold">
+                                <ShoppingCart className="h-4 w-4 md:h-5 md:w-5 text-primary" />
+                                <span className="text-sm md:text-base font-semibold">
                                     {selectedItems.reduce((sum, item) => sum + item.quantity, 0)} {selectedItems.reduce((sum, item) => sum + item.quantity, 0) === 1 ? 'item' : 'itens'}
                                 </span>
                             </div>
-                            <div className="text-lg font-bold text-primary">
+                            <div className="text-base md:text-lg font-bold text-primary">
                                 Total: {formatCurrency(calculateTotal())}
                             </div>
                         </div>
@@ -711,26 +776,113 @@ export function Menu() {
                                 variant="outline"
                                 onClick={() => setSelectedItems([])}
                                 disabled={isLoading}
-                                className="flex-1 md:flex-none"
+                                className="flex-1 md:flex-none h-11 md:h-10 touch-manipulation"
                             >
                                 Limpar
                             </Button>
                             <Button
-                                onClick={handleCreateOrder}
+                                onClick={handleCreateOrderClick}
                                 disabled={isLoading || selectedItems.length === 0}
-                                className="min-w-[150px] flex-1 md:flex-none"
+                                className="min-w-[140px] md:min-w-[150px] flex-1 md:flex-none h-11 md:h-10 touch-manipulation"
                             >
-                                {isLoading ? (
-                                    <>Criando pedido...</>
-                                ) : (
-                                    <>
-                                        <ShoppingCart className="mr-2 h-4 w-4" />
-                                        Criar Pedido
-                                    </>
-                                )}
+                                <ShoppingCart className="mr-2 h-4 w-4" />
+                                Criar Pedido
                             </Button>
                         </div>
                     </div>
+                </div>
+            )}
+
+            {/* Dialog para criar pedido - solicitar nome do cliente */}
+            <Dialog open={isCreateOrderDialogOpen} onOpenChange={setIsCreateOrderDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Criar Pedido</DialogTitle>
+                        <DialogDescription>
+                            Informe o nome do cliente para finalizar o pedido
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        {error && (
+                            <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">
+                                {error}
+                            </div>
+                        )}
+                        <div className="grid gap-2">
+                            <Label htmlFor="customer-name">Nome do Cliente *</Label>
+                            <Input
+                                id="customer-name"
+                                value={customerName}
+                                onChange={(e) => {
+                                    setCustomerName(e.target.value)
+                                    setError("")
+                                }}
+                                placeholder="Digite o nome do cliente"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && customerName.trim()) {
+                                        handleCreateOrder()
+                                    }
+                                }}
+                                autoFocus
+                            />
+                        </div>
+                        <div className="bg-muted p-3 rounded-md">
+                            <div className="text-sm font-semibold mb-2">Resumo do Pedido:</div>
+                            <div className="space-y-1 text-sm">
+                                {selectedItems.map(item => {
+                                    const unifiedItem = unifiedItems.find(i => i.id === item.id)!
+                                    return (
+                                        <div key={item.id} className="flex justify-between">
+                                            <span>{unifiedItem.name} x {item.quantity}</span>
+                                            <span>{formatCurrency(unifiedItem.price * item.quantity)}</span>
+                                        </div>
+                                    )
+                                })}
+                                <div className="flex justify-between font-bold pt-2 border-t mt-2">
+                                    <span>Total:</span>
+                                    <span>{formatCurrency(calculateTotal())}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setIsCreateOrderDialogOpen(false)
+                                setCustomerName("")
+                                setError("")
+                            }}
+                            disabled={isLoading}
+                        >
+                            Cancelar
+                        </Button>
+                        <Button
+                            onClick={handleCreateOrder}
+                            disabled={isLoading || !customerName.trim()}
+                        >
+                            {isLoading ? "Criando pedido..." : "Confirmar Pedido"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Mensagem de sucesso */}
+            {showSuccessMessage && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                    <Card className="max-w-md mx-4">
+                        <CardContent className="p-6 text-center">
+                            <div className="mb-4">
+                                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center">
+                                    <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <h3 className="text-xl font-bold mb-2">Pedido Criado com Sucesso!</h3>
+                            <p className="text-muted-foreground">Redirecionando para a página de pedidos...</p>
+                        </CardContent>
+                    </Card>
                 </div>
             )}
 

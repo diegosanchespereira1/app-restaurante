@@ -85,7 +85,7 @@ interface RestaurantContextType {
     updateTableStatus: (tableId: number, status: Table["status"]) => void
     processPayment: (orderId: string, method: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     closeTable: (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
-    addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string }>
+    addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string; data?: MenuItem }>
     updateMenuItem: (id: number, item: Partial<MenuItem>) => Promise<{ success: boolean; error?: string }>
     deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>
     expenses: Expense[]
@@ -623,18 +623,18 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
     }
 
     // Menu CRUD
-    const addMenuItem = async (item: Omit<MenuItem, "id">) => {
+    const addMenuItem = async (item: Omit<MenuItem, "id">): Promise<{ success: boolean; error?: string; data?: MenuItem }> => {
         // Demo mode: just use local state
         if (!isSupabaseConfigured) {
             const newItem: MenuItem = { ...item, id: Date.now() }
             setMenuItems(prev => [...prev, newItem])
-            return { success: true }
+            return { success: true, data: newItem }
         }
 
-        const { data, error } = await supabase.from('menu_items').insert(item).select()
+        const { data, error } = await supabase.from('menu_items').insert(item).select().single()
         if (data) {
-            setMenuItems(prev => [...prev, data[0]])
-            return { success: true }
+            setMenuItems(prev => [...prev, data])
+            return { success: true, data }
         }
         if (error) {
             console.error("Error adding menu item:", error)
