@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" fill="none">
+  <defs>
+    <linearGradient id="arrowGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#0066CC" />
+      <stop offset="100%" stop-color="#0052CC" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Curved Arrow -->
+  <path
+    d="M 5 60 Q 20 40, 35 45 Q 50 50, 65 35 Q 80 20, 95 35"
+    fill="none"
+    stroke="url(#arrowGrad)"
+    stroke-width="5"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  
+  <!-- Container - simplified isometric -->
+  <g transform="translate(20, 15)">
+    <!-- Top face -->
+    <path d="M10 10 L40 0 L70 10 L40 20 Z" fill="#0066CC" stroke="white" stroke-width="2" />
+    <!-- Front face -->
+    <path d="M10 10 L10 50 L40 60 L40 20 Z" fill="#0066CC" stroke="white" stroke-width="2" />
+    <!-- Right face -->
+    <path d="M40 20 L70 10 L70 50 L40 60 Z" fill="#0052CC" stroke="white" stroke-width="2" />
+    <!-- Vertical lines -->
+    <line x1="20" y1="20" x2="20" y2="55" stroke="white" stroke-width="1.5" opacity="0.9" />
+    <line x1="35" y1="15" x2="35" y2="58" stroke="white" stroke-width="1.5" opacity="0.9" />
+    <line x1="60" y1="12" x2="60" y2="52" stroke="white" stroke-width="1.5" opacity="0.9" />
+  </g>
+  
+  <!-- Arrowhead -->
+  <path d="M 90 30 L 95 35 L 90 40 Z" fill="#0066CC" stroke="white" stroke-width="2" />
+</svg>
