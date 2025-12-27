@@ -161,34 +161,34 @@ export function MobileOrderDetailsDrawer({
                                 {selectedItems.map((item) => {
                                     const unifiedItem = unifiedItems.find(i => i.id === item.id)
                                     return (
-                                        <div key={item.id} className="flex items-center justify-between gap-4 p-3 bg-muted/50 rounded-lg">
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium truncate">{unifiedItem?.name}</p>
-                                                <div className="text-sm text-muted-foreground">
-                                                    {formatCurrency(unifiedItem?.price || 0)}
+                                        <div key={item.id} className="p-3 bg-muted/50 rounded-lg space-y-2">
+                                            <p className="font-medium whitespace-nowrap overflow-hidden text-ellipsis">{unifiedItem?.name}</p>
+                                            <div className="text-sm text-muted-foreground">
+                                                {formatCurrency(unifiedItem?.price || 0)}
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex items-center gap-2">
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        onClick={() => handleRemoveItem(item.id)}
+                                                    >
+                                                        <Minus className="h-3 w-3" />
+                                                    </Button>
+                                                    <span className="w-8 text-center font-medium">{item.quantity}</span>
+                                                    <Button
+                                                        variant="outline"
+                                                        size="icon"
+                                                        className="h-8 w-8"
+                                                        onClick={() => handleAddItem(item.id)}
+                                                    >
+                                                        <Plus className="h-3 w-3" />
+                                                    </Button>
                                                 </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    className="h-8 w-8"
-                                                    onClick={() => handleRemoveItem(item.id)}
-                                                >
-                                                    <Minus className="h-3 w-3" />
-                                                </Button>
-                                                <span className="w-8 text-center font-medium">{item.quantity}</span>
-                                                <Button
-                                                    variant="outline"
-                                                    size="icon"
-                                                    className="h-8 w-8"
-                                                    onClick={() => handleAddItem(item.id)}
-                                                >
-                                                    <Plus className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                            <div className="font-medium w-20 text-right">
-                                                {formatCurrency((unifiedItem?.price || 0) * item.quantity)}
+                                                <div className="font-medium text-right">
+                                                    {formatCurrency((unifiedItem?.price || 0) * item.quantity)}
+                                                </div>
                                             </div>
                                         </div>
                                     )
