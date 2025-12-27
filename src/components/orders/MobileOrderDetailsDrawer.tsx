@@ -8,6 +8,7 @@ import { Minus, Plus, ShoppingBag, X } from "lucide-react"
 import { formatCurrency } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
 import { cn } from "../../lib/utils"
+import type { Table } from "../../context/RestaurantContext"
 
 interface UnifiedItem {
     id: string
@@ -30,12 +31,11 @@ interface MobileOrderDetailsDrawerProps {
     onClose: () => void
     selectedItems: SelectedItem[]
     unifiedItems: UnifiedItem[]
-    total: number
     orderType: "dine_in" | "takeout" | "delivery"
     selectedTable: string
     customerName: string
     isTablesEnabled: boolean
-    tables: Array<{ id: string; number: string; status: string }>
+    tables: Table[]
     handleAddItem: (itemId: string) => void
     handleRemoveItem: (itemId: string) => void
     setOrderType: (type: "dine_in" | "takeout" | "delivery") => void
@@ -50,7 +50,6 @@ export function MobileOrderDetailsDrawer({
     onClose,
     selectedItems,
     unifiedItems,
-    total,
     orderType,
     selectedTable,
     customerName,
