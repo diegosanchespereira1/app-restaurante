@@ -1,6 +1,6 @@
 export const translations = {
     en: {
-        appTitle: "RestoManager",
+        appTitle: "JE BEBIDAS",
         dashboard: "Dashboard",
         orders: "Orders",
         tables: "Tables",
@@ -241,11 +241,11 @@ export const translations = {
         priceWithTaxes: "Price with Taxes",
     },
     pt: {
-        appTitle: "RestoManager",
+        appTitle: "JE BEBIDAS",
         dashboard: "Painel",
         orders: "Pedidos",
         tables: "Mesas",
-        menu: "Cardápio",
+        menu: "Bebidas",
         settings: "Configurações",
         totalRevenue: "Valores à receber",
         activeOrders: "Pedidos Ativos",
@@ -309,7 +309,7 @@ export const translations = {
         reserved: "Reservada",
         soldOut: "Esgotado",
         manageTables: "Gerencie as mesas do seu restaurante.",
-        manageMenu: "Gerencie os itens do seu cardápio.",
+        manageMenu: "Gerencie os itens de bebidas.",
         manageOrders: "Gerenciar pedidos desta mesa",
         settingsTitle: "Configurações",
         settingsDescription: "Gerencie as preferências da sua aplicação.",

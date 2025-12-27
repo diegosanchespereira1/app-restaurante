@@ -1,10 +1,11 @@
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Menu, DollarSign, TrendingUp, LogOut, User, Package } from "lucide-react"
+import { LayoutDashboard, ClipboardList, Settings, Armchair, Menu, DollarSign, TrendingUp, LogOut, User, Package } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { NavLink, useNavigate } from "react-router-dom"
 import { useLanguage } from "../../context/LanguageContext"
 import { useSettings } from "../../context/SettingsContext"
 import { useAuth } from "../../context/AuthContext"
 import { Button } from "../ui/button"
+import { Logo } from "../ui/Logo"
 
 interface SidebarProps extends React.HTMLAttributes<HTMLDivElement> {
     onClose?: () => void
@@ -42,9 +43,8 @@ export function Sidebar({ className, onClose }: SidebarProps) {
         <div className={cn("pb-12 min-h-screen border-r bg-card flex flex-col", className)}>
             <div className="space-y-4 py-4 flex-1">
                 <div className="px-3 py-2">
-                    <div className="flex items-center gap-2 px-4 mb-6">
-                        <UtensilsCrossed className="h-6 w-6 text-primary" />
-                        <h2 className="text-xl font-bold tracking-tight">{t("appTitle")}</h2>
+                    <div className="px-4 mb-6">
+                        <Logo size="sm" showText={false} />
                     </div>
                     <div className="space-y-1">
                         {links.map((link) => (

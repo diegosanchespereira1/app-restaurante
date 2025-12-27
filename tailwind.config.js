@@ -8,7 +8,7 @@ export default {
         extend: {
             colors: {
                 primary: {
-                    DEFAULT: "#F97316", // Orange-500
+                    DEFAULT: "#0066CC", // JE BEBIDAS Blue
                     foreground: "#FFFFFF",
                 },
                 secondary: {

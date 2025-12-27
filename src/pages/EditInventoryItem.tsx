@@ -316,13 +316,13 @@ export function EditInventoryItem() {
                     </CardHeader>
                     <CardContent className="space-y-4">
                         <div>
-                            <Label htmlFor="menu_item">Vincular a Item do Cardápio (Opcional)</Label>
+                            <Label htmlFor="menu_item">Vincular a Item de Bebidas (Opcional)</Label>
                             <Select
                                 value={formData.menu_item_id?.toString() || 'none'}
                                 onValueChange={handleMenuItemSelect}
                             >
                                 <SelectTrigger id="menu_item">
-                                    <SelectValue placeholder="Selecione um item do cardápio ou deixe em branco" />
+                                    <SelectValue placeholder="Selecione um item de bebidas ou deixe em branco" />
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="none">Nenhum (criar item independente)</SelectItem>
