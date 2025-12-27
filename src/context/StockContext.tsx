@@ -124,26 +124,53 @@ export function StockProvider({ children }: { children: ReactNode }) {
     }
 
     try {
+      // Build insert object, only including defined values
+      const insertData: any = {
+        name: item.name,
+        unit: item.unit || 'UN',
+        min_stock: item.min_stock ?? 0,
+        current_stock: item.current_stock ?? 0,
+        cost_price: item.cost_price ?? null,
+        selling_price: item.selling_price ?? null,
+        category: item.category || null,
+        menu_item_id: item.menu_item_id || null,
+        product_type: item.product_type || null,
+        ncm: item.ncm || null,
+        cst_icms: item.cst_icms || null,
+        cfop: item.cfop || null,
+        icms_rate: item.icms_rate ?? null,
+        ipi_rate: item.ipi_rate ?? null,
+        ean_code: item.ean_code || null
+      }
+
+      // Only include image if it's provided (avoid schema cache issues)
+      if (item.image) {
+        insertData.image = item.image
+      }
+
       const { data, error: insertError } = await supabase
         .from('inventory_items')
-        .insert({
-          ...item,
-          unit: item.unit || 'UN',
-          min_stock: item.min_stock || 0,
-          current_stock: item.current_stock || 0,
-          image: item.image || 'materialApoio/imagem-nao-disponivel.gif',
-          product_type: item.product_type || null,
-          ncm: item.ncm || null,
-          cst_icms: item.cst_icms || null,
-          cfop: item.cfop || null,
-          icms_rate: item.icms_rate || null,
-          ipi_rate: item.ipi_rate || null,
-          ean_code: item.ean_code || null
-        })
+        .insert(insertData)
         .select()
         .single()
 
-      if (insertError) throw insertError
+      if (insertError) {
+        // If error is about image column, try again without it
+        if (insertError.message?.includes("'image' column")) {
+          delete insertData.image
+          const { data: retryData, error: retryError } = await supabase
+            .from('inventory_items')
+            .insert(insertData)
+            .select()
+            .single()
+          
+          if (retryError) throw retryError
+          
+          setInventoryItems(prev => [...prev, retryData])
+          return { success: true, data: retryData }
+        }
+        throw insertError
+      }
 
       setInventoryItems(prev => [...prev, data])
       return { success: true, data }
