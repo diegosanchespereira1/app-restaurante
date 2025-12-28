@@ -40,3 +40,4 @@ export function LowStockAlert({ items }: LowStockAlertProps) {
 
 
 
+
