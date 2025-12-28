@@ -14,12 +14,10 @@ import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
 import { Save, RotateCcw, ExternalLink, Printer, TestTube } from "lucide-react"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { testNetworkPrinter } from "../lib/printer"
 import { UserManagement } from "../components/settings/UserManagement"
 
 export function Settings() {
-    const navigate = useNavigate()
     const { language, setLanguage, t } = useLanguage()
     const { 
         updateSettings, 
