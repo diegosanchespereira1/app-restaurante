@@ -61,6 +61,7 @@ const productToMenuItem = (p: Product): MenuItem => ({
     description: p.description ?? '',
     category: p.category ?? '',
     status: (p.status ?? 'Available') as "Available" | "Sold Out",
+    // Preservar a imagem exata (null vira string vazia, que será tratada pelo componente)
     image: p.image ?? ''
 })
 

@@ -233,9 +233,10 @@ export function StockProvider({ children }: { children: ReactNode }) {
       if (updates.ipi_rate !== undefined) updateData.ipi_rate = updates.ipi_rate ?? null
       if (updates.ean_code !== undefined) updateData.ean_code = updates.ean_code || null
 
-      // Only include image if it's provided (avoid schema cache issues)
-      if (updates.image !== undefined && updates.image !== null) {
-        updateData.image = updates.image
+      // Sempre incluir image se fornecida (mesmo que seja string vazia, para limpar imagem)
+      // Se não fornecida (undefined), não incluir para não sobrescrever
+      if (updates.image !== undefined) {
+        updateData.image = updates.image || null // Converter string vazia para null
       }
 
       const { error: updateError } = await supabase

@@ -274,7 +274,7 @@ export function EditInventoryItem() {
         setUploadProgress(0)
         setUploadError(null)
 
-        let progressInterval: NodeJS.Timeout | null = null
+        let progressInterval: ReturnType<typeof setInterval> | null = null
 
         try {
             // Simular progresso: redimensionamento (0-30%)
@@ -363,7 +363,7 @@ export function EditInventoryItem() {
                         .from('product-images')
                         .getPublicUrl(filePath)
                     
-                    finalImageUrl = urlResponse?.publicUrl || null
+                    finalImageUrl = urlResponse?.data?.publicUrl || null
                 } catch (urlError) {
                     console.error('Erro ao obter URL:', urlError)
                 }
@@ -531,17 +531,10 @@ export function EditInventoryItem() {
         setIsSubmitting(true)
         try {
             // Priorizar imagePreviewUrl se existir (imagem recém-uploadada)
-            // Senão, usar formData.image se não for vazio/nulo
-            // Por último, usar DEFAULT_IMAGE
-            const imageToSave = imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE ? formData.image : DEFAULT_IMAGE)
-            
-            // Log para debug
-            console.log('Salvando item com imagem:', {
-                imagePreviewUrl,
-                formDataImage: formData.image,
-                imageToSave,
-                isDefault: imageToSave === DEFAULT_IMAGE
-            })
+            // Senão, usar formData.image se não for vazio/nulo ou DEFAULT_IMAGE
+            // IMPORTANTE: Se formData.image for DEFAULT_IMAGE, ainda assim usar ele (pode ser que o usuário queira a imagem padrão)
+            // Mas se tivermos imagePreviewUrl (URL do Supabase), sempre priorizar
+            const imageToSave = imagePreviewUrl || formData.image || DEFAULT_IMAGE
             
             const result = await updateInventoryItem(itemId, {
                 menu_item_id: formData.menu_item_id,
