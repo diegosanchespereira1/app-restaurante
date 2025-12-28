@@ -1,5 +1,6 @@
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useContext, type ReactNode } from "react"
 import { translations, type Language, type ExtendedTranslationKey } from "../translations"
+import { useSettings } from "./SettingsContext"
 
 interface LanguageContextType {
     language: Language
@@ -10,7 +11,13 @@ interface LanguageContextType {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-    const [language, setLanguage] = useState<Language>("pt")
+    const { settings, updateSettings } = useSettings()
+    // Usar o idioma das configurações ou padrão 'pt'
+    const language: Language = (settings?.language as Language) || "pt"
+
+    const setLanguage = (lang: Language) => {
+        updateSettings({ language: lang })
+    }
 
     const t = (key: ExtendedTranslationKey) => {
         const translation = translations[language]

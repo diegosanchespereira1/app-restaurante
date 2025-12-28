@@ -318,8 +318,8 @@ export function Menu() {
                                             </div>
                                             
                                             {/* Controles de quantidade */}
-                                            <div className="flex items-center justify-between gap-1 md:gap-2 min-w-0">
-                                                <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
+                                            <div className="flex flex-col gap-2 min-w-0">
+                                                <div className="flex items-center gap-1 md:gap-2 min-w-0">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
@@ -342,7 +342,7 @@ export function Menu() {
                                                     </Button>
                                                 </div>
                                                 {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate shrink-0">
+                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate">
                                                         {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}
@@ -393,8 +393,8 @@ export function Menu() {
                                             </div>
                                             
                                             {/* Controles de quantidade */}
-                                            <div className="flex items-center justify-between gap-1 md:gap-2 min-w-0">
-                                                <div className="flex items-center gap-1 md:gap-2 flex-1 min-w-0">
+                                            <div className="flex flex-col gap-2 min-w-0">
+                                                <div className="flex items-center gap-1 md:gap-2 min-w-0">
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
@@ -417,7 +417,7 @@ export function Menu() {
                                                     </Button>
                                                 </div>
                                                 {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate shrink-0">
+                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate">
                                                         {formatCurrency(item.price * getItemQuantity(item.id))}
                                                     </span>
                                                 )}

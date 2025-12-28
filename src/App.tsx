@@ -121,9 +121,9 @@ function AuthenticatedRoutes() {
 
 function App() {
   return (
-    <SettingsProvider>
-      <LanguageProvider>
-        <AuthProvider>
+    <AuthProvider>
+      <SettingsProvider>
+        <LanguageProvider>
           <StockProvider>
             <RestaurantProvider>
               <Router>
@@ -140,9 +140,9 @@ function App() {
               </Router>
             </RestaurantProvider>
           </StockProvider>
-        </AuthProvider>
-      </LanguageProvider>
-    </SettingsProvider>
+        </LanguageProvider>
+      </SettingsProvider>
+    </AuthProvider>
   )
 }
 
