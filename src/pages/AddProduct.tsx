@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
@@ -8,8 +8,9 @@ import { Label } from "../components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { Textarea } from "../components/ui/textarea"
-import { ArrowLeft, Save, Plus } from "lucide-react"
+import { ArrowLeft, Save, Plus, Upload, Loader2 } from "lucide-react"
 import type { CreateProductInput } from "../types/product"
+import { supabase, isSupabaseConfigured } from "../lib/supabase"
 
 const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
 
@@ -24,6 +25,12 @@ export function AddProduct() {
     const [newCategoryName, setNewCategoryName] = useState("")
     const [isAddingCategory, setIsAddingCategory] = useState(false)
     const [categoryError, setCategoryError] = useState<string | null>(null)
+    const [isUploadingImage, setIsUploadingImage] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState(0)
+    const [uploadError, setUploadError] = useState<string | null>(null)
+    const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+    const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null)
+    const fileInputRef = useRef<HTMLInputElement>(null)
     
     const [formData, setFormData] = useState<CreateProductInput>({
         name: '',
@@ -64,6 +71,247 @@ export function AddProduct() {
         { value: 'CX', label: 'CX - Caixa' },
         { value: 'PC', label: 'PC - Pacote' }
     ]
+
+    // Limpar object URL quando componente desmontar
+    useEffect(() => {
+        return () => {
+            if (localPreviewUrl) {
+                URL.revokeObjectURL(localPreviewUrl)
+            }
+        }
+    }, [localPreviewUrl])
+
+    // Função para redimensionar imagem
+    const resizeImage = (file: File): Promise<File> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.readAsDataURL(file)
+            reader.onload = (event) => {
+                const img = new Image()
+                img.src = event.target?.result as string
+                img.onload = () => {
+                    // Tamanho fixo para redimensionamento: 800x800 (formato quadrado)
+                    const MAX_WIDTH = 800
+                    const MAX_HEIGHT = 800
+                    
+                    let width = img.width
+                    let height = img.height
+                    
+                    // Calcular novas dimensões mantendo proporção
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height = (height * MAX_WIDTH) / width
+                            width = MAX_WIDTH
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width = (width * MAX_HEIGHT) / height
+                            height = MAX_HEIGHT
+                        }
+                    }
+                    
+                    // Criar canvas para redimensionar
+                    const canvas = document.createElement('canvas')
+                    canvas.width = MAX_WIDTH
+                    canvas.height = MAX_HEIGHT
+                    const ctx = canvas.getContext('2d')
+                    
+                    if (!ctx) {
+                        reject(new Error('Não foi possível criar contexto do canvas'))
+                        return
+                    }
+                    
+                    // Preencher fundo branco
+                    ctx.fillStyle = '#FFFFFF'
+                    ctx.fillRect(0, 0, MAX_WIDTH, MAX_HEIGHT)
+                    
+                    // Centralizar e redimensionar imagem
+                    const x = (MAX_WIDTH - width) / 2
+                    const y = (MAX_HEIGHT - height) / 2
+                    ctx.drawImage(img, x, y, width, height)
+                    
+                    // Converter canvas para blob e depois para File
+                    canvas.toBlob(
+                        (blob) => {
+                            if (!blob) {
+                                reject(new Error('Erro ao redimensionar imagem'))
+                                return
+                            }
+                            const resizedFile = new File([blob], file.name, {
+                                type: 'image/jpeg',
+                                lastModified: Date.now()
+                            })
+                            resolve(resizedFile)
+                        },
+                        'image/jpeg',
+                        0.9 // Qualidade JPEG (90%)
+                    )
+                }
+                img.onerror = () => reject(new Error('Erro ao carregar imagem'))
+            }
+            reader.onerror = () => reject(new Error('Erro ao ler arquivo'))
+        })
+    }
+
+    const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0]
+        if (!file) return
+
+        // Validar tipo de arquivo
+        if (!file.type.startsWith('image/')) {
+            setUploadError('Por favor, selecione apenas arquivos de imagem')
+            return
+        }
+
+        if (!isSupabaseConfigured) {
+            setUploadError('Supabase não está configurado.')
+            return
+        }
+
+        // Criar preview imediato usando URL.createObjectURL
+        const previewUrl = URL.createObjectURL(file)
+        setLocalPreviewUrl(previewUrl)
+
+        setIsUploadingImage(true)
+        setUploadProgress(0)
+        setUploadError(null)
+
+        let progressInterval: ReturnType<typeof setInterval> | null = null
+
+        try {
+            // Simular progresso: redimensionamento (0-30%)
+            setUploadProgress(10)
+            const resizedFile = await resizeImage(file)
+            setUploadProgress(30)
+            
+            // Gerar nome único para o arquivo
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpg`
+            const filePath = `product-images/${fileName}`
+
+            // Simular progresso durante o upload (30-70%)
+            let simulatedProgress = 30
+            progressInterval = setInterval(() => {
+                simulatedProgress += 5
+                if (simulatedProgress <= 70) {
+                    setUploadProgress(simulatedProgress)
+                } else {
+                    if (progressInterval) {
+                        clearInterval(progressInterval)
+                        progressInterval = null
+                    }
+                }
+            }, 150)
+
+            // Fazer upload para o Supabase Storage
+            const { error } = await supabase.storage
+                .from('product-images')
+                .upload(filePath, resizedFile, {
+                    cacheControl: '3600',
+                    upsert: false,
+                    contentType: 'image/jpeg'
+                })
+
+            // Parar a simulação de progresso
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
+
+            setUploadProgress(70)
+
+            if (error) {
+                if (progressInterval) {
+                    clearInterval(progressInterval)
+                    progressInterval = null
+                }
+                
+                if (error.message.includes('Bucket not found')) {
+                    setUploadError('Bucket de imagens não encontrado. Por favor, crie um bucket chamado "product-images" no Supabase Storage.')
+                } else if (error.message.includes('row-level security policy') || error.message.includes('RLS')) {
+                    setUploadError('Erro de política de segurança. Execute o script setup_storage_policies.sql no SQL Editor do Supabase para configurar as políticas do bucket.')
+                } else {
+                    setUploadError(`Erro ao fazer upload: ${error.message}`)
+                }
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                }
+                setLocalPreviewUrl(null)
+                setUploadProgress(0)
+                setIsUploadingImage(false)
+                return
+            }
+
+            setUploadProgress(75)
+
+            // Construir URL manualmente
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+            let finalImageUrl: string | null = null
+            
+            if (supabaseUrl) {
+                finalImageUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${filePath}`
+            } else {
+                try {
+                    const urlResponse = supabase.storage
+                        .from('product-images')
+                        .getPublicUrl(filePath)
+                    
+                    finalImageUrl = urlResponse?.data?.publicUrl || null
+                } catch (urlError) {
+                    console.error('Erro ao obter URL:', urlError)
+                }
+            }
+
+            setUploadProgress(85)
+
+            if (finalImageUrl) {
+                setUploadProgress(90)
+                setImagePreviewUrl(finalImageUrl)
+                setFormData(prev => ({ ...prev, image: finalImageUrl }))
+                setUploadProgress(95)
+                
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                }
+                setLocalPreviewUrl(null)
+                
+                setUploadProgress(100)
+                setUploadError(null)
+                setIsUploadingImage(false)
+                
+                setTimeout(() => {
+                    setUploadProgress(0)
+                }, 800)
+            } else {
+                setUploadError('Erro ao obter URL da imagem. Verifique se o bucket está público e as políticas RLS estão configuradas.')
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                }
+                setLocalPreviewUrl(null)
+                setUploadProgress(0)
+                setIsUploadingImage(false)
+            }
+        } catch (err: any) {
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
+            
+            setUploadError(err.message || 'Erro ao fazer upload da imagem')
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl)
+            }
+            setLocalPreviewUrl(null)
+            setUploadProgress(0)
+        } finally {
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
+            if (fileInputRef.current) {
+                fileInputRef.current.value = ''
+            }
+        }
+    }
 
     const handleCategorySelect = (value: string) => {
         if (value === 'add-new-category') {
@@ -115,13 +363,23 @@ export function AddProduct() {
             return
         }
 
+        // Não permitir salvar enquanto estiver fazendo upload de imagem
+        if (isUploadingImage) {
+            setError('Aguarde o upload da imagem terminar antes de salvar')
+            return
+        }
+
         setIsSubmitting(true)
         setError(null)
         setSuccess(false)
 
         try {
             console.log('Tentando criar produto:', formData)
-            const result = await addProduct(formData)
+            // Priorizar imagePreviewUrl se existir (imagem recém-uploadada)
+            const imageToSave = imagePreviewUrl || formData.image || DEFAULT_IMAGE
+            const productData = { ...formData, image: imageToSave }
+            
+            const result = await addProduct(productData)
             console.log('Resultado da criação:', result)
 
             if (result && result.success) {
@@ -215,13 +473,105 @@ export function AddProduct() {
                         </div>
 
                         <div>
-                            <Label htmlFor="image">URL da Imagem</Label>
-                            <Input
-                                id="image"
-                                value={formData.image || ''}
-                                onChange={(e) => setFormData({ ...formData, image: e.target.value || DEFAULT_IMAGE })}
-                                placeholder={DEFAULT_IMAGE}
-                            />
+                            <Label htmlFor="image">Imagem do Produto</Label>
+                            
+                            {/* Botão de Upload */}
+                            <div className="flex gap-2 mb-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingImage || isSubmitting || !isSupabaseConfigured}
+                                    className="w-auto"
+                                >
+                                    {isUploadingImage ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Enviando... {uploadProgress}%
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-4 h-4 mr-2" />
+                                            {formData.image && formData.image !== DEFAULT_IMAGE ? 'Alterar Imagem' : 'Selecionar Imagem'}
+                                        </>
+                                    )}
+                                </Button>
+                                <Input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                    disabled={isUploadingImage}
+                                />
+                                {!isSupabaseConfigured && (
+                                    <p className="text-xs text-muted-foreground self-center">
+                                        Supabase não configurado.
+                                    </p>
+                                )}
+                            </div>
+                            
+                            {/* Barra de progresso do upload */}
+                            {isUploadingImage && uploadProgress > 0 && (
+                                <div className="w-full mb-2">
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div
+                                            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Erro de upload */}
+                            {uploadError && (
+                                <p className="text-sm text-destructive mb-2">{uploadError}</p>
+                            )}
+
+                            {/* Preview da imagem */}
+                            {(localPreviewUrl || imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE)) && (
+                                <div className="mt-2">
+                                    {isUploadingImage && (
+                                        <p className="text-xs text-muted-foreground mb-2">
+                                            Redimensionando e enviando imagem (800x800px)...
+                                        </p>
+                                    )}
+                                    {!isUploadingImage && formData.image && formData.image !== DEFAULT_IMAGE && (
+                                        <p className="text-xs text-muted-foreground mb-2">
+                                            Imagem carregada com sucesso. A imagem foi redimensionada automaticamente para 800x800px.
+                                        </p>
+                                    )}
+                                    <img
+                                        src={localPreviewUrl || imagePreviewUrl || formData.image || DEFAULT_IMAGE}
+                                        alt="Preview"
+                                        className="w-32 h-32 object-cover rounded-md border"
+                                        onLoad={() => {
+                                            if (imagePreviewUrl && localPreviewUrl && !isUploadingImage) {
+                                                URL.revokeObjectURL(localPreviewUrl)
+                                                setLocalPreviewUrl(null)
+                                            }
+                                        }}
+                                        onError={(e) => {
+                                            const target = e.currentTarget
+                                            if (localPreviewUrl && target.src !== localPreviewUrl) {
+                                                target.src = localPreviewUrl
+                                                return
+                                            }
+                                            if (imagePreviewUrl && target.src !== imagePreviewUrl) {
+                                                target.src = imagePreviewUrl
+                                                return
+                                            }
+                                            if (formData.image && formData.image !== DEFAULT_IMAGE && target.src !== formData.image) {
+                                                target.src = formData.image
+                                                return
+                                            }
+                                            if (target.src !== DEFAULT_IMAGE) {
+                                                target.src = DEFAULT_IMAGE
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            )}
                         </div>
                     </CardContent>
                 </Card>
@@ -470,9 +820,9 @@ export function AddProduct() {
                     >
                         Cancelar
                     </Button>
-                    <Button type="submit" disabled={isSubmitting}>
+                    <Button type="submit" disabled={isSubmitting || isUploadingImage}>
                         <Save className="w-4 h-4 mr-2" />
-                        {isSubmitting ? 'Salvando...' : 'Salvar Produto'}
+                        {isSubmitting ? 'Salvando...' : isUploadingImage ? 'Aguarde o upload...' : 'Salvar Produto'}
                     </Button>
                 </div>
             </form>
