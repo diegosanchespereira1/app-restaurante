@@ -266,6 +266,13 @@ export function EditInventoryItem() {
             return
         }
 
+        // Verificar se o usuário está autenticado (necessário para upload)
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+            setUploadError('Você precisa estar logado para fazer upload de imagens.')
+            return
+        }
+
         // Criar preview imediato usando URL.createObjectURL (mais confiável)
         const previewUrl = URL.createObjectURL(file)
         setLocalPreviewUrl(previewUrl) // Preview local que persiste até upload completo
@@ -284,7 +291,9 @@ export function EditInventoryItem() {
             
             // Gerar nome único para o arquivo
             const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpg`
-            const filePath = `product-images/${fileName}`
+            // filePath deve ser apenas o nome do arquivo, sem o prefixo do bucket
+            // pois o bucket já é especificado no .from('product-images')
+            const filePath = fileName
 
             // Simular progresso durante o upload
             // Como o Supabase não fornece callback de progresso, vamos simular incrementos
@@ -355,6 +364,7 @@ export function EditInventoryItem() {
             let finalImageUrl: string | null = null
             
             if (supabaseUrl) {
+                // filePath agora é apenas o fileName, então construir URL corretamente
                 finalImageUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${filePath}`
             } else {
                 // Fallback: tentar usar getPublicUrl
