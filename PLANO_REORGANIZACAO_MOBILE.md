@@ -150,3 +150,4 @@ Quando um usuário adiciona um novo item ao pedido no mobile, o item aparece no 
 - Manter todas as funcionalidades existentes (tipo de pedido, seleção de mesa, nome do cliente)
 - Garantir que a experiência desktop não seja afetada
 
+
