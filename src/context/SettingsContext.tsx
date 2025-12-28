@@ -54,7 +54,7 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(defaultSettings)
   const [isLoading, setIsLoading] = useState(true)
-  const { user, profile } = useAuth()
+  const { profile } = useAuth()
   const isInitialLoad = useRef(true)
   const isSavingRef = useRef(false)
 
