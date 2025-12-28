@@ -10,11 +10,10 @@ import { formatCurrency } from "../lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
 export function Menu() {
     const navigate = useNavigate()
-    const { menuItems, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory, addOrder, generateOrderId } = useRestaurant()
+    const { menuItems, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory, addOrder, generateOrderId } = useRestaurant()
     const { t } = useLanguage()
     const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [isCreateOrderDialogOpen, setIsCreateOrderDialogOpen] = useState(false)
@@ -25,9 +24,6 @@ export function Menu() {
     const [error, setError] = useState("")
     const [newCategoryName, setNewCategoryName] = useState("")
     const [editingCategory, setEditingCategory] = useState<{ id: number, name: string } | null>(null)
-    // Edit Item Logic
-    const [isEditOpen, setIsEditOpen] = useState(false)
-    const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
 
 
     const handleAddCategory = async () => {
@@ -60,55 +56,7 @@ export function Menu() {
     }
 
 
-    const handleUpdateItem = async () => {
-        if (!editingItem) return
-        setError("")
-        setIsLoading(true)
 
-        try {
-            const result = await updateMenuItem(editingItem.id, {
-                name: editingItem.name,
-                description: editingItem.description,
-                price: editingItem.price,
-                category: editingItem.category,
-                image: editingItem.image
-            })
-
-            if (result.success) {
-                setIsEditOpen(false)
-                setEditingItem(null)
-            } else {
-                setError(result.error || "Failed to update item")
-            }
-        } catch (err) {
-            console.error(err)
-            setError("An unexpected error occurred")
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleDeleteItem = async (item: MenuItem) => {
-        if (confirm(`Tem certeza que deseja excluir "${item.name}"?`)) {
-            setIsLoading(true)
-            try {
-                const result = await deleteMenuItem(item.id)
-                if (!result.success) {
-                    setError(result.error || "Erro ao excluir item")
-                }
-            } catch (err) {
-                console.error(err)
-                setError("Erro ao excluir item")
-            } finally {
-                setIsLoading(false)
-            }
-        }
-    }
-
-    const handleEditClick = (item: MenuItem) => {
-        setEditingItem(item)
-        setIsEditOpen(true)
-    }
 
     // Usar menuItems diretamente (já são produtos com price)
     const availableItems = menuItems.filter(item => item.price > 0 && item.status === "Available")
@@ -249,15 +197,15 @@ export function Menu() {
 
     return (
         <div className="space-y-8 w-full max-w-full overflow-x-hidden" style={{ paddingBottom: selectedItems.length > 0 ? '120px' : '0' }}>
-            <div className="flex items-center justify-between gap-4 w-full min-w-0">
-                <div className="min-w-0 flex-1">
-                    <h2 className="text-3xl font-bold tracking-tight truncate">{t("menu")}</h2>
-                    <p className="text-muted-foreground truncate">{t("manageMenu")}</p>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full min-w-0">
+                <div className="min-w-0 flex-1 w-full">
+                    <h2 className="text-3xl font-bold tracking-tight break-words">{t("menu")}</h2>
+                    <p className="text-muted-foreground break-words">{t("manageMenu")}</p>
                 </div>
-                <div className="flex gap-2 shrink-0">
+                <div className="flex gap-2 shrink-0 w-full md:w-auto">
                     <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
                         <DialogTrigger asChild>
-                            <Button variant="outline">
+                            <Button variant="outline" className="flex-1 md:flex-none">
                                 Manage Categories
                             </Button>
                         </DialogTrigger>
@@ -315,7 +263,7 @@ export function Menu() {
                         </DialogContent>
                     </Dialog>
 
-                    <Button onClick={() => navigate('/products/new')}>
+                    <Button onClick={() => navigate('/products/new')} className="flex-1 md:flex-none">
                         <Plus className="mr-2 h-4 w-4" /> {t("addItem")}
                     </Button>
                 </div>
@@ -339,7 +287,7 @@ export function Menu() {
                 return (
                     <div key={category.id} className="space-y-3 md:space-y-4 w-full">
                         <h3 className="text-lg md:text-xl font-semibold capitalize truncate">{category.name}</h3>
-                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
+                        <div className="grid grid-cols-2 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
                             {items.map((item) => (
                                 <Card key={item.id} className="overflow-hidden flex flex-col w-full min-w-0">
                                     <div className="aspect-square md:aspect-video relative w-full overflow-hidden">
@@ -354,7 +302,7 @@ export function Menu() {
                                     </div>
                                     <CardHeader className="p-2 md:p-6 min-w-0">
                                         <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
-                                            <span className="text-xs md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
+                                            <span className="text-lg md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
                                             <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit shrink-0">
                                                 {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
@@ -365,26 +313,8 @@ export function Menu() {
                                             {item.description || "Sem descrição"}
                                         </p>
                                         <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
-                                            <div className="flex items-center justify-between gap-2 min-w-0">
+                                            <div className="flex items-center gap-2 min-w-0">
                                                 <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
-                                                <div className="flex gap-1 shrink-0">
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            onClick={() => handleEditClick(item)}
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
-                                                        >
-                                                            <Pencil className="h-3.5 w-3.5 md:h-3 md:w-3" />
-                                                        </Button>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm"
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation shrink-0"
-                                                            onClick={() => handleDeleteItem(item)}
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
-                                                        </Button>
-                                                    </div>
                                             </div>
                                             
                                             {/* Controles de quantidade */}
@@ -432,7 +362,7 @@ export function Menu() {
                 return (
                     <div key={catName} className="space-y-3 md:space-y-4 w-full">
                         <h3 className="text-lg md:text-xl font-semibold capitalize truncate">{catName} (Uncategorized)</h3>
-                        <div className="grid grid-cols-3 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
+                        <div className="grid grid-cols-2 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
                             {items.map(item => (
                                 <Card key={item.id} className="overflow-hidden flex flex-col w-full min-w-0">
                                     <div className="aspect-square md:aspect-video relative w-full overflow-hidden">
@@ -447,7 +377,7 @@ export function Menu() {
                                     </div>
                                     <CardHeader className="p-2 md:p-6 min-w-0">
                                         <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
-                                            <span className="text-xs md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
+                                            <span className="text-lg md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
                                             <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit shrink-0">
                                                 {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
                                             </Badge>
@@ -458,26 +388,8 @@ export function Menu() {
                                             {item.description || "Sem descrição"}
                                         </p>
                                         <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
-                                            <div className="flex items-center justify-between gap-2 min-w-0">
+                                            <div className="flex items-center gap-2 min-w-0">
                                                 <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
-                                                <div className="flex gap-1 shrink-0">
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            onClick={() => handleEditClick(item)}
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
-                                                        >
-                                                            <Pencil className="h-3.5 w-3.5 md:h-3 md:w-3" />
-                                                        </Button>
-                                                        <Button 
-                                                            variant="ghost" 
-                                                            size="sm"
-                                                            className="h-9 w-9 md:h-8 md:w-8 p-0 text-destructive hover:text-destructive touch-manipulation shrink-0"
-                                                            onClick={() => handleDeleteItem(item)}
-                                                        >
-                                                            <Trash2 className="h-3.5 w-3.5 md:h-3 md:w-3" />
-                                                        </Button>
-                                                    </div>
                                             </div>
                                             
                                             {/* Controles de quantidade */}
@@ -648,73 +560,6 @@ export function Menu() {
                 </div>
             )}
 
-            {/* Edit Item Dialog */}
-            <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit Item</DialogTitle>
-                    </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        {error && (
-                            <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">
-                                {error}
-                            </div>
-                        )}
-                        <div className="grid gap-2">
-                            <Label>{t("itemName")}</Label>
-                            <Input
-                                value={editingItem?.name || ""}
-                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, name: e.target.value } : null)}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>{t("itemDescription")}</Label>
-                            <Input
-                                value={editingItem?.description || ""}
-                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, description: e.target.value } : null)}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>{t("itemPrice")}</Label>
-                            <Input
-                                type="number"
-                                value={editingItem?.price || ""}
-                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, price: parseFloat(e.target.value) } : null)}
-                            />
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>{t("itemCategory")}</Label>
-                            <Select
-                                value={editingItem?.category || ""}
-                                onValueChange={(value) => setEditingItem(prev => prev ? { ...prev, category: value } : null)}
-                            >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select a category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {categories.map(category => (
-                                        <SelectItem key={category.id} value={category.name}>
-                                            {category.name}
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                        <div className="grid gap-2">
-                            <Label>{t("itemImage")}</Label>
-                            <Input
-                                value={editingItem?.image || ""}
-                                onChange={(e) => setEditingItem(prev => prev ? { ...prev, image: e.target.value } : null)}
-                            />
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button onClick={handleUpdateItem} disabled={isLoading}>
-                            {isLoading ? "Saving..." : t("save")}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
         </div>
     )
 }
