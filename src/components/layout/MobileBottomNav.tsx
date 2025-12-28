@@ -1,5 +1,6 @@
+import React from "react"
 import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Package, TrendingUp, DollarSign } from "lucide-react"
-import { NavLink, useNavigate } from "react-router-dom"
+import { NavLink, useNavigate, useLocation } from "react-router-dom"
 import { cn } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
 import { useSettings } from "../../context/SettingsContext"
@@ -11,6 +12,7 @@ export function MobileBottomNav() {
     const { isTablesEnabled } = useSettings()
     const { hasPermission } = useAuth()
     const navigate = useNavigate()
+    const location = useLocation()
 
     const allLinks = [
         { href: "/", label: t("dashboard"), icon: LayoutDashboard, requiredRole: null as any },
@@ -26,37 +28,50 @@ export function MobileBottomNav() {
         return hasPermission(link.requiredRole)
     })
 
-    // Cards for admin/manager features
-    const adminCards = [
-        { 
-            href: "/stock", 
-            label: t("stockManagement") || "Estoque", 
-            icon: Package, 
-            requiredRole: 'admin' as any 
-        },
-        { 
-            href: "/sales", 
-            label: t("salesAnalysis"), 
-            icon: TrendingUp, 
-            requiredRole: ['admin', 'gerente'] as any 
-        },
-        { 
-            href: "/finance", 
-            label: t("finance"), 
-            icon: DollarSign, 
-            requiredRole: ['admin', 'gerente'] as any 
-        },
-    ]
+    // Only process admin cards when on settings page
+    const isSettingsPage = location.pathname === '/settings'
+    
+    // Cards for admin/manager features - only processed when on settings page
+    type AdminCard = {
+        href: string
+        label: string
+        icon: React.ComponentType<{ className?: string }>
+        requiredRole: any
+    }
+    
+    let visibleCards: AdminCard[] = []
+    if (isSettingsPage) {
+        const adminCards: AdminCard[] = [
+            { 
+                href: "/stock", 
+                label: t("stockManagement") || "Estoque", 
+                icon: Package, 
+                requiredRole: 'admin' as any 
+            },
+            { 
+                href: "/sales", 
+                label: t("salesAnalysis"), 
+                icon: TrendingUp, 
+                requiredRole: ['admin', 'gerente'] as any 
+            },
+            { 
+                href: "/finance", 
+                label: t("finance"), 
+                icon: DollarSign, 
+                requiredRole: ['admin', 'gerente'] as any 
+            },
+        ]
 
-    const visibleCards = adminCards.filter(card => {
-        if (!card.requiredRole) return true
-        return hasPermission(card.requiredRole)
-    })
+        visibleCards = adminCards.filter(card => {
+            if (!card.requiredRole) return true
+            return hasPermission(card.requiredRole)
+        })
+    }
 
     return (
         <>
-            {/* Admin Cards Section */}
-            {visibleCards.length > 0 && (
+            {/* Admin Cards Section - Only rendered on settings page */}
+            {isSettingsPage && visibleCards.length > 0 && (
                 <div className="mobile-admin-cards fixed bottom-[60px] left-0 right-0 z-40 lg:hidden print:hidden px-4 pb-2 bg-background/95 backdrop-blur-sm">
                     <div className="grid grid-cols-3 gap-2 max-w-screen-md mx-auto">
                         {visibleCards.map((card) => (
