@@ -1,4 +1,7 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from 'react'
+import { supabase, isSupabaseConfigured } from '../lib/supabase'
+import { useAuth } from './AuthContext'
+import type { Language } from '../translations'
 
 interface PrinterSettings {
   enabled: boolean
@@ -11,6 +14,7 @@ interface PrinterSettings {
 }
 
 interface Settings {
+  language: Language
   enableTables: boolean
   enableOrderDisplay: boolean
   printer: PrinterSettings
@@ -39,6 +43,7 @@ const defaultPrinterSettings: PrinterSettings = {
 }
 
 const defaultSettings: Settings = {
+  language: 'pt',
   enableTables: true,
   enableOrderDisplay: false,
   printer: defaultPrinterSettings
@@ -49,49 +54,134 @@ const SettingsContext = createContext<SettingsContextType | undefined>(undefined
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<Settings>(defaultSettings)
   const [isLoading, setIsLoading] = useState(true)
+  const { user, profile } = useAuth()
+  const isInitialLoad = useRef(true)
+  const isSavingRef = useRef(false)
 
-  // Load settings from localStorage on mount
+  // Verificar se o usuário é admin
+  const isAdmin = profile?.role === 'admin'
+
+  // Load settings from database or localStorage
   useEffect(() => {
     const loadSettings = async () => {
       try {
+        // Se o Supabase estiver configurado, carregar configurações globais do banco
+        if (isSupabaseConfigured) {
+          console.log('Loading global settings from database')
+          
+          const { data, error } = await supabase
+            .from('app_settings')
+            .select('settings')
+            .eq('id', 'global')
+            .single()
+
+          if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+            console.error('Error loading settings from database:', error)
+            // Fallback para localStorage em caso de erro
+            loadFromLocalStorage()
+          } else if (data && data.settings) {
+            console.log('Settings loaded from database:', data.settings)
+            // Merge com defaults para garantir que novas configurações sejam incluídas
+            const mergedSettings = { ...defaultSettings, ...data.settings }
+            setSettings(mergedSettings)
+          } else {
+            console.log('No settings found in database, using defaults')
+            setSettings(defaultSettings)
+          }
+        } else {
+          // Modo demo: usar localStorage
+          console.log('Loading settings from localStorage (demo mode)')
+          loadFromLocalStorage()
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error)
+        loadFromLocalStorage()
+      } finally {
+        setIsLoading(false)
+        isInitialLoad.current = false
+      }
+    }
+
+    const loadFromLocalStorage = () => {
+      try {
         const savedSettings = localStorage.getItem('restaurant-settings')
-        console.log('Loading settings from localStorage:', savedSettings)
-        
         if (savedSettings) {
           const parsed = JSON.parse(savedSettings)
-          console.log('Parsed settings:', parsed)
-          
-          // Merge saved settings with defaults to handle new settings that might be added
           const mergedSettings = { ...defaultSettings, ...parsed }
-          console.log('Merged settings:', mergedSettings)
-          
           setSettings(mergedSettings)
         } else {
-          console.log('No saved settings found, using defaults')
           setSettings(defaultSettings)
         }
       } catch (error) {
-        console.error('Error loading settings from localStorage:', error)
+        console.error('Error loading from localStorage:', error)
         setSettings(defaultSettings)
-      } finally {
-        setIsLoading(false)
       }
     }
 
     loadSettings()
-  }, [])
+  }, []) // Carregar apenas uma vez ao montar
 
-  // Save settings to localStorage whenever they change
+  // Save settings to database or localStorage (apenas se for admin)
   useEffect(() => {
-    if (!isLoading) {
+    // Não salvar durante o carregamento inicial
+    // Apenas admins podem salvar
+    if (isLoading || isInitialLoad.current || isSavingRef.current || !isAdmin) {
+      return
+    }
+
+    const saveSettings = async () => {
+      isSavingRef.current = true
+      
+      try {
+        // Se o Supabase estiver configurado e o usuário for admin, salvar no banco
+        if (isSupabaseConfigured && isAdmin) {
+          console.log('Saving global settings to database (admin user)')
+          
+          const { error } = await supabase
+            .from('app_settings')
+            .upsert({
+              id: 'global',
+              settings: settings,
+              updated_at: new Date().toISOString()
+            }, {
+              onConflict: 'id'
+            })
+
+          if (error) {
+            console.error('Error saving settings to database:', error)
+            // Fallback para localStorage em caso de erro
+            saveToLocalStorage()
+          } else {
+            console.log('Settings saved to database successfully')
+          }
+        } else {
+          // Modo demo: usar localStorage
+          saveToLocalStorage()
+        }
+      } catch (error) {
+        console.error('Error saving settings:', error)
+        saveToLocalStorage()
+      } finally {
+        isSavingRef.current = false
+      }
+    }
+
+    const saveToLocalStorage = () => {
       try {
         localStorage.setItem('restaurant-settings', JSON.stringify(settings))
         console.log('Settings saved to localStorage:', settings)
       } catch (error) {
-        console.error('Error saving settings to localStorage:', error)
+        console.error('Error saving to localStorage:', error)
       }
     }
-  }, [settings, isLoading])
+
+    // Debounce: aguardar 500ms antes de salvar para evitar muitas chamadas
+    const timeoutId = setTimeout(() => {
+      saveSettings()
+    }, 500)
+
+    return () => clearTimeout(timeoutId)
+  }, [settings, isAdmin, isLoading])
 
   const updateSettings = (newSettings: Partial<Settings>) => {
     console.log('Updating settings:', newSettings)
@@ -106,21 +196,81 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     }))
   }
 
-  const saveSettings = () => {
+  const saveSettings = async () => {
+    // Apenas admins podem salvar configurações
+    if (!isAdmin) {
+      console.warn('Only admins can save settings')
+      return
+    }
+
     try {
-      localStorage.setItem('restaurant-settings', JSON.stringify(settings))
-      console.log('Settings manually saved:', settings)
-      // You could add a toast notification here
+      // Se o Supabase estiver configurado e o usuário for admin, salvar no banco
+      if (isSupabaseConfigured && isAdmin) {
+        console.log('Manually saving global settings to database (admin user)')
+        
+        const { error } = await supabase
+          .from('app_settings')
+          .upsert({
+            id: 'global',
+            settings: settings,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'id'
+          })
+
+        if (error) {
+          console.error('Error manually saving settings to database:', error)
+          // Fallback para localStorage
+          localStorage.setItem('restaurant-settings', JSON.stringify(settings))
+        } else {
+          console.log('Settings manually saved to database successfully')
+        }
+      } else {
+        // Modo demo: usar localStorage
+        localStorage.setItem('restaurant-settings', JSON.stringify(settings))
+        console.log('Settings manually saved to localStorage:', settings)
+      }
     } catch (error) {
       console.error('Error manually saving settings:', error)
     }
   }
 
-  const resetSettings = () => {
+  const resetSettings = async () => {
+    // Apenas admins podem resetar configurações
+    if (!isAdmin) {
+      console.warn('Only admins can reset settings')
+      return
+    }
+
     setSettings(defaultSettings)
+    
     try {
-      localStorage.removeItem('restaurant-settings')
-      console.log('Settings reset to defaults')
+      // Se o Supabase estiver configurado e o usuário for admin, resetar no banco
+      if (isSupabaseConfigured && isAdmin) {
+        console.log('Resetting global settings in database (admin user)')
+        
+        const { error } = await supabase
+          .from('app_settings')
+          .upsert({
+            id: 'global',
+            settings: defaultSettings,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'id'
+          })
+
+        if (error) {
+          console.error('Error resetting settings in database:', error)
+          // Fallback para localStorage
+          localStorage.removeItem('restaurant-settings')
+        } else {
+          console.log('Settings reset in database successfully')
+        }
+      } else {
+        // Modo demo: usar localStorage
+        localStorage.removeItem('restaurant-settings')
+        console.log('Settings reset in localStorage')
+      }
     } catch (error) {
       console.error('Error resetting settings:', error)
     }

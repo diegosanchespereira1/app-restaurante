@@ -12,6 +12,7 @@ import {
 } from "../components/ui/select"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
+import { useAuth } from "../context/AuthContext"
 import { Save, RotateCcw, ExternalLink, Printer, TestTube } from "lucide-react"
 import { useState } from "react"
 import { testNetworkPrinter } from "../lib/printer"
@@ -19,6 +20,7 @@ import { UserManagement } from "../components/settings/UserManagement"
 
 export function Settings() {
     const { language, setLanguage, t } = useLanguage()
+    const { isAdmin } = useAuth()
     const { 
         updateSettings, 
         updatePrinterSettings,
@@ -97,36 +99,50 @@ export function Settings() {
                 <p className="text-muted-foreground break-words mt-1">{t("settingsDescription")}</p>
             </div>
 
-            {/* Save/Reset Actions */}
-            <Card>
-                <CardHeader>
-                    <CardTitle>Ações de Configuração</CardTitle>
-                    <CardDescription>
-                        Salve suas configurações ou reset para os valores padrão
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <Button onClick={handleSave} className="flex items-center justify-center gap-2 w-full sm:w-auto">
-                            <Save className="w-4 h-4" />
-                            Salvar Configurações
-                        </Button>
-                        <Button 
-                            variant="outline" 
-                            onClick={handleReset}
-                            className="flex items-center justify-center gap-2 w-full sm:w-auto"
-                        >
-                            <RotateCcw className="w-4 h-4" />
-                            Reset para Padrão
-                        </Button>
-                    </div>
-                    {saveMessage && (
-                        <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md">
-                            {saveMessage}
+            {/* Save/Reset Actions - Apenas para admins */}
+            {isAdmin && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Ações de Configuração</CardTitle>
+                        <CardDescription>
+                            Salve as configurações globais ou reset para os valores padrão. Apenas administradores podem salvar configurações.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex flex-col sm:flex-row gap-4">
+                            <Button onClick={handleSave} className="flex items-center justify-center gap-2 w-full sm:w-auto">
+                                <Save className="w-4 h-4" />
+                                Salvar Configurações
+                            </Button>
+                            <Button 
+                                variant="outline" 
+                                onClick={handleReset}
+                                className="flex items-center justify-center gap-2 w-full sm:w-auto"
+                            >
+                                <RotateCcw className="w-4 h-4" />
+                                Reset para Padrão
+                            </Button>
                         </div>
-                    )}
-                </CardContent>
-            </Card>
+                        {saveMessage && (
+                            <div className="mt-4 p-3 bg-green-100 text-green-700 rounded-md">
+                                {saveMessage}
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+            
+            {/* Mensagem para usuários não-admin */}
+            {!isAdmin && (
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Configurações do Sistema</CardTitle>
+                        <CardDescription>
+                            Você está visualizando as configurações globais do sistema. Apenas administradores podem modificar essas configurações.
+                        </CardDescription>
+                    </CardHeader>
+                </Card>
+            )}
 
             {/* Order Display Actions */}
             {isOrderDisplayEnabled && (
