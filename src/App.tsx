@@ -25,7 +25,7 @@ import { TableBill } from "./pages/TableBill"
 import { Stock } from "./pages/Stock"
 import { AddInventoryItem } from "./pages/AddInventoryItem"
 import { EditInventoryItem } from "./pages/EditInventoryItem"
-import { ItemsManagement } from "./pages/ItemsManagement"
+import { AddProduct } from "./pages/AddProduct"
 
 // Component to handle authenticated routes
 function AuthenticatedRoutes() {
@@ -81,14 +81,6 @@ function AuthenticatedRoutes() {
             </ProtectedRoute>
           } 
         />
-        <Route 
-          path="/items-management" 
-          element={
-            <ProtectedRoute requiredRole={['admin', 'gerente']}>
-              <ItemsManagement />
-            </ProtectedRoute>
-          } 
-        />
         <Route path="/order-display" element={<OrderDisplay />} />
         <Route 
           path="/stock" 
@@ -111,6 +103,14 @@ function AuthenticatedRoutes() {
           element={
             <ProtectedRoute requiredRole="admin">
               <EditInventoryItem />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/products/new" 
+          element={
+            <ProtectedRoute requiredRole={['admin', 'gerente']}>
+              <AddProduct />
             </ProtectedRoute>
           } 
         />

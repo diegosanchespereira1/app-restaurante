@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
-import type { Product } from '../types/product'
+import type { Product, CreateProductInput } from '../types/product'
 
 // Types - MenuItem mantido para compatibilidade durante transição
 export interface MenuItem {
@@ -96,12 +96,13 @@ interface RestaurantContextType {
     addOrder: (order: Order) => Promise<{ success: boolean; error?: string }>
     addTable: (tableNumber: string) => Promise<{ success: boolean; error?: string }>
     updateOrderStatus: (orderId: string, status: Order["status"]) => Promise<{ success: boolean; error?: string }>
-    updateTableStatus: (tableId: number, status: Table["status"]) => void
+    updateTableStatus: (tableId: number, status: Table["status"]) => Promise<void>
     processPayment: (orderId: string, method: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     closeTable: (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string; data?: MenuItem }>
     updateMenuItem: (id: number, item: Partial<MenuItem>) => Promise<{ success: boolean; error?: string }>
     deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>
+    addProduct: (product: CreateProductInput) => Promise<{ success: boolean; error?: string; data?: Product }>
     expenses: Expense[]
     addExpense: (expense: Omit<Expense, "id">) => Promise<{ success: boolean; error?: string }>
     deleteExpense: (id: number) => void
@@ -741,6 +742,106 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         }
     }
 
+    // Nova função unificada para adicionar produtos
+    const addProduct = async (product: CreateProductInput): Promise<{ success: boolean; error?: string; data?: Product }> => {
+        // Validação: produto deve ter nome e pelo menos um dos seguintes: preço OU unidade/estoque
+        if (!product.name || product.name.trim() === '') {
+            return { success: false, error: 'Nome do produto é obrigatório' }
+        }
+
+        if (!product.price && !product.unit) {
+            return { success: false, error: 'Produto deve ter preço de venda ou informações de estoque' }
+        }
+
+        // Demo mode
+        if (!isSupabaseConfigured) {
+            const newProduct: Product = {
+                id: Date.now(),
+                name: product.name,
+                category: product.category || null,
+                image: product.image || null,
+                price: product.price || null,
+                description: product.description || null,
+                status: product.status || null,
+                unit: product.unit || null,
+                min_stock: product.min_stock || null,
+                current_stock: product.current_stock || null,
+                cost_price: product.cost_price || null,
+                product_type: product.product_type || null,
+                ncm: product.ncm || null,
+                cst_icms: product.cst_icms || null,
+                cfop: product.cfop || null,
+                icms_rate: product.icms_rate || null,
+                ipi_rate: product.ipi_rate || null,
+                ean_code: product.ean_code || null,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+            }
+            // Se tem preço, adicionar aos menuItems
+            if (product.price) {
+                const menuItem = productToMenuItem(newProduct)
+                setMenuItems(prev => [...prev, menuItem])
+            }
+            return { success: true, data: newProduct }
+        }
+
+        try {
+            // Preparar dados para inserção
+            const productData: any = {
+                name: product.name.trim(),
+                category: product.category || null,
+                image: product.image || null,
+                price: product.price || null,
+                description: product.description || null,
+                status: product.status || (product.price ? 'Available' : null),
+                unit: product.unit || null,
+                min_stock: product.min_stock ?? null,
+                current_stock: product.current_stock ?? null,
+                cost_price: product.cost_price || null,
+                product_type: product.product_type || null,
+                ncm: product.ncm || null,
+                cst_icms: product.cst_icms || null,
+                cfop: product.cfop || null,
+                icms_rate: product.icms_rate || null,
+                ipi_rate: product.ipi_rate || null,
+                ean_code: product.ean_code || null
+            }
+
+            console.log('Inserindo produto no banco:', productData)
+            const { data, error } = await supabase.from('products').insert(productData).select().single()
+
+            if (error) {
+                console.error("Error adding product:", error)
+                return { success: false, error: error.message }
+            }
+
+            if (!data) {
+                console.error("No data returned from insert")
+                return { success: false, error: 'Erro desconhecido ao criar produto' }
+            }
+
+            console.log('Produto criado com sucesso:', data)
+            const newProduct = data as Product
+            
+            // Se tem preço, atualizar menuItems localmente
+            if (newProduct.price) {
+                const menuItem = productToMenuItem(newProduct)
+                setMenuItems(prev => {
+                    // Verificar se já existe para evitar duplicatas
+                    if (prev.find(m => m.id === menuItem.id)) {
+                        return prev.map(m => m.id === menuItem.id ? menuItem : m)
+                    }
+                    return [...prev, menuItem]
+                })
+            }
+            
+            return { success: true, data: newProduct }
+        } catch (err: any) {
+            console.error("Error adding product (catch):", err)
+            return { success: false, error: err.message || 'Erro ao criar produto' }
+        }
+    }
+
     const deleteMenuItem = async (id: number): Promise<{ success: boolean; error?: string }> => {
         // Optimistic update
         const previousItems = [...menuItems]
@@ -941,6 +1042,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 addMenuItem,
                 updateMenuItem,
                 deleteMenuItem,
+                addProduct,
                 expenses,
                 addExpense,
                 deleteExpense,

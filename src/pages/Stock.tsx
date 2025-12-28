@@ -62,10 +62,10 @@ export function Stock() {
                     <Button 
                         variant="outline" 
                         className="flex items-center gap-2"
-                        onClick={() => navigate('/stock/add')}
+                        onClick={() => navigate('/products/new')}
                     >
                         <Plus className="w-4 h-4" />
-                        {t("addInventoryItem") || "Adicionar Item"}
+                        Adicionar Produto
                     </Button>
                     <Button 
                         variant="outline" 

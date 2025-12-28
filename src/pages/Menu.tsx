@@ -14,73 +14,21 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 
 export function Menu() {
     const navigate = useNavigate()
-    const { menuItems, addMenuItem, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory, addOrder, generateOrderId } = useRestaurant()
+    const { menuItems, updateMenuItem, deleteMenuItem, isLoading: isMenuLoading, error: menuError, categories, addCategory, updateCategory, deleteCategory, addOrder, generateOrderId } = useRestaurant()
     const { t } = useLanguage()
     const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [isCreateOrderDialogOpen, setIsCreateOrderDialogOpen] = useState(false)
     const [customerName, setCustomerName] = useState("")
     const [showSuccessMessage, setShowSuccessMessage] = useState(false)
-    const [isAddOpen, setIsAddOpen] = useState(false)
     const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
     const [isLoading, setIsLoading] = useState(false)
     const [error, setError] = useState("")
     const [newCategoryName, setNewCategoryName] = useState("")
     const [editingCategory, setEditingCategory] = useState<{ id: number, name: string } | null>(null)
-    const [newItem, setNewItem] = useState({
-        name: "",
-        description: "",
-        price: "",
-        category: "",
-        image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60"
-    })
     // Edit Item Logic
     const [isEditOpen, setIsEditOpen] = useState(false)
     const [editingItem, setEditingItem] = useState<MenuItem | null>(null)
 
-    // Set default category when categories load
-    if (!newItem.category && categories.length > 0) {
-        setNewItem(prev => ({ ...prev, category: categories[0].name }))
-    }
-
-    const handleAddItem = async () => {
-        setError("")
-        const price = parseFloat(newItem.price)
-
-        if (!newItem.name || !newItem.price || isNaN(price) || !newItem.category) {
-            setError(t("fillAllFields"))
-            return
-        }
-
-        setIsLoading(true)
-        try {
-            const result = await addMenuItem({
-                name: newItem.name,
-                description: newItem.description,
-                price: price,
-                category: newItem.category,
-                status: "Available",
-                image: newItem.image
-            })
-
-            if (result.success) {
-                setNewItem({
-                    name: "",
-                    description: "",
-                    price: "",
-                    category: categories[0]?.name || "",
-                    image: "https://images.unsplash.com/photo-1546069901-ba9599a7e63c?w=800&auto=format&fit=crop&q=60"
-                })
-                setIsAddOpen(false)
-            } else {
-                setError(result.error || "Failed to save item. Please try again.")
-            }
-        } catch (err) {
-            setError("An unexpected error occurred.")
-            console.error(err)
-        } finally {
-            setIsLoading(false)
-        }
-    }
 
     const handleAddCategory = async () => {
         if (!newCategoryName.trim()) return
@@ -367,77 +315,9 @@ export function Menu() {
                         </DialogContent>
                     </Dialog>
 
-                    <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
-                        <DialogTrigger asChild>
-                            <Button>
-                                <Plus className="mr-2 h-4 w-4" /> {t("addItem")}
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>{t("addItem")}</DialogTitle>
-                            </DialogHeader>
-                            <div className="grid gap-4 py-4">
-                                {error && (
-                                    <div className="bg-destructive/15 text-destructive text-sm p-3 rounded-md">
-                                        {error}
-                                    </div>
-                                )}
-                                <div className="grid gap-2">
-                                    <Label>{t("itemName")}</Label>
-                                    <Input
-                                        value={newItem.name}
-                                        onChange={(e) => setNewItem({ ...newItem, name: e.target.value })}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>{t("itemDescription")}</Label>
-                                    <Input
-                                        value={newItem.description}
-                                        onChange={(e) => setNewItem({ ...newItem, description: e.target.value })}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>{t("itemPrice")}</Label>
-                                    <Input
-                                        type="number"
-                                        value={newItem.price}
-                                        onChange={(e) => setNewItem({ ...newItem, price: e.target.value })}
-                                    />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>{t("itemCategory")}</Label>
-                                    <Select
-                                        value={newItem.category}
-                                        onValueChange={(value) => setNewItem({ ...newItem, category: value })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select a category" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {categories.map(category => (
-                                                <SelectItem key={category.id} value={category.name}>
-                                                    {category.name}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label>{t("itemImage")}</Label>
-                                    <Input
-                                        value={newItem.image}
-                                        onChange={(e) => setNewItem({ ...newItem, image: e.target.value })}
-                                    />
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button onClick={handleAddItem} disabled={isLoading}>
-                                    {isLoading ? "Saving..." : t("save")}
-                                </Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                    <Button onClick={() => navigate('/products/new')}>
+                        <Plus className="mr-2 h-4 w-4" /> {t("addItem")}
+                    </Button>
                 </div>
             </div>
 
