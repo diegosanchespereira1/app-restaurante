@@ -1,7 +1,25 @@
+import { useLocation } from "react-router-dom"
+import { useEffect } from "react"
 import { Sidebar } from "./Sidebar"
 import { MobileBottomNav } from "./MobileBottomNav"
 
 export function Layout({ children }: { children: React.ReactNode }) {
+    const location = useLocation()
+    const isSettingsPage = location.pathname === '/settings'
+
+    useEffect(() => {
+        if (isSettingsPage) {
+            document.body.classList.add('has-admin-cards')
+        } else {
+            document.body.classList.remove('has-admin-cards')
+        }
+
+        // Cleanup on unmount
+        return () => {
+            document.body.classList.remove('has-admin-cards')
+        }
+    }, [isSettingsPage])
+
     return (
         <div className="flex h-screen bg-background">
             {/* Desktop Sidebar - Only on large screens (lg+) */}

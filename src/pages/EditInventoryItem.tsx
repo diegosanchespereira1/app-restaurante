@@ -29,8 +29,12 @@ export function EditInventoryItem() {
     const [isAddingCategory, setIsAddingCategory] = useState(false)
     const [categoryError, setCategoryError] = useState<string | null>(null)
     const [isUploadingImage, setIsUploadingImage] = useState(false)
+    const [uploadProgress, setUploadProgress] = useState(0) // Progresso do upload (0-100)
     const [uploadError, setUploadError] = useState<string | null>(null)
+    const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null)
+    const [localPreviewUrl, setLocalPreviewUrl] = useState<string | null>(null) // Preview local (blob URL)
     const fileInputRef = useRef<HTMLInputElement>(null)
+    const isInitialLoad = useRef(true) // Flag para rastrear se já inicializamos o preview
 
     const itemId = id ? parseInt(id) : null
     const currentItem = itemId ? getInventoryItemById(itemId) : null
@@ -60,26 +64,55 @@ export function EditInventoryItem() {
     // Carregar dados do item quando o componente montar ou o item mudar
     useEffect(() => {
         if (currentItem) {
-            setFormData({
-                menu_item_id: currentItem.menu_item_id,
-                name: currentItem.name,
-                unit: currentItem.unit,
-                min_stock: currentItem.min_stock,
-                current_stock: currentItem.current_stock,
-                cost_price: currentItem.cost_price,
-                selling_price: currentItem.selling_price,
-                category: currentItem.category || '',
-                image: currentItem.image || DEFAULT_IMAGE,
-                product_type: currentItem.product_type || '',
-                ncm: currentItem.ncm || '',
-                cst_icms: currentItem.cst_icms || '',
-                cfop: currentItem.cfop || '',
-                icms_rate: currentItem.icms_rate,
-                ipi_rate: currentItem.ipi_rate,
-                ean_code: currentItem.ean_code || ''
+            const itemImage = currentItem.image || DEFAULT_IMAGE
+            
+            setFormData(prev => {
+                // Preservar a imagem atual se já tivermos uma válida (não padrão)
+                // Isso evita perder o preview quando salvamos e o item é recarregado
+                const imageToUse = prev.image && prev.image !== DEFAULT_IMAGE 
+                    ? prev.image 
+                    : itemImage
+                
+                return {
+                    menu_item_id: currentItem.menu_item_id,
+                    name: currentItem.name,
+                    unit: currentItem.unit,
+                    min_stock: currentItem.min_stock,
+                    current_stock: currentItem.current_stock,
+                    cost_price: currentItem.cost_price,
+                    selling_price: currentItem.selling_price,
+                    category: currentItem.category || '',
+                    image: imageToUse, // Preservar imagem atual se existir
+                    product_type: currentItem.product_type || '',
+                    ncm: currentItem.ncm || '',
+                    cst_icms: currentItem.cst_icms || '',
+                    cfop: currentItem.cfop || '',
+                    icms_rate: currentItem.icms_rate,
+                    ipi_rate: currentItem.ipi_rate,
+                    ean_code: currentItem.ean_code || ''
+                }
             })
+            
+            // Atualizar preview apenas na primeira vez (quando ainda não inicializamos)
+            // Não resetar o preview depois da primeira inicialização
+            // Isso preserva o preview durante edições e após salvar
+            if (isInitialLoad.current) {
+                if (itemImage && itemImage !== DEFAULT_IMAGE) {
+                    setImagePreviewUrl(itemImage)
+                }
+                isInitialLoad.current = false
+            }
         }
-    }, [currentItem])
+    }, [currentItem]) // Executar apenas quando currentItem mudar
+
+    // Limpar object URL quando componente desmontar
+    useEffect(() => {
+        return () => {
+            if (localPreviewUrl) {
+                URL.revokeObjectURL(localPreviewUrl)
+            }
+        }
+    }, [localPreviewUrl])
 
     // Tipos de produto para cálculo de imposto
     const productTypes = [
@@ -146,6 +179,78 @@ export function EditInventoryItem() {
         }
     }
 
+    // Função para redimensionar imagem
+    const resizeImage = (file: File): Promise<File> => {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader()
+            reader.readAsDataURL(file)
+            reader.onload = (event) => {
+                const img = new Image()
+                img.src = event.target?.result as string
+                img.onload = () => {
+                    // Tamanho fixo para redimensionamento: 800x800 (formato quadrado)
+                    const MAX_WIDTH = 800
+                    const MAX_HEIGHT = 800
+                    
+                    let width = img.width
+                    let height = img.height
+                    
+                    // Calcular novas dimensões mantendo proporção
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height = (height * MAX_WIDTH) / width
+                            width = MAX_WIDTH
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width = (width * MAX_HEIGHT) / height
+                            height = MAX_HEIGHT
+                        }
+                    }
+                    
+                    // Criar canvas para redimensionar
+                    const canvas = document.createElement('canvas')
+                    canvas.width = MAX_WIDTH
+                    canvas.height = MAX_HEIGHT
+                    const ctx = canvas.getContext('2d')
+                    
+                    if (!ctx) {
+                        reject(new Error('Não foi possível criar contexto do canvas'))
+                        return
+                    }
+                    
+                    // Preencher fundo branco
+                    ctx.fillStyle = '#FFFFFF'
+                    ctx.fillRect(0, 0, MAX_WIDTH, MAX_HEIGHT)
+                    
+                    // Centralizar e redimensionar imagem
+                    const x = (MAX_WIDTH - width) / 2
+                    const y = (MAX_HEIGHT - height) / 2
+                    ctx.drawImage(img, x, y, width, height)
+                    
+                    // Converter canvas para blob e depois para File
+                    canvas.toBlob(
+                        (blob) => {
+                            if (!blob) {
+                                reject(new Error('Erro ao redimensionar imagem'))
+                                return
+                            }
+                            const resizedFile = new File([blob], file.name, {
+                                type: 'image/jpeg',
+                                lastModified: Date.now()
+                            })
+                            resolve(resizedFile)
+                        },
+                        'image/jpeg',
+                        0.9 // Qualidade JPEG (90%)
+                    )
+                }
+                img.onerror = () => reject(new Error('Erro ao carregar imagem'))
+            }
+            reader.onerror = () => reject(new Error('Erro ao ler arquivo'))
+        })
+    }
+
     const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0]
         if (!file) return
@@ -156,63 +261,174 @@ export function EditInventoryItem() {
             return
         }
 
-        // Validar tamanho (max 5MB)
-        if (file.size > 5 * 1024 * 1024) {
-            setUploadError('A imagem deve ter no máximo 5MB')
+        if (!isSupabaseConfigured) {
+            setUploadError('Supabase não está configurado.')
             return
         }
 
-        if (!isSupabaseConfigured) {
-            setUploadError('Supabase não está configurado. Use uma URL de imagem.')
-            return
-        }
+        // Criar preview imediato usando URL.createObjectURL (mais confiável)
+        const previewUrl = URL.createObjectURL(file)
+        setLocalPreviewUrl(previewUrl) // Preview local que persiste até upload completo
 
         setIsUploadingImage(true)
+        setUploadProgress(0)
         setUploadError(null)
 
+        let progressInterval: NodeJS.Timeout | null = null
+
         try {
+            // Simular progresso: redimensionamento (0-30%)
+            setUploadProgress(10)
+            const resizedFile = await resizeImage(file)
+            setUploadProgress(30)
+            
             // Gerar nome único para o arquivo
-            const fileExt = file.name.split('.').pop()
-            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`
+            const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.jpg`
             const filePath = `product-images/${fileName}`
+
+            // Simular progresso durante o upload
+            // Como o Supabase não fornece callback de progresso, vamos simular incrementos
+            // Iniciar simulação de progresso durante upload (30-70%)
+            let simulatedProgress = 30
+            progressInterval = setInterval(() => {
+                simulatedProgress += 5
+                if (simulatedProgress <= 70) {
+                    setUploadProgress(simulatedProgress)
+                } else {
+                    // Parar em 70% e aguardar o upload real terminar
+                    if (progressInterval) {
+                        clearInterval(progressInterval)
+                        progressInterval = null
+                    }
+                }
+            }, 150) // Incrementa a cada 150ms para progresso mais rápido
 
             // Fazer upload para o Supabase Storage
             const { error } = await supabase.storage
                 .from('product-images')
-                .upload(filePath, file, {
+                .upload(filePath, resizedFile, {
                     cacheControl: '3600',
-                    upsert: false
+                    upsert: false,
+                    contentType: 'image/jpeg'
                 })
 
+            // Parar a simulação de progresso
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
+
+            // Progresso: upload concluído (70%)
+            setUploadProgress(70)
+
             if (error) {
-                // Se o bucket não existir, tentar criar e fazer upload novamente
+                // Parar a simulação de progresso
+                if (progressInterval) {
+                    clearInterval(progressInterval)
+                    progressInterval = null
+                }
+                
+                // Tratar diferentes tipos de erro
                 if (error.message.includes('Bucket not found')) {
                     setUploadError('Bucket de imagens não encontrado. Por favor, crie um bucket chamado "product-images" no Supabase Storage.')
+                } else if (error.message.includes('row-level security policy') || error.message.includes('RLS')) {
+                    setUploadError('Erro de política de segurança. Execute o script setup_storage_policies.sql no SQL Editor do Supabase para configurar as políticas do bucket.')
                 } else {
                     setUploadError(`Erro ao fazer upload: ${error.message}`)
                 }
+                // Limpar preview em caso de erro
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                }
+                setLocalPreviewUrl(null)
+                setUploadProgress(0)
+                setIsUploadingImage(false)
                 return
             }
 
-            // Obter URL pública da imagem
-            const { data: urlData } = supabase.storage
-                .from('product-images')
-                .getPublicUrl(filePath)
+            // Progresso: obtendo URL (70-85%)
+            setUploadProgress(75)
 
-            if (urlData?.publicUrl) {
-                setFormData(prev => ({ ...prev, image: urlData.publicUrl }))
-                setUploadError(null)
-                // Limpar mensagem de erro após 3 segundos se houver sucesso
-                setTimeout(() => setUploadError(null), 3000)
+            // Sempre construir URL manualmente (mais confiável)
+            // getPublicUrl pode não funcionar corretamente em alguns casos
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+            let finalImageUrl: string | null = null
+            
+            if (supabaseUrl) {
+                finalImageUrl = `${supabaseUrl}/storage/v1/object/public/product-images/${filePath}`
             } else {
-                setUploadError('Erro ao obter URL da imagem')
+                // Fallback: tentar usar getPublicUrl
+                try {
+                    const urlResponse = supabase.storage
+                        .from('product-images')
+                        .getPublicUrl(filePath)
+                    
+                    finalImageUrl = urlResponse?.publicUrl || null
+                } catch (urlError) {
+                    console.error('Erro ao obter URL:', urlError)
+                }
+            }
+
+            setUploadProgress(85)
+
+            if (finalImageUrl) {
+                // Progresso: processando (85-95%)
+                setUploadProgress(90)
+                
+                // Atualizar preview com a URL do Supabase primeiro
+                setImagePreviewUrl(finalImageUrl)
+                
+                // Atualizar formData com a URL do Supabase
+                // Isso garante que a URL esteja salva no formData para quando salvarmos
+                setFormData(prev => ({ ...prev, image: finalImageUrl }))
+                
+                setUploadProgress(95)
+                
+                // Limpar preview local
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                }
+                setLocalPreviewUrl(null)
+                
+                // Progresso completo
+                setUploadProgress(100)
+                setUploadError(null)
+                setIsUploadingImage(false) // Resetar imediatamente
+                
+                // Resetar progresso após um breve delay para mostrar 100%
+                setTimeout(() => {
+                    setUploadProgress(0)
+                }, 800)
+            } else {
+                setUploadError('Erro ao obter URL da imagem. Verifique se o bucket está público e as políticas RLS estão configuradas.')
+                // Limpar preview em caso de erro
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl)
+                }
+                setLocalPreviewUrl(null)
+                setUploadProgress(0)
+                setIsUploadingImage(false)
             }
         } catch (err: any) {
+            // Parar a simulação de progresso
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
+            
             setUploadError(err.message || 'Erro ao fazer upload da imagem')
-            // Limpar mensagem de erro após 5 segundos
-            setTimeout(() => setUploadError(null), 5000)
+            // Limpar preview se houver erro
+            if (previewUrl) {
+                URL.revokeObjectURL(previewUrl)
+            }
+            setLocalPreviewUrl(null)
+            setUploadProgress(0)
         } finally {
-            setIsUploadingImage(false)
+            // Garantir que o interval seja limpo mesmo se houver algum problema
+            if (progressInterval) {
+                clearInterval(progressInterval)
+                progressInterval = null
+            }
             // Limpar o input para permitir selecionar o mesmo arquivo novamente
             if (fileInputRef.current) {
                 fileInputRef.current.value = ''
@@ -306,8 +522,27 @@ export function EditInventoryItem() {
             return
         }
 
+        // Não permitir salvar enquanto estiver fazendo upload de imagem
+        if (isUploadingImage) {
+            setError('Aguarde o upload da imagem terminar antes de salvar')
+            return
+        }
+
         setIsSubmitting(true)
         try {
+            // Priorizar imagePreviewUrl se existir (imagem recém-uploadada)
+            // Senão, usar formData.image se não for vazio/nulo
+            // Por último, usar DEFAULT_IMAGE
+            const imageToSave = imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE ? formData.image : DEFAULT_IMAGE)
+            
+            // Log para debug
+            console.log('Salvando item com imagem:', {
+                imagePreviewUrl,
+                formDataImage: formData.image,
+                imageToSave,
+                isDefault: imageToSave === DEFAULT_IMAGE
+            })
+            
             const result = await updateInventoryItem(itemId, {
                 menu_item_id: formData.menu_item_id,
                 name: formData.name,
@@ -317,7 +552,7 @@ export function EditInventoryItem() {
                 cost_price: formData.cost_price,
                 selling_price: formData.selling_price,
                 category: formData.category || null,
-                image: formData.image || DEFAULT_IMAGE,
+                image: imageToSave,
                 product_type: formData.product_type || null,
                 ncm: formData.ncm || null,
                 cst_icms: formData.cst_icms || null,
@@ -328,6 +563,12 @@ export function EditInventoryItem() {
             })
 
             if (result.success) {
+                // Garantir que o preview seja mantido com a imagem atual
+                // Usar imagePreviewUrl se existir, senão usar formData.image
+                const finalImage = imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE ? formData.image : null)
+                if (finalImage) {
+                    setImagePreviewUrl(finalImage)
+                }
                 setSuccess(true)
                 setTimeout(() => {
                     navigate('/stock')
@@ -434,18 +675,18 @@ export function EditInventoryItem() {
                                         type="button"
                                         variant="outline"
                                         onClick={() => fileInputRef.current?.click()}
-                                        disabled={isUploadingImage || !isSupabaseConfigured}
+                                        disabled={isUploadingImage || isSubmitting || !isSupabaseConfigured}
                                         className="w-auto"
                                     >
                                         {isUploadingImage ? (
                                             <>
                                                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                                Enviando...
+                                                Enviando... {uploadProgress}%
                                             </>
                                         ) : (
                                             <>
                                                 <Upload className="w-4 h-4 mr-2" />
-                                                Upload de Imagem
+                                                {formData.image && formData.image !== DEFAULT_IMAGE ? 'Alterar Imagem' : 'Selecionar Imagem'}
                                             </>
                                         )}
                                     </Button>
@@ -459,36 +700,73 @@ export function EditInventoryItem() {
                                     />
                                     {!isSupabaseConfigured && (
                                         <p className="text-xs text-muted-foreground self-center">
-                                            Supabase não configurado. Use URL abaixo.
+                                            Supabase não configurado.
                                         </p>
                                     )}
                                 </div>
+                                
+                                {/* Barra de progresso do upload */}
+                                {isUploadingImage && uploadProgress > 0 && (
+                                    <div className="w-full mb-2">
+                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                            <div
+                                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                                style={{ width: `${uploadProgress}%` }}
+                                            ></div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 {/* Erro de upload */}
                                 {uploadError && (
                                     <p className="text-sm text-destructive mb-2">{uploadError}</p>
                                 )}
 
-                                {/* Campo de URL */}
-                                <Input
-                                    id="image"
-                                    value={formData.image}
-                                    onChange={(e) => setFormData({ ...formData, image: e.target.value || DEFAULT_IMAGE })}
-                                    placeholder="URL da imagem ou caminho do arquivo"
-                                />
-                                <p className="text-xs text-muted-foreground mt-1">
-                                    Faça upload de uma imagem ou cole uma URL. Se vincular a um item do menu, a imagem será copiada automaticamente.
-                                </p>
-                                
-                                {/* Preview da imagem */}
-                                {formData.image && (
+                                {/* Preview da imagem - priorizar preview local, depois URL do Supabase, depois formData */}
+                                {(localPreviewUrl || imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE)) && (
                                     <div className="mt-2">
+                                        {isUploadingImage && (
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Redimensionando e enviando imagem (800x800px)...
+                                            </p>
+                                        )}
+                                        {!isUploadingImage && formData.image && formData.image !== DEFAULT_IMAGE && (
+                                            <p className="text-xs text-muted-foreground mb-2">
+                                                Imagem carregada com sucesso. A imagem foi redimensionada automaticamente para 800x800px.
+                                            </p>
+                                        )}
                                         <img
-                                            src={formData.image}
+                                            src={localPreviewUrl || imagePreviewUrl || formData.image || DEFAULT_IMAGE}
                                             alt="Preview"
                                             className="w-32 h-32 object-cover rounded-md border"
+                                            onLoad={() => {
+                                                // Quando a imagem do Supabase carregar com sucesso, podemos limpar o preview local
+                                                if (imagePreviewUrl && localPreviewUrl && !isUploadingImage) {
+                                                    URL.revokeObjectURL(localPreviewUrl)
+                                                    setLocalPreviewUrl(null)
+                                                }
+                                            }}
                                             onError={(e) => {
-                                                e.currentTarget.src = DEFAULT_IMAGE
+                                                const target = e.currentTarget
+                                                // Se temos preview local, usar ele
+                                                if (localPreviewUrl && target.src !== localPreviewUrl) {
+                                                    target.src = localPreviewUrl
+                                                    return
+                                                }
+                                                // Se temos URL do Supabase diferente, tentar ela
+                                                if (imagePreviewUrl && target.src !== imagePreviewUrl) {
+                                                    target.src = imagePreviewUrl
+                                                    return
+                                                }
+                                                // Se temos formData.image diferente, tentar ela
+                                                if (formData.image && formData.image !== DEFAULT_IMAGE && target.src !== formData.image) {
+                                                    target.src = formData.image
+                                                    return
+                                                }
+                                                // Último recurso: imagem padrão
+                                                if (target.src !== DEFAULT_IMAGE) {
+                                                    target.src = DEFAULT_IMAGE
+                                                }
                                             }}
                                         />
                                     </div>
@@ -839,9 +1117,9 @@ export function EditInventoryItem() {
                         <ArrowLeft className="w-4 h-4 mr-2" />
                         Cancelar
                     </Button>
-                    <Button type="submit" disabled={isSubmitting || isStockLoading}>
+                    <Button type="submit" disabled={isSubmitting || isStockLoading || isUploadingImage}>
                         <Save className="w-4 h-4 mr-2" />
-                        {isSubmitting ? 'Salvando...' : 'Salvar Alterações'}
+                        {isSubmitting ? 'Salvando...' : isUploadingImage ? 'Aguarde o upload...' : 'Salvar Alterações'}
                     </Button>
                 </div>
             </form>
