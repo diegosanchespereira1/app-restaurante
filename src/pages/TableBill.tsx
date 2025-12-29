@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { ArrowLeft, Wallet, CreditCard, QrCode, Ticket } from "lucide-react"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
-import { formatCurrency, calculatePriceWithDiscount } from "../lib/utils"
+import { useSettings } from "../context/SettingsContext"
+import { formatCurrency, calculatePriceWithDiscount, validatePaymentDiscount } from "../lib/utils"
 import {
     Dialog,
     DialogContent,
@@ -27,11 +28,13 @@ export function TableBill() {
     const navigate = useNavigate()
     const { tables, orders, closeTable, menuItems } = useRestaurant()
     const { t } = useLanguage()
+    const { settings } = useSettings()
 
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<"Cash" | "Card" | "Voucher" | "PIX">("Cash")
     const [products, setProducts] = useState<Product[]>([])
     const [paymentDiscountType, setPaymentDiscountType] = useState<"fixed" | "percentage" | null>(null)
     const [paymentDiscountValue, setPaymentDiscountValue] = useState<number | null>(null)
+    const [discountError, setDiscountError] = useState<string | null>(null)
 
     const table = tables.find(t => t.id === Number(id))
     const activeOrders = orders.filter(o => o.table === table?.number && o.status !== "Closed")
@@ -105,9 +108,14 @@ export function TableBill() {
         return total
     }, [activeOrders, products, menuItems, selectedPaymentMethod])
 
+    // Calcular subtotal antes do desconto no pagamento
+    const subtotalBeforePaymentDiscount = useMemo(() => {
+        return subtotalWithPaymentDiscount
+    }, [subtotalWithPaymentDiscount])
+
     // Calcular total com desconto no pagamento aplicado
     const totalAmount = useMemo(() => {
-        let total = subtotalWithPaymentDiscount
+        let total = subtotalBeforePaymentDiscount
         
         // Aplicar desconto no pagamento se existir
         if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0) {
@@ -120,9 +128,46 @@ export function TableBill() {
         }
         
         return total
-    }, [subtotalWithPaymentDiscount, paymentDiscountType, paymentDiscountValue])
+    }, [subtotalBeforePaymentDiscount, paymentDiscountType, paymentDiscountValue])
+
+    // Validar desconto quando o valor mudar
+    useEffect(() => {
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0) {
+            const validation = validatePaymentDiscount(
+                paymentDiscountType,
+                paymentDiscountValue,
+                settings.paymentDiscountLimitType,
+                settings.paymentDiscountLimitValue,
+                subtotalBeforePaymentDiscount
+            )
+            
+            if (!validation.isValid) {
+                setDiscountError(validation.errorMessage || null)
+            } else {
+                setDiscountError(null)
+            }
+        } else {
+            setDiscountError(null)
+        }
+    }, [paymentDiscountType, paymentDiscountValue, settings.paymentDiscountLimitType, settings.paymentDiscountLimitValue, subtotalBeforePaymentDiscount])
 
     const handleCloseTable = async () => {
+        // Validar desconto antes de fechar a mesa
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0) {
+            const validation = validatePaymentDiscount(
+                paymentDiscountType,
+                paymentDiscountValue,
+                settings.paymentDiscountLimitType,
+                settings.paymentDiscountLimitValue,
+                subtotalBeforePaymentDiscount
+            )
+            
+            if (!validation.isValid) {
+                alert(validation.errorMessage || 'Limite de desconto maior do que o permitido.')
+                return
+            }
+        }
+
         if (table) {
             const result = await closeTable(table.id, selectedPaymentMethod)
             if (result.success) {
@@ -368,7 +413,7 @@ export function TableBill() {
                                                             <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
                                                             <Label
                                                                 htmlFor="cash"
-                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                             >
                                                                 <Wallet className="mb-3 h-6 w-6" />
                                                                 {t("cash")}
@@ -378,7 +423,7 @@ export function TableBill() {
                                                             <RadioGroupItem value="Card" id="card" className="peer sr-only" />
                                                             <Label
                                                                 htmlFor="card"
-                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                             >
                                                                 <CreditCard className="mb-3 h-6 w-6" />
                                                                 {t("card")}
@@ -388,7 +433,7 @@ export function TableBill() {
                                                             <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
                                                             <Label
                                                                 htmlFor="voucher"
-                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                             >
                                                                 <Ticket className="mb-3 h-6 w-6" />
                                                                 {t("voucher")}
@@ -398,7 +443,7 @@ export function TableBill() {
                                                             <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
                                                             <Label
                                                                 htmlFor="pix"
-                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                                className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                             >
                                                                 <QrCode className="mb-3 h-6 w-6" />
                                                                 {t("pix")}
@@ -417,10 +462,22 @@ export function TableBill() {
                                                                 if (value === 'none') {
                                                                     setPaymentDiscountType(null)
                                                                     setPaymentDiscountValue(null)
+                                                                    setDiscountError(null)
                                                                 } else {
                                                                     setPaymentDiscountType(value as "fixed" | "percentage")
                                                                     if (paymentDiscountValue === null) {
                                                                         setPaymentDiscountValue(0)
+                                                                    }
+                                                                    // Validar se já há valor definido
+                                                                    if (paymentDiscountValue !== null && paymentDiscountValue > 0) {
+                                                                        const validation = validatePaymentDiscount(
+                                                                            value as "fixed" | "percentage",
+                                                                            paymentDiscountValue,
+                                                                            settings.paymentDiscountLimitType,
+                                                                            settings.paymentDiscountLimitValue,
+                                                                            subtotalBeforePaymentDiscount
+                                                                        )
+                                                                        setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
                                                                     }
                                                                 }
                                                             }}
@@ -441,12 +498,35 @@ export function TableBill() {
                                                                 min="0"
                                                                 max={paymentDiscountType === 'percentage' ? "100" : undefined}
                                                                 value={paymentDiscountValue || ''}
-                                                                onChange={(e) => setPaymentDiscountValue(e.target.value ? parseFloat(e.target.value) : null)}
+                                                                onChange={(e) => {
+                                                                    const value = e.target.value
+                                                                    const numValue = value ? parseFloat(value) : null
+                                                                    setPaymentDiscountValue(numValue)
+                                                                    
+                                                                    // Validação em tempo real
+                                                                    if (numValue !== null && numValue > 0) {
+                                                                        const validation = validatePaymentDiscount(
+                                                                            paymentDiscountType,
+                                                                            numValue,
+                                                                            settings.paymentDiscountLimitType,
+                                                                            settings.paymentDiscountLimitValue,
+                                                                            subtotalBeforePaymentDiscount
+                                                                        )
+                                                                        setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                                    } else {
+                                                                        setDiscountError(null)
+                                                                    }
+                                                                }}
                                                                 placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
-                                                                className="flex-1"
+                                                                className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
                                                             />
                                                         )}
                                                     </div>
+                                                    {discountError && (
+                                                        <div className="text-sm text-red-600 mt-1">
+                                                            {discountError}
+                                                        </div>
+                                                    )}
                                                 </div>
 
                                                 {/* Resumo de valores */}
@@ -461,7 +541,7 @@ export function TableBill() {
                                                             <span>
                                                                 {paymentDiscountType === 'fixed' 
                                                                     ? `-${formatCurrency(paymentDiscountValue)}`
-                                                                    : `-${formatCurrency((subtotalWithPaymentDiscount * paymentDiscountValue) / 100)}`
+                                                                    : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
                                                                 }
                                                             </span>
                                                         </div>
@@ -469,11 +549,11 @@ export function TableBill() {
                                                     <div className="flex justify-between font-bold pt-2 border-t">
                                                         <span>Total:</span>
                                                         {(() => {
-                                                            const hasDiscount = totalAmount < subtotalWithPaymentDiscount
+                                                            const hasDiscount = totalAmount < subtotalBeforePaymentDiscount
                                                             return hasDiscount ? (
                                                                 <div className="flex flex-col items-end">
                                                                     <span className="line-through text-muted-foreground text-sm">
-                                                                        {formatCurrency(subtotalWithPaymentDiscount)}
+                                                                        {formatCurrency(subtotalBeforePaymentDiscount)}
                                                                     </span>
                                                                     <span className="text-green-600 text-lg">
                                                                         {formatCurrency(totalAmount)}

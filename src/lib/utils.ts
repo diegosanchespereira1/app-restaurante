@@ -52,3 +52,75 @@ export function calculatePriceWithDiscount(
 
     return basePrice
 }
+
+/**
+ * Valida se o desconto aplicado está dentro do limite permitido
+ * @param discountType Tipo de desconto: 'fixed' (valor fixo) ou 'percentage' (percentual)
+ * @param discountValue Valor do desconto a ser aplicado
+ * @param limitType Tipo de limite: 'fixed' (valor fixo) ou 'percentage' (percentual) ou null
+ * @param limitValue Valor do limite máximo permitido
+ * @param subtotal Subtotal antes do desconto (usado para calcular limite percentual em valor)
+ * @returns Objeto com { isValid: boolean, errorMessage?: string }
+ */
+export function validatePaymentDiscount(
+    discountType: "fixed" | "percentage" | null,
+    discountValue: number | null,
+    limitType: "fixed" | "percentage" | null,
+    limitValue: number | null,
+    subtotal: number
+): { isValid: boolean; errorMessage?: string } {
+    // Se não há desconto sendo aplicado, não precisa validar
+    if (!discountType || discountValue === null || discountValue === undefined || discountValue <= 0) {
+        return { isValid: true }
+    }
+
+    // Se não há limite configurado, permite qualquer desconto
+    if (!limitType || limitValue === null || limitValue === undefined) {
+        return { isValid: true }
+    }
+
+    // Validar conforme o tipo de desconto e tipo de limite
+    if (discountType === 'fixed') {
+        // Desconto em valor fixo
+        if (limitType === 'fixed') {
+            // Limite também é valor fixo
+            if (discountValue > limitValue) {
+                return {
+                    isValid: false,
+                    errorMessage: `Limite de desconto maior do que o permitido. O valor máximo permitido é ${formatCurrency(limitValue)}.`
+                }
+            }
+        } else if (limitType === 'percentage') {
+            // Limite é percentual, converter para valor
+            const maxDiscountValue = (subtotal * limitValue) / 100
+            if (discountValue > maxDiscountValue) {
+                return {
+                    isValid: false,
+                    errorMessage: `Limite de desconto maior do que o permitido. O valor máximo permitido é ${formatCurrency(maxDiscountValue)} (${limitValue}% de ${formatCurrency(subtotal)}).`
+                }
+            }
+        }
+    } else if (discountType === 'percentage') {
+        // Desconto em percentual
+        if (limitType === 'fixed') {
+            // Limite é valor fixo, converter desconto para valor e comparar
+            const discountAmount = (subtotal * discountValue) / 100
+            if (discountAmount > limitValue) {
+                return {
+                    isValid: false,
+                    errorMessage: `Limite de desconto maior do que o permitido. O percentual máximo permitido é ${((limitValue / subtotal) * 100).toFixed(2)}% (${formatCurrency(limitValue)}).`
+                }
+            }
+        } else if (limitType === 'percentage') {
+            // Limite também é percentual
+            if (discountValue > limitValue) {
+                return {
+                    isValid: false,
+                    errorMessage: `Limite de desconto maior do que o permitido. O percentual máximo permitido é ${limitValue}%.`
+                }
+            }
+        }
+    }
+
+    return { isValid: true }
+}

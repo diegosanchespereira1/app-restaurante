@@ -613,6 +613,20 @@ export function AddProduct() {
                             />
                         </div>
 
+                        {/* Campo Bebida Gelada - sempre visível */}
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="is_cold"
+                                checked={formData.is_cold || false}
+                                onChange={(e) => setFormData({ ...formData, is_cold: e.target.checked })}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="is_cold" className="cursor-pointer">
+                                Bebida gelada (mostra ícone de floco de neve)
+                            </Label>
+                        </div>
+
                         {formData.price && (
                             <>
                                 <div>
@@ -629,18 +643,6 @@ export function AddProduct() {
                                             <SelectItem value="Sold Out">Esgotado</SelectItem>
                                         </SelectContent>
                                     </Select>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                    <input
-                                        type="checkbox"
-                                        id="is_cold"
-                                        checked={formData.is_cold || false}
-                                        onChange={(e) => setFormData({ ...formData, is_cold: e.target.checked })}
-                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                    />
-                                    <Label htmlFor="is_cold" className="cursor-pointer">
-                                        Bebida gelada
-                                    </Label>
                                 </div>
                                 
                                 {/* Campos de Desconto por Método de Pagamento */}

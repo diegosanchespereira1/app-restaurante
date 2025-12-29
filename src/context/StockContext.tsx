@@ -23,6 +23,10 @@ const productToInventoryItem = (p: Product): InventoryItem => ({
   image: p.image,
   description: p.description,
   status: p.status,
+  is_cold: p.is_cold ?? null,
+  discount_type: p.discount_type ?? null,
+  discount_value: p.discount_value ?? null,
+  discount_applies_to: p.discount_applies_to ?? null,
   product_type: p.product_type,
   ncm: p.ncm,
   cst_icms: p.cst_icms,
@@ -230,6 +234,10 @@ export function StockProvider({ children }: { children: ReactNode }) {
       if (updates.category !== undefined) updateData.category = updates.category || null
       if (updates.description !== undefined) updateData.description = updates.description || null
       if (updates.status !== undefined) updateData.status = updates.status || null
+      if (updates.is_cold !== undefined) updateData.is_cold = updates.is_cold ?? null
+      if (updates.discount_type !== undefined) updateData.discount_type = updates.discount_type || null
+      if (updates.discount_value !== undefined) updateData.discount_value = updates.discount_value ?? null
+      if (updates.discount_applies_to !== undefined) updateData.discount_applies_to = updates.discount_applies_to || null
       // menu_item_id não é mais usado na nova estrutura
       if (updates.product_type !== undefined) updateData.product_type = updates.product_type || null
       if (updates.ncm !== undefined) updateData.ncm = updates.ncm || null

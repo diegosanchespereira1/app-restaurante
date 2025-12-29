@@ -32,8 +32,9 @@ export interface Order {
     orderType: "dine_in" | "takeout" | "delivery"
     items: OrderItem[]
     total: number
-    status: "Pending" | "Preparing" | "Ready" | "Delivered" | "Closed"
+    status: "Pending" | "Preparing" | "Ready" | "Delivered" | "Closed" | "Cancelled"
     time: string
+    created_at?: string
     closedAt?: string
     notes?: string
     paymentMethod?: "Cash" | "Card" | "Voucher" | "PIX"
@@ -113,6 +114,7 @@ interface RestaurantContextType {
     updateTableStatus: (tableId: number, status: Table["status"]) => Promise<void>
     processPayment: (orderId: string, method: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     closeTable: (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
+    cancelOrder: (orderId: string) => Promise<{ success: boolean; error?: string }>
     addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string; data?: MenuItem }>
     updateMenuItem: (id: number, item: Partial<MenuItem>) => Promise<{ success: boolean; error?: string }>
     deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>
@@ -213,6 +215,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     total: o.total,
                     status: o.status,
                     time: new Date(o.created_at).toLocaleString(),
+                    created_at: o.created_at,
                     closedAt: o.closed_at,
                     notes: o.notes,
                     paymentMethod: o.payment_method,
@@ -675,6 +678,92 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
+    const cancelOrder = async (orderId: string): Promise<{ success: boolean; error?: string }> => {
+        const order = orders.find(o => o.id === orderId)
+        if (!order) return { success: false, error: "Pedido não encontrado" }
+
+        if (order.status !== "Closed") {
+            return { success: false, error: "Apenas pedidos fechados podem ser cancelados" }
+        }
+
+        const previousOrders = [...orders]
+
+        // Atualizar estado local
+        setOrders(prev =>
+            prev.map(o => {
+                if (o.id === orderId) {
+                    return {
+                        ...o,
+                        status: "Cancelled" as const,
+                        paymentMethod: undefined,
+                        closedAt: undefined
+                    }
+                }
+                return o
+            })
+        )
+
+        // Demo mode: apenas atualizar estado local
+        if (!isSupabaseConfigured) {
+            // Se o pedido tinha uma mesa, verificar se precisa atualizar status da mesa
+            if (order.table) {
+                const otherActiveOrders = orders.filter(
+                    o => o.table === order.table && o.id !== orderId && o.status === "Closed"
+                )
+                if (otherActiveOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+            return { success: true }
+        }
+
+        // Atualizar no banco de dados
+        try {
+            const { error: updateError } = await supabase
+                .from('orders')
+                .update({
+                    status: 'Cancelled',
+                    payment_method: null,
+                    closed_at: null
+                })
+                .eq('id', orderId)
+
+            if (updateError) {
+                console.error("Error cancelling order:", updateError)
+                setOrders(previousOrders)
+                return { success: false, error: updateError.message }
+            }
+
+            // Se o pedido tinha uma mesa, verificar se precisa atualizar status da mesa
+            // Quando cancelamos um pedido fechado, a mesa já deveria estar disponível,
+            // mas verificamos se há outros pedidos ativos (não fechados, não cancelados)
+            if (order.table) {
+                const { data: activeOrders } = await supabase
+                    .from('orders')
+                    .select('id')
+                    .eq('table_number', order.table)
+                    .in('status', ['Pending', 'Preparing', 'Ready', 'Delivered', 'Closed'])
+
+                // Se não há mais pedidos (excluindo cancelados), liberar a mesa
+                if (!activeOrders || activeOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+
+            return { success: true }
+        } catch (error: any) {
+            console.error("Error cancelling order:", error)
+            setOrders(previousOrders)
+            return { success: false, error: error.message || "Erro ao cancelar pedido" }
+        }
+    }
+
     // Menu CRUD (agora usando products)
     const addMenuItem = async (item: Omit<MenuItem, "id">): Promise<{ success: boolean; error?: string; data?: MenuItem }> => {
         // Demo mode: just use local state
@@ -1061,6 +1150,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 updateTableStatus,
                 processPayment,
                 closeTable,
+                cancelOrder,
                 addMenuItem,
                 updateMenuItem,
                 deleteMenuItem,

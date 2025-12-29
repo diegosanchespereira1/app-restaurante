@@ -22,6 +22,7 @@ export function Settings() {
     const { language, setLanguage, t } = useLanguage()
     const { isAdmin } = useAuth()
     const { 
+        settings,
         updateSettings, 
         updatePrinterSettings,
         isTablesEnabled, 
@@ -389,6 +390,75 @@ export function Settings() {
                                         className="flex-shrink-0"
                                     />
                                 </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Limite de Desconto no Pagamento */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Limite de Desconto no Pagamento</CardTitle>
+                        <CardDescription>
+                            Defina o valor máximo ou percentual máximo de desconto que pode ser aplicado no momento do pagamento.
+                            Os usuários não poderão aplicar descontos maiores que o limite configurado.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="grid gap-2">
+                            <Label htmlFor="discount-limit-type">Tipo de Limite</Label>
+                            <Select
+                                value={settings.paymentDiscountLimitType || 'none'}
+                                onValueChange={(value) => {
+                                    if (value === 'none') {
+                                        updateSettings({ 
+                                            paymentDiscountLimitType: null,
+                                            paymentDiscountLimitValue: null
+                                        })
+                                    } else {
+                                        updateSettings({ 
+                                            paymentDiscountLimitType: value as "fixed" | "percentage",
+                                            paymentDiscountLimitValue: settings.paymentDiscountLimitValue || 0
+                                        })
+                                    }
+                                }}
+                            >
+                                <SelectTrigger id="discount-limit-type">
+                                    <SelectValue placeholder="Selecione o tipo" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sem limite</SelectItem>
+                                    <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                    <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        {settings.paymentDiscountLimitType && (
+                            <div className="grid gap-2">
+                                <Label htmlFor="discount-limit-value">
+                                    {settings.paymentDiscountLimitType === 'fixed' 
+                                        ? 'Valor Máximo de Desconto (R$)' 
+                                        : 'Percentual Máximo de Desconto (%)'}
+                                </Label>
+                                <Input
+                                    id="discount-limit-value"
+                                    type="number"
+                                    step={settings.paymentDiscountLimitType === 'fixed' ? "0.01" : "0.1"}
+                                    min="0"
+                                    max={settings.paymentDiscountLimitType === 'percentage' ? "100" : undefined}
+                                    value={settings.paymentDiscountLimitValue || ''}
+                                    onChange={(e) => {
+                                        const value = e.target.value ? parseFloat(e.target.value) : null
+                                        updateSettings({ paymentDiscountLimitValue: value })
+                                    }}
+                                    placeholder={settings.paymentDiscountLimitType === 'fixed' ? "0.00" : "0"}
+                                />
+                                <p className="text-xs text-muted-foreground">
+                                    {settings.paymentDiscountLimitType === 'fixed' 
+                                        ? 'O desconto aplicado não poderá ultrapassar este valor em reais'
+                                        : 'O desconto aplicado não poderá ultrapassar este percentual'}
+                                </p>
                             </div>
                         )}
                     </CardContent>

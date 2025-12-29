@@ -19,7 +19,7 @@ import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 import { Input } from "../components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
-import { formatCurrency, calculatePriceWithDiscount } from "../lib/utils"
+import { formatCurrency, calculatePriceWithDiscount, validatePaymentDiscount } from "../lib/utils"
 import { printReceipt } from "../lib/printer"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
 import type { Product } from "../types/product"
@@ -29,13 +29,14 @@ export function OrderDetails() {
     const navigate = useNavigate()
     const { orders, updateOrderStatus, processPayment, menuItems } = useRestaurant()
     const { t } = useLanguage()
-    const { printerSettings } = useSettings()
+    const { printerSettings, settings } = useSettings()
     const [note, setNote] = useState("")
     const [isPaymentOpen, setIsPaymentOpen] = useState(false)
     const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Voucher" | "PIX">("Cash")
     const [products, setProducts] = useState<Product[]>([])
     const [paymentDiscountType, setPaymentDiscountType] = useState<"fixed" | "percentage" | null>(null)
     const [paymentDiscountValue, setPaymentDiscountValue] = useState<number | null>(null)
+    const [discountError, setDiscountError] = useState<string | null>(null)
 
     const order = orders.find(o => o.id === id)
 
@@ -90,8 +91,8 @@ export function OrderDetails() {
         return subtotal
     }, [order, products, menuItems, paymentMethod])
 
-    // Calcular total com desconto aplicado (incluindo desconto do pedido e desconto no pagamento)
-    const totalWithDiscount = useMemo(() => {
+    // Calcular subtotal antes do desconto no pagamento (com desconto do pedido aplicado)
+    const subtotalBeforePaymentDiscount = useMemo(() => {
         if (!order) return 0
         
         let total = subtotalWithPaymentDiscount
@@ -106,6 +107,15 @@ export function OrderDetails() {
             }
         }
         
+        return total
+    }, [order, subtotalWithPaymentDiscount])
+
+    // Calcular total com desconto aplicado (incluindo desconto do pedido e desconto no pagamento)
+    const totalWithDiscount = useMemo(() => {
+        if (!order) return 0
+        
+        let total = subtotalBeforePaymentDiscount
+        
         // Aplicar desconto no pagamento se existir
         if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0) {
             if (paymentDiscountType === 'fixed') {
@@ -117,7 +127,28 @@ export function OrderDetails() {
         }
         
         return total
-    }, [order, subtotalWithPaymentDiscount, paymentDiscountType, paymentDiscountValue])
+    }, [order, subtotalBeforePaymentDiscount, paymentDiscountType, paymentDiscountValue])
+
+    // Validar desconto quando o valor mudar
+    useEffect(() => {
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+            const validation = validatePaymentDiscount(
+                paymentDiscountType,
+                paymentDiscountValue,
+                settings.paymentDiscountLimitType,
+                settings.paymentDiscountLimitValue,
+                subtotalBeforePaymentDiscount
+            )
+            
+            if (!validation.isValid) {
+                setDiscountError(validation.errorMessage || null)
+            } else {
+                setDiscountError(null)
+            }
+        } else {
+            setDiscountError(null)
+        }
+    }, [paymentDiscountType, paymentDiscountValue, settings.paymentDiscountLimitType, settings.paymentDiscountLimitValue, subtotalBeforePaymentDiscount, order])
 
     if (!order) {
         return <div className="p-8 text-center">{t("orderNotFound")}</div>
@@ -140,6 +171,22 @@ export function OrderDetails() {
     }
 
     const handlePayment = async () => {
+        // Validar desconto antes de processar o pagamento
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+            const validation = validatePaymentDiscount(
+                paymentDiscountType,
+                paymentDiscountValue,
+                settings.paymentDiscountLimitType,
+                settings.paymentDiscountLimitValue,
+                subtotalBeforePaymentDiscount
+            )
+            
+            if (!validation.isValid) {
+                alert(validation.errorMessage || 'Limite de desconto maior do que o permitido.')
+                return
+            }
+        }
+
         const result = await processPayment(order.id, paymentMethod)
         if (result.success) {
             setIsPaymentOpen(false)
@@ -199,6 +246,15 @@ export function OrderDetails() {
         }
     }
 
+    const getPaymentMethodIcon = (method: "Cash" | "Card" | "Voucher" | "PIX", className: string = "h-4 w-4") => {
+        switch (method) {
+            case 'Cash': return <Wallet className={className} />
+            case 'Card': return <CreditCard className={className} />
+            case 'Voucher': return <Ticket className={className} />
+            case 'PIX': return <QrCode className={className} />
+        }
+    }
+
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
             {/* BEGIN: MainHeader */}
@@ -226,6 +282,15 @@ export function OrderDetails() {
                         <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
                         <span>•</span>
                         <span>{t("customer")}: {order.customer}</span>
+                        {order.status === "Closed" && order.paymentMethod && (
+                            <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1.5">
+                                    {getPaymentMethodIcon(order.paymentMethod)}
+                                    <span>{t("paymentMethod")}: {t(order.paymentMethod.toLowerCase() as any)}</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
                 {/* Header Right: Action Buttons */}
@@ -273,7 +338,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="cash"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <Wallet className="mb-3 h-6 w-6" />
                                                         {t("cash")}
@@ -283,7 +348,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="Card" id="card" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="card"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <CreditCard className="mb-3 h-6 w-6" />
                                                         {t("card")}
@@ -293,7 +358,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="voucher"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <Ticket className="mb-3 h-6 w-6" />
                                                         {t("voucher")}
@@ -303,7 +368,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="pix"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <QrCode className="mb-3 h-6 w-6" />
                                                         {t("pix")}
@@ -322,10 +387,22 @@ export function OrderDetails() {
                                                         if (value === 'none') {
                                                             setPaymentDiscountType(null)
                                                             setPaymentDiscountValue(null)
+                                                            setDiscountError(null)
                                                         } else {
                                                             setPaymentDiscountType(value as "fixed" | "percentage")
                                                             if (paymentDiscountValue === null) {
                                                                 setPaymentDiscountValue(0)
+                                                            }
+                                                            // Validar se já há valor definido
+                                                            if (paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    value as "fixed" | "percentage",
+                                                                    paymentDiscountValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
                                                             }
                                                         }
                                                     }}
@@ -346,12 +423,35 @@ export function OrderDetails() {
                                                         min="0"
                                                         max={paymentDiscountType === 'percentage' ? "100" : undefined}
                                                         value={paymentDiscountValue || ''}
-                                                        onChange={(e) => setPaymentDiscountValue(e.target.value ? parseFloat(e.target.value) : null)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value
+                                                            const numValue = value ? parseFloat(value) : null
+                                                            setPaymentDiscountValue(numValue)
+                                                            
+                                                            // Validação em tempo real
+                                                            if (numValue !== null && numValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    paymentDiscountType,
+                                                                    numValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                            } else {
+                                                                setDiscountError(null)
+                                                            }
+                                                        }}
                                                         placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
-                                                        className="flex-1"
+                                                        className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
                                                     />
                                                 )}
                                             </div>
+                                            {discountError && (
+                                                <div className="text-sm text-red-600 mt-1">
+                                                    {discountError}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Resumo de valores */}
@@ -377,17 +477,7 @@ export function OrderDetails() {
                                                     <span>
                                                         {paymentDiscountType === 'fixed' 
                                                             ? `-${formatCurrency(paymentDiscountValue)}`
-                                                            : `-${formatCurrency(((() => {
-                                                                let base = subtotalWithPaymentDiscount
-                                                                if (order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0) {
-                                                                    if (order.order_discount_type === 'fixed') {
-                                                                        base = Math.max(0, base - order.order_discount_value)
-                                                                    } else {
-                                                                        base = Math.max(0, base - (base * order.order_discount_value) / 100)
-                                                                    }
-                                                                }
-                                                                return base
-                                                            })() * paymentDiscountValue) / 100)}`
+                                                            : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
                                                         }
                                                     </span>
                                                 </div>
@@ -395,11 +485,11 @@ export function OrderDetails() {
                                             <div className="flex justify-between font-bold pt-2 border-t">
                                                 <span>Total:</span>
                                                 {(() => {
-                                                    const hasDiscount = totalWithDiscount < subtotalWithPaymentDiscount
+                                                    const hasDiscount = totalWithDiscount < subtotalBeforePaymentDiscount
                                                     return hasDiscount ? (
                                                         <div className="flex flex-col items-end">
                                                             <span className="line-through text-muted-foreground text-sm">
-                                                                {formatCurrency(subtotalWithPaymentDiscount)}
+                                                                {formatCurrency(subtotalBeforePaymentDiscount)}
                                                             </span>
                                                             <span className="text-green-600 text-lg">
                                                                 {formatCurrency(totalWithDiscount)}
@@ -454,6 +544,17 @@ export function OrderDetails() {
                             {getStatusIcon(order.status)}
                             <span>{t(order.status.toLowerCase() as any) || order.status}</span>
                         </div>
+                        {order.status === "Closed" && order.paymentMethod && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-700">{t("paymentMethod")}:</span>
+                                    <div className="flex items-center gap-2">
+                                        {getPaymentMethodIcon(order.paymentMethod, "h-4 w-4 text-gray-600")}
+                                        <span className="text-sm font-semibold text-gray-900">{t(order.paymentMethod.toLowerCase() as any)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </section>
 
                     {/* Order Summary Card */}
@@ -514,6 +615,17 @@ export function OrderDetails() {
                                 })()}
                             </div>
                         </div>
+                        {order.status === "Closed" && order.paymentMethod && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-700">{t("paymentMethod")}:</span>
+                                    <div className="flex items-center gap-2">
+                                        {getPaymentMethodIcon(order.paymentMethod, "h-4 w-4 text-gray-600")}
+                                        <span className="text-sm font-semibold text-gray-900">{t(order.paymentMethod.toLowerCase() as any)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {order.status !== "Closed" && (
                             <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
                                 <DialogTrigger asChild>
@@ -541,7 +653,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="cash"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <Wallet className="mb-3 h-6 w-6" />
                                                         {t("cash")}
@@ -551,7 +663,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="Card" id="card" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="card"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <CreditCard className="mb-3 h-6 w-6" />
                                                         {t("card")}
@@ -561,7 +673,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="voucher"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <Ticket className="mb-3 h-6 w-6" />
                                                         {t("voucher")}
@@ -571,7 +683,7 @@ export function OrderDetails() {
                                                     <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
                                                     <Label
                                                         htmlFor="pix"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
                                                     >
                                                         <QrCode className="mb-3 h-6 w-6" />
                                                         {t("pix")}
@@ -590,10 +702,22 @@ export function OrderDetails() {
                                                         if (value === 'none') {
                                                             setPaymentDiscountType(null)
                                                             setPaymentDiscountValue(null)
+                                                            setDiscountError(null)
                                                         } else {
                                                             setPaymentDiscountType(value as "fixed" | "percentage")
                                                             if (paymentDiscountValue === null) {
                                                                 setPaymentDiscountValue(0)
+                                                            }
+                                                            // Validar se já há valor definido
+                                                            if (paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    value as "fixed" | "percentage",
+                                                                    paymentDiscountValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
                                                             }
                                                         }
                                                     }}
@@ -614,12 +738,35 @@ export function OrderDetails() {
                                                         min="0"
                                                         max={paymentDiscountType === 'percentage' ? "100" : undefined}
                                                         value={paymentDiscountValue || ''}
-                                                        onChange={(e) => setPaymentDiscountValue(e.target.value ? parseFloat(e.target.value) : null)}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value
+                                                            const numValue = value ? parseFloat(value) : null
+                                                            setPaymentDiscountValue(numValue)
+                                                            
+                                                            // Validação em tempo real
+                                                            if (numValue !== null && numValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    paymentDiscountType,
+                                                                    numValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                            } else {
+                                                                setDiscountError(null)
+                                                            }
+                                                        }}
                                                         placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
-                                                        className="flex-1"
+                                                        className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
                                                     />
                                                 )}
                                             </div>
+                                            {discountError && (
+                                                <div className="text-sm text-red-600 mt-1">
+                                                    {discountError}
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Resumo de valores */}
@@ -645,17 +792,7 @@ export function OrderDetails() {
                                                     <span>
                                                         {paymentDiscountType === 'fixed' 
                                                             ? `-${formatCurrency(paymentDiscountValue)}`
-                                                            : `-${formatCurrency(((() => {
-                                                                let base = subtotalWithPaymentDiscount
-                                                                if (order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0) {
-                                                                    if (order.order_discount_type === 'fixed') {
-                                                                        base = Math.max(0, base - order.order_discount_value)
-                                                                    } else {
-                                                                        base = Math.max(0, base - (base * order.order_discount_value) / 100)
-                                                                    }
-                                                                }
-                                                                return base
-                                                            })() * paymentDiscountValue) / 100)}`
+                                                            : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
                                                         }
                                                     </span>
                                                 </div>
@@ -663,11 +800,11 @@ export function OrderDetails() {
                                             <div className="flex justify-between font-bold pt-2 border-t">
                                                 <span>Total:</span>
                                                 {(() => {
-                                                    const hasDiscount = totalWithDiscount < subtotalWithPaymentDiscount
+                                                    const hasDiscount = totalWithDiscount < subtotalBeforePaymentDiscount
                                                     return hasDiscount ? (
                                                         <div className="flex flex-col items-end">
                                                             <span className="line-through text-muted-foreground text-sm">
-                                                                {formatCurrency(subtotalWithPaymentDiscount)}
+                                                                {formatCurrency(subtotalBeforePaymentDiscount)}
                                                             </span>
                                                             <span className="text-green-600 text-lg">
                                                                 {formatCurrency(totalWithDiscount)}
