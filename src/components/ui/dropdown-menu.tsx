@@ -86,7 +86,6 @@ const DropdownMenuContent = React.forwardRef<
   const context = React.useContext(DropdownMenuContext)
   if (!context) throw new Error("DropdownMenuContent must be used within DropdownMenu")
 
-  const [calculatedSide, setCalculatedSide] = React.useState<"top" | "bottom">("bottom")
   const [position, setPosition] = React.useState<{ top: number; left: number } | null>(null)
   const contentRef = React.useRef<HTMLDivElement>(null)
 
@@ -106,7 +105,6 @@ const DropdownMenuContent = React.forwardRef<
     // Determinar se deve aparecer acima ou abaixo
     const shouldShowTop = spaceBelow < contentHeight && spaceAbove > spaceBelow
     const finalSide = side || (shouldShowTop ? "top" : "bottom")
-    setCalculatedSide(finalSide)
     
     // Calcular posição alinhada com o botão
     let left: number
@@ -143,7 +141,6 @@ const DropdownMenuContent = React.forwardRef<
   React.useEffect(() => {
     if (!context.open) {
       setPosition(null)
-      setCalculatedSide("bottom")
       return
     }
 
@@ -160,7 +157,6 @@ const DropdownMenuContent = React.forwardRef<
     
     const shouldShowTop = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
     const finalSide = side || (shouldShowTop ? "top" : "bottom")
-    setCalculatedSide(finalSide)
     
     let left: number
     if (align === "end") {
