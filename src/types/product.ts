@@ -11,6 +11,7 @@ export interface Product {
   price: number | null // preço de venda
   description: string | null
   status: "Available" | "Sold Out" | null
+  is_cold: boolean | null // indica se a bebida é gelada
   
   // Campos de estoque (pode ser NULL se produto não tem controle de estoque)
   unit: string | null
@@ -42,6 +43,7 @@ export interface CreateProductInput {
   price?: number | null
   description?: string | null
   status?: "Available" | "Sold Out" | null
+  is_cold?: boolean | null
   
   // Campos de estoque
   unit?: string | null

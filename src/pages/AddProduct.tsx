@@ -40,6 +40,7 @@ export function AddProduct() {
         price: null,
         description: null,
         status: null,
+        is_cold: false,
         // Campos de estoque
         unit: null,
         min_stock: null,
@@ -608,21 +609,35 @@ export function AddProduct() {
                         </div>
 
                         {formData.price && (
-                            <div>
-                                <Label htmlFor="status">Status</Label>
-                                <Select
-                                    value={formData.status || 'Available'}
-                                    onValueChange={(value: "Available" | "Sold Out") => setFormData({ ...formData, status: value })}
-                                >
-                                    <SelectTrigger id="status">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Available">Disponível</SelectItem>
-                                        <SelectItem value="Sold Out">Esgotado</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <>
+                                <div>
+                                    <Label htmlFor="status">Status</Label>
+                                    <Select
+                                        value={formData.status || 'Available'}
+                                        onValueChange={(value: "Available" | "Sold Out") => setFormData({ ...formData, status: value })}
+                                    >
+                                        <SelectTrigger id="status">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Available">Disponível</SelectItem>
+                                            <SelectItem value="Sold Out">Esgotado</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                <div className="flex items-center space-x-2">
+                                    <input
+                                        type="checkbox"
+                                        id="is_cold"
+                                        checked={formData.is_cold || false}
+                                        onChange={(e) => setFormData({ ...formData, is_cold: e.target.checked })}
+                                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <Label htmlFor="is_cold" className="cursor-pointer">
+                                        Bebida gelada
+                                    </Label>
+                                </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>

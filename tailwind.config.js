@@ -6,6 +6,9 @@ export default {
     ],
     theme: {
         extend: {
+            screens: {
+                'xs': '344px',
+            },
             colors: {
                 primary: {
                     DEFAULT: "#0066CC", // JE BEBIDAS Blue

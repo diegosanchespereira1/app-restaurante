@@ -11,6 +11,7 @@ export interface MenuItem {
     category: string
     status: "Available" | "Sold Out"
     image: string
+    is_cold?: boolean | null
 }
 
 export interface OrderItem {
@@ -62,7 +63,8 @@ const productToMenuItem = (p: Product): MenuItem => ({
     category: p.category ?? '',
     status: (p.status ?? 'Available') as "Available" | "Sold Out",
     // Preservar a imagem exata (null vira string vazia, que será tratada pelo componente)
-    image: p.image ?? ''
+    image: p.image ?? '',
+    is_cold: p.is_cold ?? false
 })
 
 // Demo data for when Supabase is not configured

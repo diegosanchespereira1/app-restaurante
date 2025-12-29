@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Card, CardContent } from "../components/ui/card"
-import { Plus, Minus, ShoppingCart, Pencil, Trash2 } from "lucide-react"
+import { Plus, Minus, ShoppingCart, Pencil, Trash2, Snowflake } from "lucide-react"
 import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { formatCurrency } from "../lib/utils"
@@ -436,7 +436,7 @@ export function Menu() {
                         </div>
                         
                         {/* Grid Layout */}
-                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-2 xs:grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6 justify-items-center">
                             {items.map((item) => {
                                 const quantity = getItemQuantity(item.id)
                                 const total = getItemTotal(item.id, item.price)
@@ -445,20 +445,27 @@ export function Menu() {
                                 return (
                                     <article
                                         key={item.id}
-                                        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow"
+                                        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow w-full max-w-[169px] sm:max-w-[169px]"
+                                        style={{ height: '350px' }}
                                     >
                                         {/* Image Area */}
-                                        <div className="relative bg-orange-50/30 items-center justify-center aspect-square">
+                                        <div className="relative bg-orange-50/30 flex items-center justify-center aspect-square w-full" style={{ height: '110px', paddingTop: '0px', paddingBottom: '0px', marginTop: '7px', marginBottom: '7px' }}>
+                                            {item.is_cold && (
+                                                <div className="absolute top-3 left-3 bg-blue-100 text-blue-700 rounded-full p-1.5 shadow-sm">
+                                                    <Snowflake className="h-4 w-4" />
+                                                </div>
+                                            )}
                                             {isAvailable && (
-                                                <span className="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">
+                                                <span className="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded" style={{ paddingLeft: '8px', paddingRight: '8px', width: '74px' }}>
                                                     Disponível
                                                 </span>
                                             )}
                                             {item.image ? (
                                                 <img
                                                     alt={item.name}
-                                                    className="w-full h-full object-cover"
+                                                    className="object-cover"
                                                     src={item.image}
+                                                    style={{ width: '120px', height: '120px', overflow: 'visible', marginTop: '7px', marginBottom: '7px' }}
                                                     onError={(e) => {
                                                         e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
                                                     }}
@@ -472,17 +479,17 @@ export function Menu() {
                                         
                                         {/* Content Area */}
                                         <div className="p-4 flex-1 flex flex-col">
-                                            <h3 className="font-semibold text-gray-900">{item.name}</h3>
-                                            <p className="text-sm text-gray-400 mt-1">
+                                            <h3 className="text-base font-semibold text-gray-900" style={{ fontSize: '14px', height: '18px' }}>{item.name}</h3>
+                                            <p className="text-sm text-gray-400 mt-1" style={{ marginTop: '4px', marginBottom: '10px', minHeight: '36px', lineHeight: '18px' }}>
                                                 {item.description || "Sem descrição"}
                                             </p>
                                             
-                                            <div className="mt-auto pt-4">
-                                                <p className="text-sm font-bold text-gray-900 mb-3">
+                                            <div className="mt-auto" style={{ paddingTop: '5px', marginTop: '0px' }}>
+                                                <p className="text-sm font-bold text-gray-900 mb-3" style={{ marginBottom: '10px' }}>
                                                     {formatCurrency(item.price)}
                                                 </p>
-                                                <div className="flex justify-start items-center">
-                                                    <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50 h-9 flex-shrink-0">
+                                                <div className="flex justify-center items-center">
+                                                    <div className="flex justify-center items-center border border-gray-200 rounded-lg bg-gray-50 h-9 flex-shrink-0" style={{ width: '150px', marginTop: '5px', marginBottom: '5px', textAlign: 'center', justifyContent: 'center' }}>
                                                         <button
                                                             onClick={() => handleRemoveFromOrder(item.id)}
                                                             disabled={quantity === 0}
@@ -490,11 +497,11 @@ export function Menu() {
                                                         >
                                                             <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
                                                         </button>
-                                                        <span className={`px-2 sm:px-3 text-sm ${
+                                                        <span className={`text-sm ${
                                                             quantity > 0
                                                                 ? 'text-gray-800 font-medium'
                                                                 : 'hidden'
-                                                        }`}>
+                                                        }`} style={{ paddingLeft: '33px', paddingRight: '33px' }}>
                                                             {quantity}
                                                         </span>
                                                         <input
@@ -504,7 +511,7 @@ export function Menu() {
                                                             readOnly
                                                             type="number"
                                                             value={quantity}
-                                                            style={{ WebkitAppearance: 'none', MozAppearance: 'textfield' }}
+                                                            style={{ WebkitAppearance: 'none', MozAppearance: 'textfield', marginLeft: '29px', marginRight: '29px' }}
                                                         />
                                                         <button
                                                             onClick={() => handleAddToOrder(item.id)}
@@ -516,7 +523,7 @@ export function Menu() {
                                                 </div>
                                                 {quantity > 0 && (
                                                     <div className="mt-2">
-                                                        <p className="text-xs text-gray-500 leading-tight">
+                                                        <p className="text-xs text-gray-500 leading-tight" style={{ marginTop: '0px', marginBottom: '0px' }}>
                                                             Total:
                                                         </p>
                                                         <p className="text-sm sm:text-base font-bold text-gray-900 leading-tight">
