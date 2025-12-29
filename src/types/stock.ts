@@ -9,6 +9,8 @@ export interface InventoryItem {
   selling_price: number | null
   category: string | null
   image: string | null
+  description: string | null
+  status: "Available" | "Sold Out" | null
   product_type: string | null
   ncm: string | null
   cst_icms: string | null
@@ -74,6 +76,8 @@ export interface CreateInventoryItemInput {
   selling_price?: number | null
   category?: string | null
   image?: string | null
+  description?: string | null
+  status?: "Available" | "Sold Out" | null
   product_type?: string | null
   ncm?: string | null
   cst_icms?: string | null

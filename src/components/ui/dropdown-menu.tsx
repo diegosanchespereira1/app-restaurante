@@ -5,6 +5,7 @@ import { cn } from "../../lib/utils"
 interface DropdownMenuContextValue {
   open: boolean
   setOpen: (open: boolean) => void
+  triggerRef: React.MutableRefObject<HTMLElement | null>
 }
 
 const DropdownMenuContext = React.createContext<DropdownMenuContextValue | undefined>(undefined)
@@ -12,6 +13,7 @@ const DropdownMenuContext = React.createContext<DropdownMenuContextValue | undef
 const DropdownMenu = ({ children }: { children: React.ReactNode }) => {
   const [open, setOpen] = React.useState(false)
   const ref = React.useRef<HTMLDivElement>(null)
+  const triggerRef = React.useRef<HTMLElement | null>(null)
 
   React.useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -27,7 +29,7 @@ const DropdownMenu = ({ children }: { children: React.ReactNode }) => {
   }, [open])
 
   return (
-    <DropdownMenuContext.Provider value={{ open, setOpen }}>
+    <DropdownMenuContext.Provider value={{ open, setOpen, triggerRef }}>
       <div ref={ref} className="relative">
         {children}
       </div>
@@ -47,9 +49,18 @@ const DropdownMenuTrigger = React.forwardRef<
     onClick?.(e)
   }
 
+  const setRefs = (node: HTMLButtonElement | null) => {
+    if (typeof ref === 'function') {
+      ref(node)
+    } else if (ref) {
+      ref.current = node
+    }
+    context.triggerRef.current = node
+  }
+
   if (asChild && React.isValidElement(children)) {
     return React.cloneElement(children as React.ReactElement<any>, {
-      ref,
+      ref: setRefs,
       onClick: handleClick,
       ...props
     })
@@ -57,7 +68,7 @@ const DropdownMenuTrigger = React.forwardRef<
 
   return (
     <button
-      ref={ref}
+      ref={setRefs}
       className={className}
       onClick={handleClick}
       {...props}
@@ -70,25 +81,157 @@ DropdownMenuTrigger.displayName = "DropdownMenuTrigger"
 
 const DropdownMenuContent = React.forwardRef<
   HTMLDivElement,
-  React.HTMLAttributes<HTMLDivElement> & { align?: "start" | "end" | "center"; sideOffset?: number }
->(({ className, align = "start", sideOffset = 4, children, ...props }, ref) => {
+  React.HTMLAttributes<HTMLDivElement> & { align?: "start" | "end" | "center"; sideOffset?: number; side?: "top" | "bottom" }
+>(({ className, align = "start", sideOffset = 4, side, children, ...props }, ref) => {
   const context = React.useContext(DropdownMenuContext)
   if (!context) throw new Error("DropdownMenuContent must be used within DropdownMenu")
 
-  if (!context.open) return null
+  const [calculatedSide, setCalculatedSide] = React.useState<"top" | "bottom">("bottom")
+  const [position, setPosition] = React.useState<{ top: number; left: number } | null>(null)
+  const contentRef = React.useRef<HTMLDivElement>(null)
 
-  const alignClass = align === "end" ? "right-0" : align === "center" ? "left-1/2 -translate-x-1/2" : "left-0"
+  const updatePosition = React.useCallback(() => {
+    if (!context.triggerRef.current || !contentRef.current) return
+
+    const triggerRect = context.triggerRef.current.getBoundingClientRect()
+    const contentRect = contentRef.current.getBoundingClientRect()
+    const viewportHeight = window.innerHeight
+    const viewportWidth = window.innerWidth
+    
+    const contentWidth = contentRect.width || 150
+    const contentHeight = contentRect.height || 100
+    const spaceBelow = viewportHeight - triggerRect.bottom
+    const spaceAbove = triggerRect.top
+    
+    // Determinar se deve aparecer acima ou abaixo
+    const shouldShowTop = spaceBelow < contentHeight && spaceAbove > spaceBelow
+    const finalSide = side || (shouldShowTop ? "top" : "bottom")
+    setCalculatedSide(finalSide)
+    
+    // Calcular posição alinhada com o botão
+    let left: number
+    if (align === "end") {
+      // Alinhar à direita do botão - a borda direita do dropdown alinha com a borda direita do botão
+      left = triggerRect.right - contentWidth
+    } else if (align === "center") {
+      // Centralizar com o botão
+      left = triggerRect.left + (triggerRect.width / 2) - (contentWidth / 2)
+    } else {
+      // Alinhar à esquerda do botão
+      left = triggerRect.left
+    }
+    
+    // Garantir que não saia da viewport
+    if (align === "end") {
+      left = Math.max(8, left)
+    } else if (align === "center") {
+      if (left < 8) left = 8
+      if (left + contentWidth > viewportWidth - 8) {
+        left = viewportWidth - contentWidth - 8
+      }
+    } else {
+      left = Math.min(left, viewportWidth - contentWidth - 8)
+    }
+    
+    const top = finalSide === "top" 
+      ? triggerRect.top - contentHeight - sideOffset
+      : triggerRect.bottom + sideOffset
+    
+    setPosition({ top, left })
+  }, [context.triggerRef, align, side, sideOffset])
+
+  React.useEffect(() => {
+    if (!context.open) {
+      setPosition(null)
+      setCalculatedSide("bottom")
+      return
+    }
+
+    if (!context.triggerRef.current) return
+
+    // Calcular posição inicial com estimativa
+    const triggerRect = context.triggerRef.current.getBoundingClientRect()
+    const estimatedWidth = 150
+    const estimatedHeight = 100
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const spaceBelow = viewportHeight - triggerRect.bottom
+    const spaceAbove = triggerRect.top
+    
+    const shouldShowTop = spaceBelow < estimatedHeight && spaceAbove > spaceBelow
+    const finalSide = side || (shouldShowTop ? "top" : "bottom")
+    setCalculatedSide(finalSide)
+    
+    let left: number
+    if (align === "end") {
+      left = triggerRect.right - estimatedWidth
+    } else if (align === "center") {
+      left = triggerRect.left + (triggerRect.width / 2) - (estimatedWidth / 2)
+    } else {
+      left = triggerRect.left
+    }
+    
+    if (align === "end") {
+      left = Math.max(8, left)
+    } else if (align === "center") {
+      if (left < 8) left = 8
+      if (left + estimatedWidth > viewportWidth - 8) {
+        left = viewportWidth - estimatedWidth - 8
+      }
+    } else {
+      left = Math.min(left, viewportWidth - estimatedWidth - 8)
+    }
+    
+    const top = finalSide === "top" 
+      ? triggerRect.top - estimatedHeight - sideOffset
+      : triggerRect.bottom + sideOffset
+    
+    setPosition({ top, left })
+
+    // Recalcular com dimensões reais após renderização
+    const timeoutId = setTimeout(() => {
+      updatePosition()
+    }, 0)
+
+    return () => clearTimeout(timeoutId)
+  }, [context.open, context.triggerRef, align, side, sideOffset, updatePosition])
+
+  // Observar mudanças de tamanho do conteúdo
+  React.useEffect(() => {
+    if (!context.open || !contentRef.current) return
+
+    const resizeObserver = new ResizeObserver(() => {
+      updatePosition()
+    })
+
+    resizeObserver.observe(contentRef.current)
+
+    return () => {
+      resizeObserver.disconnect()
+    }
+  }, [context.open, updatePosition])
+
+  if (!context.open) return null
 
   return (
     <div
-      ref={ref}
+      ref={(node) => {
+        if (typeof ref === 'function') {
+          ref(node)
+        } else if (ref) {
+          ref.current = node
+        }
+        contentRef.current = node
+      }}
       className={cn(
-        "z-50 min-w-[8rem] overflow-hidden rounded-md border bg-background p-1 text-foreground shadow-md",
-        "absolute top-full mt-1",
-        alignClass,
+        "z-[9999] min-w-[8rem] overflow-hidden rounded-md border bg-background p-1 text-foreground shadow-lg",
+        "fixed",
         className
       )}
-      style={{ marginTop: `${sideOffset}px` }}
+      style={position ? {
+        top: `${position.top}px`,
+        left: `${position.left}px`,
+      } : undefined}
       {...props}
     >
       {children}

@@ -26,6 +26,7 @@ import { Stock } from "./pages/Stock"
 import { AddInventoryItem } from "./pages/AddInventoryItem"
 import { EditInventoryItem } from "./pages/EditInventoryItem"
 import { AddProduct } from "./pages/AddProduct"
+import { Promotions } from "./pages/Promotions"
 
 // Component to handle authenticated routes
 function AuthenticatedRoutes() {
@@ -111,6 +112,14 @@ function AuthenticatedRoutes() {
           element={
             <ProtectedRoute requiredRole={['admin', 'gerente']}>
               <AddProduct />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/promotions" 
+          element={
+            <ProtectedRoute requiredRole={['admin', 'gerente', 'usuario']}>
+              <Promotions />
             </ProtectedRoute>
           } 
         />

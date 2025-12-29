@@ -21,6 +21,8 @@ const productToInventoryItem = (p: Product): InventoryItem => ({
   selling_price: p.price, // usar price como selling_price
   category: p.category,
   image: p.image,
+  description: p.description,
+  status: p.status,
   product_type: p.product_type,
   ncm: p.ncm,
   cst_icms: p.cst_icms,
@@ -159,6 +161,8 @@ export function StockProvider({ children }: { children: ReactNode }) {
         cost_price: item.cost_price ?? null,
         price: item.selling_price ?? null, // usar price ao invés de selling_price
         category: item.category || null,
+        description: item.description || null,
+        status: item.status || null,
         product_type: item.product_type || null,
         ncm: item.ncm || null,
         cst_icms: item.cst_icms || null,
@@ -224,6 +228,8 @@ export function StockProvider({ children }: { children: ReactNode }) {
       if (updates.cost_price !== undefined) updateData.cost_price = updates.cost_price ?? null
       if (updates.selling_price !== undefined) updateData.price = updates.selling_price ?? null // usar price
       if (updates.category !== undefined) updateData.category = updates.category || null
+      if (updates.description !== undefined) updateData.description = updates.description || null
+      if (updates.status !== undefined) updateData.status = updates.status || null
       // menu_item_id não é mais usado na nova estrutura
       if (updates.product_type !== undefined) updateData.product_type = updates.product_type || null
       if (updates.ncm !== undefined) updateData.ncm = updates.ncm || null

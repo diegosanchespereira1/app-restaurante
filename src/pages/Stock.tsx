@@ -213,6 +213,9 @@ export function Stock() {
                                                     {item.category && (
                                                         <div className="text-sm text-muted-foreground truncate">{item.category}</div>
                                                     )}
+                                                    {item.description && (
+                                                        <div className="text-xs text-muted-foreground truncate mt-1">{item.description}</div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </TableCell>
@@ -288,6 +291,9 @@ export function Stock() {
                                         <div className="font-medium truncate">{item.name}</div>
                                         {item.category && (
                                             <div className="text-sm text-muted-foreground truncate">{item.category}</div>
+                                        )}
+                                        {item.description && (
+                                            <div className="text-xs text-muted-foreground truncate mt-1">{item.description}</div>
                                         )}
                                     </div>
                                 </div>
