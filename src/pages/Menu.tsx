@@ -481,7 +481,7 @@ export function Menu() {
                                                 <p className="text-sm font-bold text-gray-900 mb-3">
                                                     {formatCurrency(item.price)}
                                                 </p>
-                                                <div className="flex justify-between items-end gap-2 min-w-0">
+                                                <div className="flex justify-start items-center">
                                                     <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50 h-9 flex-shrink-0">
                                                         <button
                                                             onClick={() => handleRemoveFromOrder(item.id)}
@@ -513,17 +513,17 @@ export function Menu() {
                                                             <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                                                         </button>
                                                     </div>
-                                                    {quantity > 0 && (
-                                                        <div className="text-right flex-shrink-0 min-w-fit">
-                                                            <p className="text-xs text-gray-500 leading-tight">
-                                                                Total:
-                                                            </p>
-                                                            <p className="text-sm sm:text-base font-bold text-gray-900 leading-tight whitespace-nowrap">
-                                                                {formatCurrency(total)}
-                                                            </p>
-                                                        </div>
-                                                    )}
                                                 </div>
+                                                {quantity > 0 && (
+                                                    <div className="mt-2">
+                                                        <p className="text-xs text-gray-500 leading-tight">
+                                                            Total:
+                                                        </p>
+                                                        <p className="text-sm sm:text-base font-bold text-gray-900 leading-tight">
+                                                            {formatCurrency(total)}
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
                                     </article>
