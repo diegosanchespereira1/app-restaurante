@@ -8,6 +8,7 @@ import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
+import { Textarea } from "../components/ui/textarea"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "../components/ui/dialog"
 import { ArrowLeft, Save, Plus, Upload, Loader2 } from "lucide-react"
 import { formatCurrency } from "../lib/utils"
@@ -52,6 +53,8 @@ export function EditInventoryItem() {
         selling_price: null as number | null,
         category: '',
         image: DEFAULT_IMAGE,
+        description: null as string | null,
+        status: null as "Available" | "Sold Out" | null,
         product_type: '',
         ncm: '',
         cst_icms: '',
@@ -83,6 +86,8 @@ export function EditInventoryItem() {
                     selling_price: currentItem.selling_price,
                     category: currentItem.category || '',
                     image: imageToUse, // Preservar imagem atual se existir
+                    description: currentItem.description || null,
+                    status: currentItem.status || null,
                     product_type: currentItem.product_type || '',
                     ncm: currentItem.ncm || '',
                     cst_icms: currentItem.cst_icms || '',
@@ -114,13 +119,21 @@ export function EditInventoryItem() {
         }
     }, [localPreviewUrl])
 
-    // Tipos de produto para cálculo de imposto
+    // Opções para selects
     const productTypes = [
         { value: 'alimento', label: 'Alimento' },
         { value: 'bebida', label: 'Bebida' },
         { value: 'limpeza', label: 'Limpeza' },
         { value: 'embalagem', label: 'Embalagem' },
         { value: 'outros', label: 'Outros' }
+    ]
+
+    const units = [
+        { value: 'UN', label: 'UN - Unidade' },
+        { value: 'KG', label: 'KG - Quilograma' },
+        { value: 'L', label: 'L - Litro' },
+        { value: 'CX', label: 'CX - Caixa' },
+        { value: 'PC', label: 'PC - Pacote' }
     ]
 
     // CST ICMS comuns
@@ -556,6 +569,8 @@ export function EditInventoryItem() {
                 selling_price: formData.selling_price,
                 category: formData.category || null,
                 image: imageToSave,
+                description: formData.description || null,
+                status: formData.status || null,
                 product_type: formData.product_type || null,
                 ncm: formData.ncm || null,
                 cst_icms: formData.cst_icms || null,
@@ -657,161 +672,223 @@ export function EditInventoryItem() {
                             </Select>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="md:col-span-2">
-                                <Label htmlFor="name">Nome do Produto *</Label>
-                                <Input
-                                    id="name"
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    required
-                                    placeholder="Ex: Arroz, Feijão, Óleo..."
-                                />
-                            </div>
+                        <div>
+                            <Label htmlFor="name">Nome do Produto *</Label>
+                            <Input
+                                id="name"
+                                value={formData.name}
+                                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                required
+                                placeholder="Ex: Arroz, Feijão, Óleo..."
+                            />
+                        </div>
 
-                            <div className="md:col-span-2">
-                                <Label htmlFor="image">Imagem do Produto</Label>
-                                
-                                {/* Botão de Upload */}
-                                <div className="flex gap-2 mb-2">
-                                    <Button
-                                        type="button"
-                                        variant="outline"
-                                        onClick={() => fileInputRef.current?.click()}
-                                        disabled={isUploadingImage || isSubmitting || !isSupabaseConfigured}
-                                        className="w-auto"
-                                    >
-                                        {isUploadingImage ? (
-                                            <>
-                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                                Enviando... {uploadProgress}%
-                                            </>
-                                        ) : (
-                                            <>
-                                                <Upload className="w-4 h-4 mr-2" />
-                                                {formData.image && formData.image !== DEFAULT_IMAGE ? 'Alterar Imagem' : 'Selecionar Imagem'}
-                                            </>
-                                        )}
-                                    </Button>
-                                    <Input
-                                        ref={fileInputRef}
-                                        type="file"
-                                        accept="image/*"
-                                        onChange={handleImageUpload}
-                                        className="hidden"
-                                        disabled={isUploadingImage}
-                                    />
-                                    {!isSupabaseConfigured && (
-                                        <p className="text-xs text-muted-foreground self-center">
-                                            Supabase não configurado.
+                        <div>
+                            <Label htmlFor="category">Categoria</Label>
+                            <Select
+                                value={formData.category || 'none'}
+                                onValueChange={handleCategorySelect}
+                            >
+                                <SelectTrigger id="category">
+                                    <SelectValue placeholder="Selecione uma categoria" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="none">Sem categoria</SelectItem>
+                                    {safeCategories.map((cat) => (
+                                        <SelectItem key={cat.id} value={cat.name}>
+                                            {cat.name}
+                                        </SelectItem>
+                                    ))}
+                                    <SelectItem value="add-new-category">
+                                        <Plus className="w-4 h-4 inline mr-2" />
+                                        Nova categoria
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div>
+                            <Label htmlFor="image">Imagem do Produto</Label>
+                            
+                            {/* Botão de Upload */}
+                            <div className="flex gap-2 mb-2">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    disabled={isUploadingImage || isSubmitting || !isSupabaseConfigured}
+                                    className="w-auto"
+                                >
+                                    {isUploadingImage ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Enviando... {uploadProgress}%
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Upload className="w-4 h-4 mr-2" />
+                                            {formData.image && formData.image !== DEFAULT_IMAGE ? 'Alterar Imagem' : 'Selecionar Imagem'}
+                                        </>
+                                    )}
+                                </Button>
+                                <Input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleImageUpload}
+                                    className="hidden"
+                                    disabled={isUploadingImage}
+                                />
+                                {!isSupabaseConfigured && (
+                                    <p className="text-xs text-muted-foreground self-center">
+                                        Supabase não configurado.
+                                    </p>
+                                )}
+                            </div>
+                            
+                            {/* Barra de progresso do upload */}
+                            {isUploadingImage && uploadProgress > 0 && (
+                                <div className="w-full mb-2">
+                                    <div className="w-full bg-gray-200 rounded-full h-2.5">
+                                        <div
+                                            className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
+                                            style={{ width: `${uploadProgress}%` }}
+                                        ></div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Erro de upload */}
+                            {uploadError && (
+                                <p className="text-sm text-destructive mb-2">{uploadError}</p>
+                            )}
+
+                            {/* Preview da imagem */}
+                            {(localPreviewUrl || imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE)) && (
+                                <div className="mt-2">
+                                    {isUploadingImage && (
+                                        <p className="text-xs text-muted-foreground mb-2">
+                                            Redimensionando e enviando imagem (800x800px)...
                                         </p>
                                     )}
+                                    {!isUploadingImage && formData.image && formData.image !== DEFAULT_IMAGE && (
+                                        <p className="text-xs text-muted-foreground mb-2">
+                                            Imagem carregada com sucesso. A imagem foi redimensionada automaticamente para 800x800px.
+                                        </p>
+                                    )}
+                                    <img
+                                        src={localPreviewUrl || imagePreviewUrl || formData.image || DEFAULT_IMAGE}
+                                        alt="Preview"
+                                        className="w-32 h-32 object-cover rounded-md border"
+                                        onLoad={() => {
+                                            if (imagePreviewUrl && localPreviewUrl && !isUploadingImage) {
+                                                URL.revokeObjectURL(localPreviewUrl)
+                                                setLocalPreviewUrl(null)
+                                            }
+                                        }}
+                                        onError={(e) => {
+                                            const target = e.currentTarget
+                                            if (localPreviewUrl && target.src !== localPreviewUrl) {
+                                                target.src = localPreviewUrl
+                                                return
+                                            }
+                                            if (imagePreviewUrl && target.src !== imagePreviewUrl) {
+                                                target.src = imagePreviewUrl
+                                                return
+                                            }
+                                            if (formData.image && formData.image !== DEFAULT_IMAGE && target.src !== formData.image) {
+                                                target.src = formData.image
+                                                return
+                                            }
+                                            if (target.src !== DEFAULT_IMAGE) {
+                                                target.src = DEFAULT_IMAGE
+                                            }
+                                        }}
+                                    />
                                 </div>
-                                
-                                {/* Barra de progresso do upload */}
-                                {isUploadingImage && uploadProgress > 0 && (
-                                    <div className="w-full mb-2">
-                                        <div className="w-full bg-gray-200 rounded-full h-2.5">
-                                            <div
-                                                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300"
-                                                style={{ width: `${uploadProgress}%` }}
-                                            ></div>
-                                        </div>
-                                    </div>
-                                )}
+                            )}
+                        </div>
+                    </CardContent>
+                </Card>
 
-                                {/* Erro de upload */}
-                                {uploadError && (
-                                    <p className="text-sm text-destructive mb-2">{uploadError}</p>
-                                )}
+                {/* Informações de Venda */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Informações de Venda</CardTitle>
+                        <CardDescription>Preencha se o produto será vendido diretamente</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label htmlFor="selling_price">Preço de Venda</Label>
+                            <Input
+                                id="selling_price"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={formData.selling_price || ''}
+                                onChange={(e) => setFormData({ ...formData, selling_price: e.target.value ? parseFloat(e.target.value) : null })}
+                                placeholder="0.00"
+                            />
+                        </div>
 
-                                {/* Preview da imagem - priorizar preview local, depois URL do Supabase, depois formData */}
-                                {(localPreviewUrl || imagePreviewUrl || (formData.image && formData.image !== DEFAULT_IMAGE)) && (
-                                    <div className="mt-2">
-                                        {isUploadingImage && (
-                                            <p className="text-xs text-muted-foreground mb-2">
-                                                Redimensionando e enviando imagem (800x800px)...
-                                            </p>
-                                        )}
-                                        {!isUploadingImage && formData.image && formData.image !== DEFAULT_IMAGE && (
-                                            <p className="text-xs text-muted-foreground mb-2">
-                                                Imagem carregada com sucesso. A imagem foi redimensionada automaticamente para 800x800px.
-                                            </p>
-                                        )}
-                                        <img
-                                            src={localPreviewUrl || imagePreviewUrl || formData.image || DEFAULT_IMAGE}
-                                            alt="Preview"
-                                            className="w-32 h-32 object-cover rounded-md border"
-                                            onLoad={() => {
-                                                // Quando a imagem do Supabase carregar com sucesso, podemos limpar o preview local
-                                                if (imagePreviewUrl && localPreviewUrl && !isUploadingImage) {
-                                                    URL.revokeObjectURL(localPreviewUrl)
-                                                    setLocalPreviewUrl(null)
-                                                }
-                                            }}
-                                            onError={(e) => {
-                                                const target = e.currentTarget
-                                                // Se temos preview local, usar ele
-                                                if (localPreviewUrl && target.src !== localPreviewUrl) {
-                                                    target.src = localPreviewUrl
-                                                    return
-                                                }
-                                                // Se temos URL do Supabase diferente, tentar ela
-                                                if (imagePreviewUrl && target.src !== imagePreviewUrl) {
-                                                    target.src = imagePreviewUrl
-                                                    return
-                                                }
-                                                // Se temos formData.image diferente, tentar ela
-                                                if (formData.image && formData.image !== DEFAULT_IMAGE && target.src !== formData.image) {
-                                                    target.src = formData.image
-                                                    return
-                                                }
-                                                // Último recurso: imagem padrão
-                                                if (target.src !== DEFAULT_IMAGE) {
-                                                    target.src = DEFAULT_IMAGE
-                                                }
-                                            }}
-                                        />
-                                    </div>
-                                )}
-                            </div>
+                        <div>
+                            <Label htmlFor="description">Descrição</Label>
+                            <Textarea
+                                id="description"
+                                value={formData.description || ''}
+                                onChange={(e) => setFormData({ ...formData, description: e.target.value || null })}
+                                placeholder="Descrição do produto"
+                                rows={3}
+                            />
+                        </div>
 
+                        {formData.selling_price && (
                             <div>
-                                <Label htmlFor="unit">Unidade de Medida</Label>
-                                <Input
-                                    id="unit"
-                                    value={formData.unit}
-                                    onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                                    placeholder="UN, KG, L, etc"
-                                />
-                            </div>
-
-                            <div>
-                                <Label htmlFor="category">Categoria</Label>
+                                <Label htmlFor="status">Status</Label>
                                 <Select
-                                    value={formData.category || 'none'}
-                                    onValueChange={handleCategorySelect}
+                                    value={formData.status || 'Available'}
+                                    onValueChange={(value: "Available" | "Sold Out") => setFormData({ ...formData, status: value })}
                                 >
-                                    <SelectTrigger id="category">
-                                        <SelectValue placeholder="Selecione uma categoria" />
+                                    <SelectTrigger id="status">
+                                        <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="none">Sem categoria</SelectItem>
-                                        {safeCategories.map((cat) => (
-                                            <SelectItem key={cat.id} value={cat.name}>
-                                                {cat.name}
-                                            </SelectItem>
-                                        ))}
-                                        <SelectItem value="add-new-category" className="text-primary font-semibold">
-                                            <div className="flex items-center gap-2">
-                                                <Plus className="w-4 h-4" />
-                                                Adicionar nova categoria...
-                                            </div>
-                                        </SelectItem>
+                                        <SelectItem value="Available">Disponível</SelectItem>
+                                        <SelectItem value="Sold Out">Esgotado</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
+                        )}
+                    </CardContent>
+                </Card>
 
+                {/* Informações de Estoque */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Informações de Estoque</CardTitle>
+                        <CardDescription>Preencha se o produto terá controle de estoque</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div>
+                            <Label htmlFor="unit">Unidade de Medida</Label>
+                            <Select
+                                value={formData.unit || ''}
+                                onValueChange={(value) => setFormData({ ...formData, unit: value || null })}
+                            >
+                                <SelectTrigger id="unit">
+                                    <SelectValue placeholder="Selecione uma unidade" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {units.map((unit) => (
+                                        <SelectItem key={unit.value} value={unit.value}>
+                                            {unit.label}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
                             <div>
                                 <Label htmlFor="min_stock">Estoque Mínimo</Label>
                                 <Input
@@ -836,42 +913,18 @@ export function EditInventoryItem() {
                                 />
                             </div>
                         </div>
-                    </CardContent>
-                </Card>
 
-                {/* Informações de Preço */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Informações de Preço</CardTitle>
-                        <CardDescription>Preços de custo e venda do produto</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="cost_price">Preço de Custo (R$)</Label>
-                                <Input
-                                    id="cost_price"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={formData.cost_price || ''}
-                                    onChange={(e) => setFormData({ ...formData, cost_price: e.target.value ? parseFloat(e.target.value) : null })}
-                                    placeholder="0.00"
-                                />
-                            </div>
-
-                            <div>
-                                <Label htmlFor="selling_price">Preço de Venda (R$)</Label>
-                                <Input
-                                    id="selling_price"
-                                    type="number"
-                                    min="0"
-                                    step="0.01"
-                                    value={formData.selling_price || ''}
-                                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value ? parseFloat(e.target.value) : null })}
-                                    placeholder="0.00"
-                                />
-                            </div>
+                        <div>
+                            <Label htmlFor="cost_price">Preço de Custo</Label>
+                            <Input
+                                id="cost_price"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={formData.cost_price || ''}
+                                onChange={(e) => setFormData({ ...formData, cost_price: e.target.value ? parseFloat(e.target.value) : null })}
+                                placeholder="0.00"
+                            />
                         </div>
                     </CardContent>
                 </Card>

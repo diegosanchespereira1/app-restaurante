@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+
+<html lang="pt-BR"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bebidas Dashboard</title>
+<!-- Load Tailwind CSS v3 with plugins -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<!-- Tailwind Configuration for custom colors/fonts if needed -->
+<script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            'brand-blue': '#1e73e8', // Matches the "Adicionar Item" button
+            'brand-dark': '#0f0f0f', // Dark background for hero
+          },
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+<!-- Google Fonts: Inter -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<style data-purpose="global-styles">
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #f9fafb; /* Light gray background */
+    }
+    /* Hide number input spinners */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+      -webkit-appearance: none; 
+      margin: 0; 
+    }
+  </style>
+</head>
+<body class="text-gray-800 antialiased p-4 md:p-8">
+<!-- Main Container -->
+<div class="max-w-7xl mx-auto space-y-8">
+<!-- BEGIN: Header Section -->
+<header class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+<div data-purpose="header-titles">
+<h1 class="text-3xl font-bold text-gray-900">Bebidas</h1>
+<p class="text-gray-500 mt-1 text-sm">Gerencie os itens de bebidas.</p>
+</div>
+<!-- Header Actions -->
+<div class="flex gap-3" data-purpose="header-actions">
+<button class="px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
+          Manage Categories
+        </button>
+<button class="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium text-white hover:bg-blue-700 transition-colors flex items-center gap-2">
+<span>+</span> Adicionar Item
+        </button>
+</div>
+</header>
+<!-- END: Header Section -->
+<!-- BEGIN: Hero Carousel Section -->
+<section aria-label="Promotional Carousel" class="relative group">
+<!-- Carousel Navigation Arrows (Absolute positioned) -->
+<button aria-label="Previous Slide" class="absolute left-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors cursor-pointer">
+<svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M15.75 19.5L8.25 12l7.5-7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<button aria-label="Next Slide" class="absolute right-4 top-1/2 -translate-y-1/2 z-10 w-10 h-10 bg-white/90 rounded-full flex items-center justify-center shadow-md hover:bg-white transition-colors cursor-pointer">
+<svg class="w-5 h-5 text-gray-700" fill="none" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+<path d="M8.25 4.5l7.5 7.5-7.5 7.5" stroke-linecap="round" stroke-linejoin="round"></path>
+</svg>
+</button>
+<!-- Main Banner Card -->
+<div class="bg-black rounded-2xl overflow-hidden flex flex-col md:flex-row h-auto md:h-[340px]">
+<!-- Left Content -->
+<div class="p-8 md:p-12 flex flex-col justify-center w-full md:w-1/2 relative z-0">
+<h2 class="text-3xl md:text-4xl font-bold text-white leading-tight mb-2">
+            Promoção Especial:<br/>
+            Cervejas Artesanais 20% OFF!
+          </h2>
+<p class="text-gray-400 text-sm md:text-base mb-8">Promoção Especial: Cervejas Artesanais</p>
+<div>
+<button class="bg-blue-600 text-white rounded px-6 py-2 font-medium transition-colors hover:bg-blue-700">Ver Promoção</button>
+</div>
+</div>
+<!-- Right Image -->
+<div class="w-full md:w-1/2 relative h-64 md:h-full">
+<!-- Gradient overlay for smooth transition from black to image -->
+<div class="absolute inset-0 bg-gradient-to-r from-black via-transparent to-transparent z-10 pointer-events-none"></div>
+<img alt="Cervejas Artesanais" class="w-full h-full object-cover object-center" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBprHFcnukJSI8sk3h6_y8iwpkvzmbnvbdrXRjILg0A89u-Z24Wl0OmwAmEX41TNF4x2qo8ufIxE5Bme3I5tosqR5UqeIG7_cYhTASHUXM6cHqcHVHTAXJcJJIGxvA7RH5DlZ70MmNb9Pq33LjpMddsYlTecEcF35AVD5BrtH1PF2hLRJHRIUE6uD_NFpydb4quuA8GIcZ-oCp0pvpXRDtENe0rDMlGHW7zqJdDiimbKcu0H8Sk-Q812u6RiR1-k1RXf9rNdyVoCjHK"/>
+</div>
+</div>
+<!-- Pagination Dots -->
+<div class="flex justify-center gap-2 mt-4" role="tablist">
+<button aria-current="true" aria-label="Slide 1" class="w-8 h-2 bg-gray-800 rounded-full"></button>
+<button aria-label="Slide 2" class="w-2 h-2 bg-gray-300 rounded-full"></button>
+<button aria-label="Slide 3" class="w-2 h-2 bg-gray-300 rounded-full"></button>
+<button aria-label="Slide 4" class="w-2 h-2 bg-gray-300 rounded-full"></button>
+</div>
+</section>
+<!-- END: Hero Carousel Section -->
+<!-- BEGIN: Filter Categories -->
+<nav aria-label="Category Filters" class="flex flex-wrap gap-3">
+<button class="px-5 py-2 rounded-lg bg-gray-200 text-gray-800 border border-transparent font-medium text-sm transition-colors">
+        Cervejas
+      </button>
+<button class="px-5 py-2 rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 text-sm font-medium transition-colors">
+        Refrigerantes
+      </button>
+<button class="px-5 py-2 rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 text-sm font-medium transition-colors">
+        Sucos
+      </button>
+<button class="px-5 py-2 rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 text-sm font-medium transition-colors">
+        Piosmos
+      </button>
+<button class="px-5 py-2 rounded-lg bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 text-sm font-medium transition-colors">
+        Todos
+      </button>
+</nav>
+<!-- END: Filter Categories -->
+<!-- BEGIN: Product List Section -->
+<main>
+<!-- Section Title -->
+<div class="flex items-center gap-3 mb-6">
+<h2 class="text-xl font-bold text-gray-900">Cerveja</h2>
+<span class="bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 text-xs font-medium">5 items</span>
+</div>
+<!-- Grid Layout -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+<!-- Card 1: Original - 600ml (Active State Example) -->
+<article class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+<!-- Image Area -->
+<div class="relative bg-orange-50/30 items-center justify-center aspect-square">
+<span class="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">Disponível</span>
+<img alt="Original - 600ml" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAkpuJSVKQGqehdWKkiwYOO7ggZL60QvdtGP0ku40piHDFLegGVvWZeNlsn8Mg_zbSfEb5RgmVaLnsDO0-WTNbclLsFCeOlY8Iisst2Uar6p0dnSZ-SN-4z6hGOLJeIk-b0AsCs5sc4I2gEYqfRQtneSWaHddOfJ1_qq8EuEqS4q5IYeW5Xks-ASjb5KWp2dkIhJpu-L1J7zFxRoyBv9JtsoGNLapxDjhNZ4bZ6xZfXw7ejoCQSzS9R9WsjTrR3SD3vz9jRaj-wcOEJ"/>
+</div>
+<!-- Content Area -->
+<div class="p-4 flex-1 flex flex-col">
+<h3 class="font-semibold text-gray-900">Original - 600ml</h3>
+<p class="text-sm text-gray-400 mt-1">Sem descrição</p>
+<div class="mt-auto pt-4"><div class="flex justify-between items-end"><div class="flex items-center border rounded-md"><button class="px-3 py-1 bg-white text-gray-600 hover:bg-gray-100 rounded-l-md">-</button><span class="px-3 py-1 bg-white text-gray-800 font-medium border-l border-r">2</span><button class="px-3 py-1 bg-blue-600 text-white hover:bg-blue-700 rounded-r-md">+</button></div><div class="text-right"><p class="text-lg font-bold text-gray-900">R$ 16,00</p><p class="text-xs text-gray-500">Total: R$ 32,00</p></div></div></div>
+</div>
+</article>
+<!-- Card 2: Amstel - caixa 24 (Default State) -->
+<article class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+<div class="relative bg-yellow-50/30 items-center justify-center aspect-square">
+<span class="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">Disponível</span>
+<img alt="Amstel - caixa 24" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCCslLbJMVit5wWA2hG25ya1BUE8OK_5-TDlLz1SafmRFqjQSlxL-YHEsrLoMyfOCGi4ljpu7VpDn1rmBesnfHE23KuH0KbTN_CfT9qdM5sFhwVXeyDqO5jshXN-DXwODsC3vIAEBEyMew2z4hNEoIvvZIQtlaTDWpcDXIKYb4-vCXx_n7k1Iud7UT7bxUlhV16hHKNN-v1wazG3QXPoUz2uP50CxNzTkuE-KbwBq_u0r4mpKjyTtxAkcjtWCJ1e6PlqFsinwSYlsn6"/>
+</div>
+<div class="p-4 flex-1 flex flex-col">
+<h3 class="font-semibold text-gray-900">Amstel - caixa 24</h3>
+<p class="text-sm text-gray-400 mt-1">Sem descrição</p>
+<div class="mt-auto pt-4">
+<p class="text-sm font-bold text-gray-900 mb-3">R$ 16,00</p>
+<div class="flex items-end justify-between">
+<div class="flex items-center border border-gray-200 rounded-lg bg-gray-50 h-9">
+<button class="px-3 text-gray-400 hover:text-gray-600">-</button>
+<input class="w-8 text-center bg-transparent border-none p-0 text-sm text-gray-500 focus:ring-0" readonly="" type="number" value="0"/>
+<button class="px-3 text-gray-400 hover:text-gray-600">+</button>
+</div>
+<div class="text-right">
+<p class="text-lg font-bold text-gray-900 leading-none">R$ 16,00</p>
+<p class="text-xs text-gray-400 mt-1">Total: R$ 32,00</p>
+</div>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 3: Spaten - 600ml (Default State) -->
+<article class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+<div class="relative bg-green-50/30 items-center justify-center aspect-square">
+<span class="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">Disponível</span>
+<img alt="Spaten - 600ml" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuD7TEFxnwy0mn-FV4fu3Gd6JXcCgL0mjsJ5GInchNg8JxEyEYwdb3RpqL5vd1wrrZyZg0x8QkU--c11SJ65sGqToWf7cLOfAmh0ez1dIDjrllAN9db5zrD4ORxYMLHZQ8RpBns2bFj05JCGHrBBnqc7V1fZJGlglxc3HJ3rA4KPsC00ywDDy4SsrBcwWY2apHdfedzBFZLRyUfqfE7Zb9tVdrmO1xyMLuteEPlcTgQ1rYsyAWMcEBD6aNDdRd8zWJOAZM4WqxFrprv6"/>
+</div>
+<div class="p-4 flex-1 flex flex-col">
+<h3 class="font-semibold text-gray-900">Spaten - 600ml</h3>
+<p class="text-sm text-gray-400 mt-1">Sem descrição</p>
+<div class="mt-auto pt-4">
+<p class="text-sm font-bold text-gray-900 mb-3">R$ 16,00</p>
+<div class="flex items-end justify-between">
+<div class="flex items-center border border-gray-200 rounded-lg bg-gray-50 h-9">
+<button class="px-3 text-gray-400 hover:text-gray-600">-</button>
+<input class="w-8 text-center bg-transparent border-none p-0 text-sm text-gray-500 focus:ring-0" readonly="" type="number" value="0"/>
+<button class="px-3 text-gray-400 hover:text-gray-600">+</button>
+</div>
+<div class="text-right">
+<p class="text-lg font-bold text-gray-900 leading-none">R$ 14,00</p>
+<p class="text-xs text-gray-400 mt-1">Total: R$ 32,00</p>
+</div>
+</div>
+</div>
+</div>
+</article>
+<!-- Card 4: Petra - 600 ml (Default State) -->
+<article class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow">
+<div class="relative bg-orange-50/30 items-center justify-center aspect-square">
+<span class="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">Disponível</span>
+<img alt="Petra - 600 ml" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBvg_6k57atk4OUb6M-Stwoy6DAs5FbDYMGR-ou6PPzJx2JMCXucYmiYbTbosnU9vJdqiidNsFdXJ2rtLVlLJ1laBgMUPO5-tRQLnSMzjbj9zcNmpEF71uBiCSApR-tKActohR8HSJECxQz5y_dlYfjEdSw71IRLICres8cRzlo17ML8-h8zd2TSXHmZwXt9QVSs41NPbElZog636iS4bj9Oujr68Xw-WM4cgFTkMB4ijHfZvBABU_28cKTI9qNOYES4xv9gp1SAM8z"/>
+</div>
+<div class="p-4 flex-1 flex flex-col">
+<h3 class="font-semibold text-gray-900">Petra - 600 ml</h3>
+<p class="text-sm text-gray-400 mt-1">Sem descrição</p>
+<div class="mt-auto pt-4">
+<p class="text-sm font-bold text-gray-900 mb-3">R$ 14,00</p>
+<div class="flex items-end justify-between">
+<div class="flex items-center border border-gray-200 rounded-lg bg-gray-50 h-9">
+<button class="px-3 text-gray-400 hover:text-gray-600">-</button>
+<input class="w-8 text-center bg-transparent border-none p-0 text-sm text-gray-500 focus:ring-0" readonly="" type="number" value="0"/>
+<button class="px-3 text-gray-400 hover:text-gray-600">+</button>
+</div>
+<!-- Note: The mock image shows specific styling for Total even when 0, though logic suggests it might be different. Keeping visual fidelity. -->
+<div class="text-right opacity-50">
+<p class="text-lg font-bold text-gray-900 leading-none">-</p>
+</div>
+</div>
+</div>
+</div>
+</article>
+</div>
+</main>
+<!-- END: Product List Section -->
+</div>
+</body></html><!-- MISSING_IMAGES:
+- Dark banner image with beer bottles on the right (Hero Section)
+- Product image for 'Original - 600ml' bottle
+- Product image for 'Amstel - caixa 24' bottle
+- Product image for 'Spaten - 600ml' bottle
+- Product image for 'Petra - 600 ml' bottle
+-->

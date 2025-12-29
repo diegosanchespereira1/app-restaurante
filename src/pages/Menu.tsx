@@ -3,13 +3,16 @@ import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Badge } from "../components/ui/badge"
-import { Plus, Pencil, Trash2, Minus, ShoppingCart } from "lucide-react"
+import { Plus, Minus, ShoppingCart, ChevronLeft, ChevronRight, Settings, Pencil, Trash2 } from "lucide-react"
 import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { formatCurrency } from "../lib/utils"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
+import { supabase, isSupabaseConfigured } from "../lib/supabase"
+import type { PromotionWithItems } from "../types/promotion"
+import { PromotionCarousel } from "../components/promotions/PromotionCarousel"
 
 export function Menu() {
     const navigate = useNavigate()
@@ -24,7 +27,71 @@ export function Menu() {
     const [error, setError] = useState("")
     const [newCategoryName, setNewCategoryName] = useState("")
     const [editingCategory, setEditingCategory] = useState<{ id: number, name: string } | null>(null)
+    const [selectedCategory, setSelectedCategory] = useState<string>("all")
+    const [promotions, setPromotions] = useState<PromotionWithItems[]>([])
 
+    // Buscar promoções habilitadas
+    useEffect(() => {
+        const fetchPromotions = async () => {
+            if (!isSupabaseConfigured) return
+            
+            try {
+                const { data: promotionsData, error } = await supabase
+                    .from('promotions')
+                    .select('*')
+                    .eq('enabled', true)
+                    .order('created_at', { ascending: false })
+                
+                if (error) throw error
+                
+                if (promotionsData) {
+                    // Buscar itens de cada promoção
+                    const promotionsWithItems: PromotionWithItems[] = await Promise.all(
+                        promotionsData.map(async (promotion) => {
+                            if (promotion.type === 'kit') {
+                                const { data: itemsData } = await supabase
+                                    .from('promotion_items')
+                                    .select(`
+                                        *,
+                                        products:product_id (
+                                            id,
+                                            name,
+                                            price,
+                                            image
+                                        )
+                                    `)
+                                    .eq('promotion_id', promotion.id)
+                                
+                                const items = (itemsData || []).map((item: any) => ({
+                                    id: item.id,
+                                    promotion_id: item.promotion_id,
+                                    product_id: item.product_id,
+                                    quantity: item.quantity,
+                                    created_at: item.created_at,
+                                    product: item.products ? {
+                                        id: item.products.id,
+                                        name: item.products.name,
+                                        price: item.products.price,
+                                        image: item.products.image
+                                    } : undefined
+                                }))
+                                
+                                return { ...promotion, items } as PromotionWithItems
+                            }
+                            
+                            return { ...promotion, items: [] } as PromotionWithItems
+                        })
+                    )
+                    
+                    setPromotions(promotionsWithItems)
+                }
+            } catch (err) {
+                console.error('Error fetching promotions:', err)
+            }
+        }
+        
+        fetchPromotions()
+    }, [])
 
     const handleAddCategory = async () => {
         if (!newCategoryName.trim()) return
@@ -55,11 +122,30 @@ export function Menu() {
         }
     }
 
-
-
-
     // Usar menuItems diretamente (já são produtos com price)
     const availableItems = menuItems.filter(item => item.price > 0 && item.status === "Available")
+
+    // Filtrar itens por categoria selecionada
+    const getFilteredItems = () => {
+        if (selectedCategory === "all") {
+            return availableItems
+        }
+        return availableItems.filter(item => 
+            item.category?.toLowerCase().includes(selectedCategory.toLowerCase())
+        )
+    }
+
+    const filteredItems = getFilteredItems()
+
+    // Agrupar produtos por categoria para exibição
+    const itemsByCategory = filteredItems.reduce((acc, item) => {
+        const category = item.category || 'Sem categoria'
+        if (!acc[category]) {
+            acc[category] = []
+        }
+        acc[category].push(item)
+        return acc
+    }, {} as Record<string, MenuItem[]>)
 
     // Funções para gerenciar quantidade no pedido
     const handleAddToOrder = (itemId: number) => {
@@ -177,15 +263,37 @@ export function Menu() {
         }
     }, [selectedItems.length])
 
-    // Group items by category
-    const itemsByCategory = availableItems.reduce((acc, item) => {
-        const category = item.category || 'Sem categoria'
-        if (!acc[category]) {
-            acc[category] = []
+    // Handler para quando clicar em uma promoção no carrossel
+    const handlePromotionClick = (promotion: PromotionWithItems) => {
+        // Adicionar promoção ao carrinho ou navegar para detalhes
+        // Por enquanto, apenas adiciona ao carrinho se for um produto simples
+        if (promotion.type === 'product' && promotion.price) {
+            const existingItem = selectedItems.find(item => item.id === promotion.id)
+            if (existingItem) {
+                setSelectedItems(selectedItems.map(item => 
+                    item.id === promotion.id 
+                        ? { ...item, quantity: item.quantity + 1 }
+                        : item
+                ))
+            } else {
+                // Se for produto novo, precisaria criar um item temporário
+                // Por enquanto, apenas mostra um alerta
+                alert(`Promoção: ${promotion.name}`)
+            }
+        } else {
+            // Para kits, mostra os produtos incluídos
+            alert(`Kit: ${promotion.name}\nProdutos incluídos: ${promotion.items?.map(i => i.product?.name).join(', ') || 'N/A'}`)
         }
-        acc[category].push(item)
-        return acc
-    }, {} as Record<string, MenuItem[]>)
+    }
+
+    // Calcular total de um item
+    const getItemTotal = (productId: number, price: number) => {
+        const quantity = getItemQuantity(productId)
+        return quantity * price
+    }
+
+    // Extrair categorias únicas para filtros
+    const categoryNames = categories.map(c => c.name)
 
     if (isMenuLoading) {
         return <div className="flex justify-center items-center h-64">Carregando bebidas...</div>
@@ -196,18 +304,19 @@ export function Menu() {
     }
 
     return (
-        <div className="space-y-8 w-full max-w-full overflow-x-hidden" style={{ paddingBottom: selectedItems.length > 0 ? '120px' : '0' }}>
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 w-full min-w-0">
-                <div className="min-w-0 flex-1 w-full">
-                    <h2 className="text-3xl font-bold tracking-tight break-words">{t("menu")}</h2>
-                    <p className="text-muted-foreground break-words">{t("manageMenu")}</p>
+        <div className="max-w-7xl mx-auto space-y-8" style={{ paddingBottom: selectedItems.length > 0 ? '120px' : '0' }}>
+            {/* Header Section */}
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-3xl font-bold text-gray-900">{t("menu")}</h1>
+                    <p className="text-gray-500 mt-1 text-sm">Gerencie os itens de bebidas.</p>
                 </div>
-                <div className="flex gap-2 shrink-0 w-full md:w-auto">
+                <div className="flex gap-3">
                     <Dialog open={isCategoryManagerOpen} onOpenChange={setIsCategoryManagerOpen}>
                         <DialogTrigger asChild>
-                            <Button variant="outline" className="flex-1 md:flex-none">
+                            <button className="px-4 py-2 border border-gray-300 rounded-lg bg-white text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors">
                                 Manage Categories
-                            </Button>
+                            </button>
                         </DialogTrigger>
                         <DialogContent>
                             <DialogHeader>
@@ -262,174 +371,170 @@ export function Menu() {
                             </div>
                         </DialogContent>
                     </Dialog>
-
-                    <Button onClick={() => navigate('/products/new')} className="flex-1 md:flex-none">
-                        <Plus className="mr-2 h-4 w-4" /> {t("addItem")}
-                    </Button>
+                    <button 
+                        onClick={() => navigate('/products/new')}
+                        className="px-4 py-2 bg-blue-600 rounded-lg text-sm font-medium text-white hover:bg-blue-700 transition-colors flex items-center gap-2"
+                    >
+                        <span>+</span>
+                        <span>Adicionar Item</span>
+                    </button>
                 </div>
-            </div>
-
-            {Object.keys(itemsByCategory).length === 0 && (
-                <div className="text-center text-muted-foreground p-8">
-                    Nenhuma bebida encontrada. Clique em "Adicionar Item" para criar uma nova.
-                </div>
+            </header>
+            
+            {/* Hero Carousel Section */}
+            {promotions.length > 0 && (
+                <PromotionCarousel 
+                    promotions={promotions} 
+                    onPromotionClick={handlePromotionClick}
+                />
             )}
+            
+            {/* Filter Categories */}
+            {categoryNames.length > 0 && (
+                <nav aria-label="Category Filters" className="flex flex-wrap gap-3">
+                    <button
+                        onClick={() => setSelectedCategory("all")}
+                        className={`px-5 py-2 rounded-lg border font-medium text-sm transition-colors ${
+                            selectedCategory === "all"
+                                ? "bg-gray-200 text-gray-800 border-transparent"
+                                : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                        }`}
+                    >
+                        Todos
+                    </button>
+                    {categoryNames.map((categoryName) => (
+                        <button
+                            key={categoryName}
+                            onClick={() => setSelectedCategory(categoryName)}
+                            className={`px-5 py-2 rounded-lg border font-medium text-sm transition-colors ${
+                                selectedCategory === categoryName
+                                    ? "bg-gray-200 text-gray-800 border-transparent"
+                                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                            }`}
+                        >
+                            {categoryName}
+                        </button>
+                    ))}
+                </nav>
+            )}
+            
+            {/* Product List Section */}
+            <main>
+                {Object.keys(itemsByCategory).length === 0 && (
+                    <div className="text-center py-12 text-gray-500">
+                        <p>Nenhum produto encontrado. Clique em "Adicionar Item" para criar um novo.</p>
+                    </div>
+                )}
 
-            {/* Iterate over categories to preserve order and show empty ones if desired, 
-                but for now let's stick to showing categories that have items, 
-                OR we can iterate over 'categories' state to show all sections even if empty.
-                Let's iterate over 'categories' state to be consistent with the manager.
-            */}
-            {categories.map((category) => {
-                const items = itemsByCategory[category.name] || []
-                if (items.length === 0) return null // Optional: remove this line to show empty categories
-
-                return (
-                    <div key={category.id} className="space-y-3 md:space-y-4 w-full">
-                        <h3 className="text-lg md:text-xl font-semibold capitalize truncate">{category.name}</h3>
-                        <div className="grid grid-cols-2 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
-                            {items.map((item) => (
-                                <Card key={item.id} className="overflow-hidden flex flex-col w-full min-w-0">
-                                    <div className="aspect-square md:aspect-video relative w-full overflow-hidden">
-                                        <img
-                                            src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
-                                            alt={item.name}
-                                            className="object-cover w-full h-full"
-                                            onError={(e) => {
-                                                e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
-                                            }}
-                                        />
-                                    </div>
-                                    <CardHeader className="p-2 md:p-6 min-w-0">
-                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
-                                            <span className="text-lg md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
-                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit shrink-0">
-                                                {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
-                                            </Badge>
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col min-w-0">
-                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block break-words">
-                                            {item.description || "Sem descrição"}
-                                        </p>
-                                        <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
-                                            </div>
-                                            
-                                            {/* Controles de quantidade */}
-                                            <div className="flex flex-col gap-2 min-w-0">
-                                                <div className="flex items-center gap-1 md:gap-2 min-w-0">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
-                                                        onClick={() => handleRemoveFromOrder(item.id)}
-                                                        disabled={getItemQuantity(item.id) === 0}
-                                                    >
-                                                        <Minus className="h-4 w-4 md:h-4 md:w-4" />
-                                                    </Button>
-                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center shrink-0">
-                                                        {getItemQuantity(item.id) || 0}
-                                                    </span>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
-                                                        onClick={() => handleAddToOrder(item.id)}
-                                                    >
-                                                        <Plus className="h-4 w-4 md:h-4 md:w-4" />
-                                                    </Button>
+                {Object.entries(itemsByCategory).map(([categoryName, items]) => (
+                    <div key={categoryName} className="mb-8">
+                        {/* Section Title */}
+                        <div className="flex items-center gap-3 mb-6">
+                            <h2 className="text-xl font-bold text-gray-900">{categoryName}</h2>
+                            <span className="bg-gray-100 text-gray-600 rounded-full px-2 py-0.5 text-xs font-medium">
+                                {items.length} items
+                            </span>
+                        </div>
+                        
+                        {/* Grid Layout */}
+                        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {items.map((item) => {
+                                const quantity = getItemQuantity(item.id)
+                                const total = getItemTotal(item.id, item.price)
+                                const isAvailable = item.status === "Available"
+                                
+                                return (
+                                    <article
+                                        key={item.id}
+                                        className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow"
+                                    >
+                                        {/* Image Area */}
+                                        <div className="relative bg-orange-50/30 items-center justify-center aspect-square">
+                                            {isAvailable && (
+                                                <span className="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded">
+                                                    Disponível
+                                                </span>
+                                            )}
+                                            {item.image ? (
+                                                <img
+                                                    alt={item.name}
+                                                    className="w-full h-full object-cover"
+                                                    src={item.image}
+                                                    onError={(e) => {
+                                                        e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
+                                                    }}
+                                                />
+                                            ) : (
+                                                <div className="w-full h-full bg-gray-100 flex items-center justify-center">
+                                                    <span className="text-gray-400 text-sm">Sem imagem</span>
                                                 </div>
-                                                {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate">
-                                                        {formatCurrency(item.price * getItemQuantity(item.id))}
-                                                    </span>
-                                                )}
+                                            )}
+                                        </div>
+                                        
+                                        {/* Content Area */}
+                                        <div className="p-4 flex-1 flex flex-col">
+                                            <h3 className="font-semibold text-gray-900">{item.name}</h3>
+                                            <p className="text-sm text-gray-400 mt-1">
+                                                {item.description || "Sem descrição"}
+                                            </p>
+                                            
+                                            <div className="mt-auto pt-4">
+                                                <p className="text-sm font-bold text-gray-900 mb-3">
+                                                    {formatCurrency(item.price)}
+                                                </p>
+                                                <div className="flex justify-between items-end gap-2 min-w-0">
+                                                    <div className="flex items-center border border-gray-200 rounded-lg bg-gray-50 h-9 flex-shrink-0">
+                                                        <button
+                                                            onClick={() => handleRemoveFromOrder(item.id)}
+                                                            disabled={quantity === 0}
+                                                            className="px-2 sm:px-3 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed"
+                                                        >
+                                                            <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                                        </button>
+                                                        <span className={`px-2 sm:px-3 text-sm ${
+                                                            quantity > 0
+                                                                ? 'text-gray-800 font-medium'
+                                                                : 'hidden'
+                                                        }`}>
+                                                            {quantity}
+                                                        </span>
+                                                        <input
+                                                            className={`w-6 sm:w-8 text-center bg-transparent border-none p-0 text-xs sm:text-sm text-gray-500 focus:ring-0 ${
+                                                                quantity > 0 ? 'hidden' : ''
+                                                            }`}
+                                                            readOnly
+                                                            type="number"
+                                                            value={quantity}
+                                                            style={{ WebkitAppearance: 'none', MozAppearance: 'textfield' }}
+                                                        />
+                                                        <button
+                                                            onClick={() => handleAddToOrder(item.id)}
+                                                            className="px-2 sm:px-3 text-gray-400 hover:text-gray-600"
+                                                        >
+                                                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                                        </button>
+                                                    </div>
+                                                    {quantity > 0 && (
+                                                        <div className="text-right flex-shrink-0 min-w-fit">
+                                                            <p className="text-xs text-gray-500 leading-tight">
+                                                                Total:
+                                                            </p>
+                                                            <p className="text-sm sm:text-base font-bold text-gray-900 leading-tight whitespace-nowrap">
+                                                                {formatCurrency(total)}
+                                                            </p>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                         </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
+                                    </article>
+                                )
+                            })}
                         </div>
                     </div>
-                )
-            })}
+                ))}
+            </main>
 
-            {/* Fallback for items with categories not in the list (e.g. deleted categories) */}
-            {Object.entries(itemsByCategory).map(([catName, items]) => {
-                if (categories.some(c => c.name === catName)) return null; // Already handled
-                return (
-                    <div key={catName} className="space-y-3 md:space-y-4 w-full">
-                        <h3 className="text-lg md:text-xl font-semibold capitalize truncate">{catName} (Uncategorized)</h3>
-                        <div className="grid grid-cols-2 gap-2 md:gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 w-full">
-                            {items.map(item => (
-                                <Card key={item.id} className="overflow-hidden flex flex-col w-full min-w-0">
-                                    <div className="aspect-square md:aspect-video relative w-full overflow-hidden">
-                                        <img
-                                            src={item.image || "materialApoio/imagem-nao-disponivel.gif"}
-                                            alt={item.name}
-                                            className="object-cover w-full h-full"
-                                            onError={(e) => {
-                                                e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
-                                            }}
-                                        />
-                                    </div>
-                                    <CardHeader className="p-2 md:p-6 min-w-0">
-                                        <CardTitle className="flex flex-col md:flex-row md:justify-between md:items-start gap-1 min-w-0">
-                                            <span className="text-lg md:text-base font-semibold line-clamp-2 break-words min-w-0">{item.name}</span>
-                                            <Badge variant={item.status === "Available" ? "success" : "destructive"} className="text-[10px] md:text-xs w-fit shrink-0">
-                                                {t(item.status?.toLowerCase() as any) || item.status || "Disponível"}
-                                            </Badge>
-                                        </CardTitle>
-                                    </CardHeader>
-                                    <CardContent className="p-2 md:p-6 pt-0 flex-1 flex flex-col min-w-0">
-                                        <p className="text-[10px] md:text-sm text-muted-foreground mb-2 md:mb-4 line-clamp-2 hidden md:block break-words">
-                                            {item.description || "Sem descrição"}
-                                        </p>
-                                        <div className="space-y-2 md:space-y-3 mt-auto w-full min-w-0">
-                                            <div className="flex items-center gap-2 min-w-0">
-                                                <div className="text-base md:text-2xl font-bold truncate">{formatCurrency(item.price)}</div>
-                                            </div>
-                                            
-                                            {/* Controles de quantidade */}
-                                            <div className="flex flex-col gap-2 min-w-0">
-                                                <div className="flex items-center gap-1 md:gap-2 min-w-0">
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
-                                                        onClick={() => handleRemoveFromOrder(item.id)}
-                                                        disabled={getItemQuantity(item.id) === 0}
-                                                    >
-                                                        <Minus className="h-4 w-4 md:h-4 md:w-4" />
-                                                    </Button>
-                                                    <span className="text-sm md:text-sm font-medium min-w-[1.5rem] md:min-w-[2rem] text-center shrink-0">
-                                                        {getItemQuantity(item.id) || 0}
-                                                    </span>
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="h-10 w-10 md:h-8 md:w-8 p-0 touch-manipulation shrink-0"
-                                                        onClick={() => handleAddToOrder(item.id)}
-                                                    >
-                                                        <Plus className="h-4 w-4 md:h-4 md:w-4" />
-                                                    </Button>
-                                                </div>
-                                                {getItemQuantity(item.id) > 0 && (
-                                                    <span className="text-xs md:text-sm font-semibold text-primary truncate">
-                                                        {formatCurrency(item.price * getItemQuantity(item.id))}
-                                                    </span>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
-                            ))}
-                        </div>
-                    </div>
-                )
-            })}
             {/* Resumo do Pedido - Fixo na parte inferior */}
             {selectedItems.length > 0 && (
                 <div className="fixed bottom-0 left-0 right-0 lg:left-64 bg-card border-t shadow-lg z-50 p-3 md:p-4 print:hidden overflow-hidden" style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
@@ -559,7 +664,6 @@ export function Menu() {
                     </Card>
                 </div>
             )}
-
         </div>
     )
 }
