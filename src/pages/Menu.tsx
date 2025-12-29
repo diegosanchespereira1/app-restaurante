@@ -479,7 +479,7 @@ export function Menu() {
                                         
                                         {/* Content Area */}
                                         <div className="p-4 flex-1 flex flex-col">
-                                            <h3 className="text-base font-semibold text-gray-900" style={{ fontSize: '14px', height: '18px' }}>{item.name}</h3>
+                                            <h3 className="text-base font-semibold text-gray-900" style={{ fontSize: '14px', minHeight: '36px', lineHeight: '18px', marginBottom: '4px' }}>{item.name}</h3>
                                             <p className="text-sm text-gray-400 mt-1" style={{ marginTop: '4px', marginBottom: '8px', minHeight: '36px', lineHeight: '18px', height: '18px' }}>
                                                 {item.description || "Sem descrição"}
                                             </p>

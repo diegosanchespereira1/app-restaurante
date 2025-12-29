@@ -32,6 +32,11 @@ interface MobileOrderDetailsDrawerProps {
     setCustomerName: (name: string) => void
     handleCreateOrder: () => Promise<void>
     calculateTotal: () => number
+    orderDiscountType: "fixed" | "percentage" | null
+    orderDiscountValue: number | null
+    setOrderDiscountType: (type: "fixed" | "percentage" | null) => void
+    setOrderDiscountValue: (value: number | null) => void
+    calculateSubtotal: () => number
 }
 
 export function MobileOrderDetailsDrawer({
@@ -50,7 +55,12 @@ export function MobileOrderDetailsDrawer({
     setSelectedTable,
     setCustomerName,
     handleCreateOrder,
-    calculateTotal
+    calculateTotal,
+    orderDiscountType,
+    orderDiscountValue,
+    setOrderDiscountType,
+    setOrderDiscountValue,
+    calculateSubtotal
 }: MobileOrderDetailsDrawerProps) {
     const { t } = useLanguage()
 
@@ -135,6 +145,56 @@ export function MobileOrderDetailsDrawer({
                                 onChange={(e) => setCustomerName(e.target.value)}
                             />
                         </div>
+
+                        {/* Seção de Desconto */}
+                        <div className="space-y-2">
+                            <Label className="text-sm font-medium">Desconto do Pedido</Label>
+                            <div className="flex gap-2">
+                                <Select
+                                    value={orderDiscountType || 'none'}
+                                    onValueChange={(value) => {
+                                        if (value === 'none') {
+                                            setOrderDiscountType(null)
+                                            setOrderDiscountValue(null)
+                                        } else {
+                                            setOrderDiscountType(value as "fixed" | "percentage")
+                                            if (orderDiscountValue === null) {
+                                                setOrderDiscountValue(0)
+                                            }
+                                        }
+                                    }}
+                                >
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder="Tipo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Sem desconto</SelectItem>
+                                        <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                        <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                {orderDiscountType && (
+                                    <Input
+                                        type="number"
+                                        step={orderDiscountType === 'fixed' ? "0.01" : "0.1"}
+                                        min="0"
+                                        max={orderDiscountType === 'percentage' ? "100" : undefined}
+                                        value={orderDiscountValue || ''}
+                                        onChange={(e) => setOrderDiscountValue(e.target.value ? parseFloat(e.target.value) : null)}
+                                        placeholder={orderDiscountType === 'fixed' ? "0.00" : "0"}
+                                        className="flex-1"
+                                    />
+                                )}
+                            </div>
+                            {orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0 && (
+                                <p className="text-xs text-muted-foreground">
+                                    {orderDiscountType === 'fixed' 
+                                        ? `Desconto de ${formatCurrency(orderDiscountValue)}`
+                                        : `Desconto de ${orderDiscountValue}%`
+                                    }
+                                </p>
+                            )}
+                        </div>
                     </div>
 
                     {/* Lista de Itens */}
@@ -189,9 +249,43 @@ export function MobileOrderDetailsDrawer({
 
                 {/* Footer fixo com total e botão */}
                 <div className="px-6 py-4 border-t bg-background shrink-0 space-y-4">
-                    <div className="flex justify-between items-center">
+                    {/* Resumo de valores */}
+                    <div className="space-y-2">
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Subtotal:</span>
+                            <span>{formatCurrency(calculateSubtotal())}</span>
+                        </div>
+                        {orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0 && (
+                            <div className="flex justify-between text-sm text-green-600">
+                                <span>Desconto:</span>
+                                <span>
+                                    {orderDiscountType === 'fixed' 
+                                        ? `-${formatCurrency(orderDiscountValue)}`
+                                        : `-${formatCurrency((calculateSubtotal() * orderDiscountValue) / 100)}`
+                                    }
+                                </span>
+                            </div>
+                        )}
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t">
                         <span className="text-lg font-semibold">{t("total")}</span>
-                        <span className="text-2xl font-bold">{formatCurrency(calculateTotal())}</span>
+                        {(() => {
+                            const subtotal = calculateSubtotal()
+                            const total = calculateTotal()
+                            const hasDiscount = total < subtotal
+                            return hasDiscount ? (
+                                <div className="flex flex-col items-end">
+                                    <span className="line-through text-muted-foreground text-base">
+                                        {formatCurrency(subtotal)}
+                                    </span>
+                                    <span className="text-2xl font-bold text-green-600">
+                                        {formatCurrency(total)}
+                                    </span>
+                                </div>
+                            ) : (
+                                <span className="text-2xl font-bold">{formatCurrency(total)}</span>
+                            )
+                        })()}
                     </div>
                     <Button 
                         className="w-full" 

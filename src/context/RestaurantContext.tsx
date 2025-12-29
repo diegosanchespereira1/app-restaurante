@@ -12,6 +12,10 @@ export interface MenuItem {
     status: "Available" | "Sold Out"
     image: string
     is_cold?: boolean | null
+    // Campos de desconto por método de pagamento
+    discount_type?: "fixed" | "percentage" | null
+    discount_value?: number | null
+    discount_applies_to?: string[] | null
 }
 
 export interface OrderItem {
@@ -33,6 +37,9 @@ export interface Order {
     closedAt?: string
     notes?: string
     paymentMethod?: "Cash" | "Card" | "Voucher" | "PIX"
+    // Campos de desconto do pedido
+    order_discount_type?: "fixed" | "percentage" | null
+    order_discount_value?: number | null
 }
 
 export interface Table {
@@ -64,15 +71,19 @@ const productToMenuItem = (p: Product): MenuItem => ({
     status: (p.status ?? 'Available') as "Available" | "Sold Out",
     // Preservar a imagem exata (null vira string vazia, que será tratada pelo componente)
     image: p.image ?? '',
-    is_cold: p.is_cold ?? false
+    is_cold: p.is_cold ?? false,
+    // Preservar campos de desconto
+    discount_type: p.discount_type ?? null,
+    discount_value: p.discount_value ?? null,
+    discount_applies_to: p.discount_applies_to ?? null
 })
 
 // Demo data for when Supabase is not configured
 const demoProducts: Product[] = [
-    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ]
 
 const demoMenuItems: MenuItem[] = demoProducts.map(productToMenuItem)
@@ -197,6 +208,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     customer: o.customer,
                     table: o.table_number,
                     orderType: o.order_type || 'dine_in',
+                    order_discount_type: o.order_discount_type || null,
+                    order_discount_value: o.order_discount_value || null,
                     total: o.total,
                     status: o.status,
                     time: new Date(o.created_at).toLocaleString(),
@@ -345,7 +358,9 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             total: order.total,
             status: order.status,
             created_at: new Date().toISOString(),
-            notes: order.notes
+            notes: order.notes,
+            order_discount_type: order.order_discount_type || null,
+            order_discount_value: order.order_discount_value || null
         })
 
         if (orderError) {
@@ -359,7 +374,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         const orderItems = order.items.map(item => ({
             order_id: order.id,
             product_id: item.id && item.id > 0 ? item.id : null, // usar product_id
-            menu_item_id: item.id && item.id > 0 ? item.id : null, // manter para backward compatibility durante transição
+            menu_item_id: null, // sempre NULL pois estamos usando products, não menu_items
             name: item.name,
             price: item.price,
             quantity: item.quantity
@@ -766,6 +781,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 price: product.price || null,
                 description: product.description || null,
                 status: product.status || null,
+                is_cold: product.is_cold || null,
+                discount_type: product.discount_type || null,
+                discount_value: product.discount_value || null,
+                discount_applies_to: product.discount_applies_to || null,
                 unit: product.unit || null,
                 min_stock: product.min_stock || null,
                 current_stock: product.current_stock || null,
