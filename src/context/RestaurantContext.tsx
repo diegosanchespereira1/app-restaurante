@@ -11,6 +11,11 @@ export interface MenuItem {
     category: string
     status: "Available" | "Sold Out"
     image: string
+    is_cold?: boolean | null
+    // Campos de desconto por método de pagamento
+    discount_type?: "fixed" | "percentage" | null
+    discount_value?: number | null
+    discount_applies_to?: string[] | null
 }
 
 export interface OrderItem {
@@ -27,11 +32,15 @@ export interface Order {
     orderType: "dine_in" | "takeout" | "delivery"
     items: OrderItem[]
     total: number
-    status: "Pending" | "Preparing" | "Ready" | "Delivered" | "Closed"
+    status: "Pending" | "Preparing" | "Ready" | "Delivered" | "Closed" | "Cancelled"
     time: string
+    created_at?: string
     closedAt?: string
     notes?: string
     paymentMethod?: "Cash" | "Card" | "Voucher" | "PIX"
+    // Campos de desconto do pedido
+    order_discount_type?: "fixed" | "percentage" | null
+    order_discount_value?: number | null
 }
 
 export interface Table {
@@ -62,15 +71,20 @@ const productToMenuItem = (p: Product): MenuItem => ({
     category: p.category ?? '',
     status: (p.status ?? 'Available') as "Available" | "Sold Out",
     // Preservar a imagem exata (null vira string vazia, que será tratada pelo componente)
-    image: p.image ?? ''
+    image: p.image ?? '',
+    is_cold: p.is_cold ?? false,
+    // Preservar campos de desconto
+    discount_type: p.discount_type ?? null,
+    discount_value: p.discount_value ?? null,
+    discount_applies_to: p.discount_applies_to ?? null
 })
 
 // Demo data for when Supabase is not configured
 const demoProducts: Product[] = [
-    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
-    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 1, name: "Margherita Pizza", price: 25.00, description: "Classic tomato and mozzarella", category: "Pizza", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 2, name: "Carbonara Pasta", price: 22.00, description: "Creamy bacon pasta", category: "Pasta", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 3, name: "Caesar Salad", price: 18.00, description: "Fresh romaine with Caesar dressing", category: "Salads", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: 4, name: "Tiramisu", price: 12.00, description: "Classic Italian dessert", category: "Desserts", status: "Available", image: "", unit: null, min_stock: null, current_stock: null, cost_price: null, product_type: null, ncm: null, cst_icms: null, cfop: null, icms_rate: null, ipi_rate: null, ean_code: null, is_cold: null, discount_type: null, discount_value: null, discount_applies_to: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
 ]
 
 const demoMenuItems: MenuItem[] = demoProducts.map(productToMenuItem)
@@ -100,6 +114,7 @@ interface RestaurantContextType {
     updateTableStatus: (tableId: number, status: Table["status"]) => Promise<void>
     processPayment: (orderId: string, method: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     closeTable: (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
+    cancelOrder: (orderId: string) => Promise<{ success: boolean; error?: string }>
     addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string; data?: MenuItem }>
     updateMenuItem: (id: number, item: Partial<MenuItem>) => Promise<{ success: boolean; error?: string }>
     deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>
@@ -195,9 +210,12 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     customer: o.customer,
                     table: o.table_number,
                     orderType: o.order_type || 'dine_in',
+                    order_discount_type: o.order_discount_type || null,
+                    order_discount_value: o.order_discount_value || null,
                     total: o.total,
                     status: o.status,
                     time: new Date(o.created_at).toLocaleString(),
+                    created_at: o.created_at,
                     closedAt: o.closed_at,
                     notes: o.notes,
                     paymentMethod: o.payment_method,
@@ -343,7 +361,9 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             total: order.total,
             status: order.status,
             created_at: new Date().toISOString(),
-            notes: order.notes
+            notes: order.notes,
+            order_discount_type: order.order_discount_type || null,
+            order_discount_value: order.order_discount_value || null
         })
 
         if (orderError) {
@@ -357,7 +377,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         const orderItems = order.items.map(item => ({
             order_id: order.id,
             product_id: item.id && item.id > 0 ? item.id : null, // usar product_id
-            menu_item_id: item.id && item.id > 0 ? item.id : null, // manter para backward compatibility durante transição
+            menu_item_id: null, // sempre NULL pois estamos usando products, não menu_items
             name: item.name,
             price: item.price,
             quantity: item.quantity
@@ -658,6 +678,92 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         return { success: true }
     }
 
+    const cancelOrder = async (orderId: string): Promise<{ success: boolean; error?: string }> => {
+        const order = orders.find(o => o.id === orderId)
+        if (!order) return { success: false, error: "Pedido não encontrado" }
+
+        if (order.status !== "Closed") {
+            return { success: false, error: "Apenas pedidos fechados podem ser cancelados" }
+        }
+
+        const previousOrders = [...orders]
+
+        // Atualizar estado local
+        setOrders(prev =>
+            prev.map(o => {
+                if (o.id === orderId) {
+                    return {
+                        ...o,
+                        status: "Cancelled" as const,
+                        paymentMethod: undefined,
+                        closedAt: undefined
+                    }
+                }
+                return o
+            })
+        )
+
+        // Demo mode: apenas atualizar estado local
+        if (!isSupabaseConfigured) {
+            // Se o pedido tinha uma mesa, verificar se precisa atualizar status da mesa
+            if (order.table) {
+                const otherActiveOrders = orders.filter(
+                    o => o.table === order.table && o.id !== orderId && o.status === "Closed"
+                )
+                if (otherActiveOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+            return { success: true }
+        }
+
+        // Atualizar no banco de dados
+        try {
+            const { error: updateError } = await supabase
+                .from('orders')
+                .update({
+                    status: 'Cancelled',
+                    payment_method: null,
+                    closed_at: null
+                })
+                .eq('id', orderId)
+
+            if (updateError) {
+                console.error("Error cancelling order:", updateError)
+                setOrders(previousOrders)
+                return { success: false, error: updateError.message }
+            }
+
+            // Se o pedido tinha uma mesa, verificar se precisa atualizar status da mesa
+            // Quando cancelamos um pedido fechado, a mesa já deveria estar disponível,
+            // mas verificamos se há outros pedidos ativos (não fechados, não cancelados)
+            if (order.table) {
+                const { data: activeOrders } = await supabase
+                    .from('orders')
+                    .select('id')
+                    .eq('table_number', order.table)
+                    .in('status', ['Pending', 'Preparing', 'Ready', 'Delivered', 'Closed'])
+
+                // Se não há mais pedidos (excluindo cancelados), liberar a mesa
+                if (!activeOrders || activeOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+
+            return { success: true }
+        } catch (error: any) {
+            console.error("Error cancelling order:", error)
+            setOrders(previousOrders)
+            return { success: false, error: error.message || "Erro ao cancelar pedido" }
+        }
+    }
+
     // Menu CRUD (agora usando products)
     const addMenuItem = async (item: Omit<MenuItem, "id">): Promise<{ success: boolean; error?: string; data?: MenuItem }> => {
         // Demo mode: just use local state
@@ -764,6 +870,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 price: product.price || null,
                 description: product.description || null,
                 status: product.status || null,
+                is_cold: product.is_cold || null,
+                discount_type: product.discount_type || null,
+                discount_value: product.discount_value || null,
+                discount_applies_to: product.discount_applies_to || null,
                 unit: product.unit || null,
                 min_stock: product.min_stock || null,
                 current_stock: product.current_stock || null,
@@ -1040,6 +1150,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 updateTableStatus,
                 processPayment,
                 closeTable,
+                cancelOrder,
                 addMenuItem,
                 updateMenuItem,
                 deleteMenuItem,

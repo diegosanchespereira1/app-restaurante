@@ -11,6 +11,7 @@ import { Textarea } from "../components/ui/textarea"
 import { ArrowLeft, Save, Plus, Upload, Loader2 } from "lucide-react"
 import type { CreateProductInput } from "../types/product"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
+import { formatCurrency } from "../lib/utils"
 
 const DEFAULT_IMAGE = 'materialApoio/imagem-nao-disponivel.gif'
 
@@ -40,6 +41,11 @@ export function AddProduct() {
         price: null,
         description: null,
         status: null,
+        is_cold: false,
+        // Campos de desconto por método de pagamento
+        discount_type: null,
+        discount_value: null,
+        discount_applies_to: null,
         // Campos de estoque
         unit: null,
         min_stock: null,
@@ -607,22 +613,167 @@ export function AddProduct() {
                             />
                         </div>
 
+                        {/* Campo Bebida Gelada - sempre visível */}
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="is_cold"
+                                checked={formData.is_cold || false}
+                                onChange={(e) => setFormData({ ...formData, is_cold: e.target.checked })}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="is_cold" className="cursor-pointer">
+                                Bebida gelada (mostra ícone de floco de neve)
+                            </Label>
+                        </div>
+
                         {formData.price && (
-                            <div>
-                                <Label htmlFor="status">Status</Label>
-                                <Select
-                                    value={formData.status || 'Available'}
-                                    onValueChange={(value: "Available" | "Sold Out") => setFormData({ ...formData, status: value })}
-                                >
-                                    <SelectTrigger id="status">
-                                        <SelectValue />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Available">Disponível</SelectItem>
-                                        <SelectItem value="Sold Out">Esgotado</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
+                            <>
+                                <div>
+                                    <Label htmlFor="status">Status</Label>
+                                    <Select
+                                        value={formData.status || 'Available'}
+                                        onValueChange={(value: "Available" | "Sold Out") => setFormData({ ...formData, status: value })}
+                                    >
+                                        <SelectTrigger id="status">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Available">Disponível</SelectItem>
+                                            <SelectItem value="Sold Out">Esgotado</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                
+                                {/* Campos de Desconto por Método de Pagamento */}
+                                <div className="border-t pt-4 mt-4 space-y-4">
+                                    <div>
+                                        <Label className="text-base font-semibold">Desconto por Método de Pagamento</Label>
+                                        <p className="text-sm text-muted-foreground mb-3">
+                                            Configure desconto para pagamentos em dinheiro e PIX
+                                        </p>
+                                    </div>
+                                    
+                                    <div>
+                                        <Label htmlFor="discount_type">Tipo de Desconto</Label>
+                                        <Select
+                                            value={formData.discount_type || 'none'}
+                                            onValueChange={(value) => {
+                                                if (value === 'none') {
+                                                    setFormData({ 
+                                                        ...formData, 
+                                                        discount_type: null, 
+                                                        discount_value: null,
+                                                        discount_applies_to: null
+                                                    })
+                                                } else {
+                                                    setFormData({ 
+                                                        ...formData, 
+                                                        discount_type: value as "fixed" | "percentage",
+                                                        discount_value: formData.discount_value || null
+                                                    })
+                                                }
+                                            }}
+                                        >
+                                            <SelectTrigger id="discount_type">
+                                                <SelectValue placeholder="Selecione o tipo" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">Sem desconto</SelectItem>
+                                                <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                                <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+
+                                    {formData.discount_type && (
+                                        <>
+                                            <div>
+                                                <Label htmlFor="discount_value">
+                                                    {formData.discount_type === 'fixed' ? 'Valor do Desconto (R$)' : 'Percentual do Desconto (%)'}
+                                                </Label>
+                                                <Input
+                                                    id="discount_value"
+                                                    type="number"
+                                                    step={formData.discount_type === 'fixed' ? "0.01" : "0.1"}
+                                                    min="0"
+                                                    max={formData.discount_type === 'percentage' ? "100" : undefined}
+                                                    value={formData.discount_value || ''}
+                                                    onChange={(e) => setFormData({ 
+                                                        ...formData, 
+                                                        discount_value: e.target.value ? parseFloat(e.target.value) : null 
+                                                    })}
+                                                    placeholder={formData.discount_type === 'fixed' ? "0.00" : "0"}
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <Label>Aplicar desconto para:</Label>
+                                                <div className="space-y-2 mt-2">
+                                                    <div className="flex items-center space-x-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            id="discount_cash"
+                                                            checked={formData.discount_applies_to?.includes('Cash') || false}
+                                                            onChange={(e) => {
+                                                                const current = formData.discount_applies_to || []
+                                                                if (e.target.checked) {
+                                                                    setFormData({ 
+                                                                        ...formData, 
+                                                                        discount_applies_to: [...current, 'Cash']
+                                                                    })
+                                                                } else {
+                                                                    setFormData({ 
+                                                                        ...formData, 
+                                                                        discount_applies_to: current.filter(m => m !== 'Cash')
+                                                                    })
+                                                                }
+                                                            }}
+                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <Label htmlFor="discount_cash" className="cursor-pointer">
+                                                            Dinheiro (Cash)
+                                                        </Label>
+                                                    </div>
+                                                    <div className="flex items-center space-x-2">
+                                                        <input
+                                                            type="checkbox"
+                                                            id="discount_pix"
+                                                            checked={formData.discount_applies_to?.includes('PIX') || false}
+                                                            onChange={(e) => {
+                                                                const current = formData.discount_applies_to || []
+                                                                if (e.target.checked) {
+                                                                    setFormData({ 
+                                                                        ...formData, 
+                                                                        discount_applies_to: [...current, 'PIX']
+                                                                    })
+                                                                } else {
+                                                                    setFormData({ 
+                                                                        ...formData, 
+                                                                        discount_applies_to: current.filter(m => m !== 'PIX')
+                                                                    })
+                                                                }
+                                                            }}
+                                                            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <Label htmlFor="discount_pix" className="cursor-pointer">
+                                                            PIX
+                                                        </Label>
+                                                    </div>
+                                                </div>
+                                                {formData.discount_type && formData.discount_value && formData.discount_applies_to && formData.discount_applies_to.length > 0 && (
+                                                    <p className="text-xs text-muted-foreground mt-2">
+                                                        {formData.discount_type === 'fixed' 
+                                                            ? `Desconto de ${formatCurrency(formData.discount_value)} aplicado em pagamentos via ${formData.discount_applies_to.join(' e ')}`
+                                                            : `Desconto de ${formData.discount_value}% aplicado em pagamentos via ${formData.discount_applies_to.join(' e ')}`
+                                                        }
+                                                    </p>
+                                                )}
+                                            </div>
+                                        </>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>

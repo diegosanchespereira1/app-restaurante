@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer } from "lucide-react"
@@ -16,21 +16,139 @@ import {
 } from "../components/ui/dialog"
 import { Label } from "../components/ui/label"
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
+import { Input } from "../components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 
-import { formatCurrency } from "../lib/utils"
+import { formatCurrency, calculatePriceWithDiscount, validatePaymentDiscount } from "../lib/utils"
 import { printReceipt } from "../lib/printer"
+import { supabase, isSupabaseConfigured } from "../lib/supabase"
+import type { Product } from "../types/product"
 
 export function OrderDetails() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const { orders, updateOrderStatus, processPayment } = useRestaurant()
+    const { orders, updateOrderStatus, processPayment, menuItems } = useRestaurant()
     const { t } = useLanguage()
-    const { printerSettings } = useSettings()
+    const { printerSettings, settings } = useSettings()
     const [note, setNote] = useState("")
     const [isPaymentOpen, setIsPaymentOpen] = useState(false)
     const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Voucher" | "PIX">("Cash")
+    const [products, setProducts] = useState<Product[]>([])
+    const [paymentDiscountType, setPaymentDiscountType] = useState<"fixed" | "percentage" | null>(null)
+    const [paymentDiscountValue, setPaymentDiscountValue] = useState<number | null>(null)
+    const [discountError, setDiscountError] = useState<string | null>(null)
 
     const order = orders.find(o => o.id === id)
+
+    // Buscar produtos completos para aplicar desconto
+    useEffect(() => {
+        if (!isSupabaseConfigured || !order) return
+
+        const fetchProducts = async () => {
+            const productIds = order.items.map(item => item.id).filter(id => id != null)
+            
+            if (productIds.length === 0) return
+
+            const { data, error } = await supabase
+                .from('products')
+                .select('*')
+                .in('id', productIds)
+
+            if (!error && data) {
+                setProducts(data)
+            }
+        }
+
+        fetchProducts()
+    }, [order, isSupabaseConfigured])
+
+    // Calcular subtotal com desconto por método de pagamento
+    const subtotalWithPaymentDiscount = useMemo(() => {
+        if (!order) return 0
+        
+        let subtotal = 0
+        
+        for (const item of order.items) {
+            const product = products.find(p => p.id === item.id)
+            const menuItem = menuItems.find(m => m.id === item.id)
+            
+            const basePrice = item.price
+            const discountType = product?.discount_type || menuItem?.discount_type
+            const discountValue = product?.discount_value || menuItem?.discount_value
+            const discountAppliesTo = product?.discount_applies_to || menuItem?.discount_applies_to
+            
+            const priceWithDiscount = calculatePriceWithDiscount(
+                basePrice,
+                discountType,
+                discountValue,
+                discountAppliesTo,
+                paymentMethod
+            )
+            
+            subtotal += priceWithDiscount * item.quantity
+        }
+        
+        return subtotal
+    }, [order, products, menuItems, paymentMethod])
+
+    // Calcular subtotal antes do desconto no pagamento (com desconto do pedido aplicado)
+    const subtotalBeforePaymentDiscount = useMemo(() => {
+        if (!order) return 0
+        
+        let total = subtotalWithPaymentDiscount
+        
+        // Aplicar desconto do pedido se existir
+        if (order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0) {
+            if (order.order_discount_type === 'fixed') {
+                total = Math.max(0, total - order.order_discount_value)
+            } else if (order.order_discount_type === 'percentage') {
+                const discountAmount = (total * order.order_discount_value) / 100
+                total = Math.max(0, total - discountAmount)
+            }
+        }
+        
+        return total
+    }, [order, subtotalWithPaymentDiscount])
+
+    // Calcular total com desconto aplicado (incluindo desconto do pedido e desconto no pagamento)
+    const totalWithDiscount = useMemo(() => {
+        if (!order) return 0
+        
+        let total = subtotalBeforePaymentDiscount
+        
+        // Aplicar desconto no pagamento se existir
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0) {
+            if (paymentDiscountType === 'fixed') {
+                total = Math.max(0, total - paymentDiscountValue)
+            } else if (paymentDiscountType === 'percentage') {
+                const discountAmount = (total * paymentDiscountValue) / 100
+                total = Math.max(0, total - discountAmount)
+            }
+        }
+        
+        return total
+    }, [order, subtotalBeforePaymentDiscount, paymentDiscountType, paymentDiscountValue])
+
+    // Validar desconto quando o valor mudar
+    useEffect(() => {
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+            const validation = validatePaymentDiscount(
+                paymentDiscountType,
+                paymentDiscountValue,
+                settings.paymentDiscountLimitType,
+                settings.paymentDiscountLimitValue,
+                subtotalBeforePaymentDiscount
+            )
+            
+            if (!validation.isValid) {
+                setDiscountError(validation.errorMessage || null)
+            } else {
+                setDiscountError(null)
+            }
+        } else {
+            setDiscountError(null)
+        }
+    }, [paymentDiscountType, paymentDiscountValue, settings.paymentDiscountLimitType, settings.paymentDiscountLimitValue, subtotalBeforePaymentDiscount, order])
 
     if (!order) {
         return <div className="p-8 text-center">{t("orderNotFound")}</div>
@@ -53,6 +171,22 @@ export function OrderDetails() {
     }
 
     const handlePayment = async () => {
+        // Validar desconto antes de processar o pagamento
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+            const validation = validatePaymentDiscount(
+                paymentDiscountType,
+                paymentDiscountValue,
+                settings.paymentDiscountLimitType,
+                settings.paymentDiscountLimitValue,
+                subtotalBeforePaymentDiscount
+            )
+            
+            if (!validation.isValid) {
+                alert(validation.errorMessage || 'Limite de desconto maior do que o permitido.')
+                return
+            }
+        }
+
         const result = await processPayment(order.id, paymentMethod)
         if (result.success) {
             setIsPaymentOpen(false)
@@ -112,6 +246,15 @@ export function OrderDetails() {
         }
     }
 
+    const getPaymentMethodIcon = (method: "Cash" | "Card" | "Voucher" | "PIX", className: string = "h-4 w-4") => {
+        switch (method) {
+            case 'Cash': return <Wallet className={className} />
+            case 'Card': return <CreditCard className={className} />
+            case 'Voucher': return <Ticket className={className} />
+            case 'PIX': return <QrCode className={className} />
+        }
+    }
+
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
             {/* BEGIN: MainHeader */}
@@ -139,6 +282,15 @@ export function OrderDetails() {
                         <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
                         <span>•</span>
                         <span>{t("customer")}: {order.customer}</span>
+                        {order.status === "Closed" && order.paymentMethod && (
+                            <>
+                                <span>•</span>
+                                <div className="flex items-center gap-1.5">
+                                    {getPaymentMethodIcon(order.paymentMethod)}
+                                    <span>{t("paymentMethod")}: {t(order.paymentMethod.toLowerCase() as any)}</span>
+                                </div>
+                            </>
+                        )}
                     </div>
                 </div>
                 {/* Header Right: Action Buttons */}
@@ -171,56 +323,184 @@ export function OrderDetails() {
                                     <DialogHeader>
                                         <DialogTitle>{t("confirmPayment")}</DialogTitle>
                                         <DialogDescription>
-                                            {t("selectPaymentMethod")} {formatCurrency(order.total * 1.1)}.
+                                            {t("selectPaymentMethod")} {formatCurrency(totalWithDiscount)}.
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="grid gap-4 py-4">
-                                        <RadioGroup
-                                            value={paymentMethod}
-                                            onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
-                                            className="grid grid-cols-2 gap-4"
-                                        >
-                                            <div>
-                                                <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="cash"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                        <div className="space-y-2">
+                                            <Label>{t("paymentMethod")}</Label>
+                                            <RadioGroup
+                                                value={paymentMethod}
+                                                onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
+                                                className="grid grid-cols-2 gap-4"
+                                            >
+                                                <div>
+                                                    <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="cash"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <Wallet className="mb-3 h-6 w-6" />
+                                                        {t("cash")}
+                                                    </Label>
+                                                </div>
+                                                <div>
+                                                    <RadioGroupItem value="Card" id="card" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="card"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <CreditCard className="mb-3 h-6 w-6" />
+                                                        {t("card")}
+                                                    </Label>
+                                                </div>
+                                                <div>
+                                                    <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="voucher"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <Ticket className="mb-3 h-6 w-6" />
+                                                        {t("voucher")}
+                                                    </Label>
+                                                </div>
+                                                <div>
+                                                    <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="pix"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <QrCode className="mb-3 h-6 w-6" />
+                                                        {t("pix")}
+                                                    </Label>
+                                                </div>
+                                            </RadioGroup>
+                                        </div>
+
+                                        {/* Campo de Desconto no Pagamento */}
+                                        <div className="space-y-2">
+                                            <Label>Desconto no Pagamento</Label>
+                                            <div className="flex gap-2">
+                                                <Select
+                                                    value={paymentDiscountType || 'none'}
+                                                    onValueChange={(value) => {
+                                                        if (value === 'none') {
+                                                            setPaymentDiscountType(null)
+                                                            setPaymentDiscountValue(null)
+                                                            setDiscountError(null)
+                                                        } else {
+                                                            setPaymentDiscountType(value as "fixed" | "percentage")
+                                                            if (paymentDiscountValue === null) {
+                                                                setPaymentDiscountValue(0)
+                                                            }
+                                                            // Validar se já há valor definido
+                                                            if (paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    value as "fixed" | "percentage",
+                                                                    paymentDiscountValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                            }
+                                                        }
+                                                    }}
                                                 >
-                                                    <Wallet className="mb-3 h-6 w-6" />
-                                                    {t("cash")}
-                                                </Label>
+                                                    <SelectTrigger className="flex-1">
+                                                        <SelectValue placeholder="Tipo" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">Sem desconto</SelectItem>
+                                                        <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                                        <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                {paymentDiscountType && (
+                                                    <Input
+                                                        type="number"
+                                                        step={paymentDiscountType === 'fixed' ? "0.01" : "0.1"}
+                                                        min="0"
+                                                        max={paymentDiscountType === 'percentage' ? "100" : undefined}
+                                                        value={paymentDiscountValue || ''}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value
+                                                            const numValue = value ? parseFloat(value) : null
+                                                            setPaymentDiscountValue(numValue)
+                                                            
+                                                            // Validação em tempo real
+                                                            if (numValue !== null && numValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    paymentDiscountType,
+                                                                    numValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                            } else {
+                                                                setDiscountError(null)
+                                                            }
+                                                        }}
+                                                        placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
+                                                        className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
+                                                    />
+                                                )}
                                             </div>
-                                            <div>
-                                                <RadioGroupItem value="Card" id="card" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="card"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                >
-                                                    <CreditCard className="mb-3 h-6 w-6" />
-                                                    {t("card")}
-                                                </Label>
+                                            {discountError && (
+                                                <div className="text-sm text-red-600 mt-1">
+                                                    {discountError}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Resumo de valores */}
+                                        <div className="space-y-2 pt-2 border-t">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Subtotal:</span>
+                                                <span>{formatCurrency(subtotalWithPaymentDiscount)}</span>
                                             </div>
-                                            <div>
-                                                <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="voucher"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                >
-                                                    <Ticket className="mb-3 h-6 w-6" />
-                                                    {t("voucher")}
-                                                </Label>
+                                            {order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0 && (
+                                                <div className="flex justify-between text-sm text-green-600">
+                                                    <span>Desconto do Pedido:</span>
+                                                    <span>
+                                                        {order.order_discount_type === 'fixed' 
+                                                            ? `-${formatCurrency(order.order_discount_value)}`
+                                                            : `-${formatCurrency((subtotalWithPaymentDiscount * order.order_discount_value) / 100)}`
+                                                        }
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && (
+                                                <div className="flex justify-between text-sm text-green-600">
+                                                    <span>Desconto no Pagamento:</span>
+                                                    <span>
+                                                        {paymentDiscountType === 'fixed' 
+                                                            ? `-${formatCurrency(paymentDiscountValue)}`
+                                                            : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
+                                                        }
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between font-bold pt-2 border-t">
+                                                <span>Total:</span>
+                                                {(() => {
+                                                    const hasDiscount = totalWithDiscount < subtotalBeforePaymentDiscount
+                                                    return hasDiscount ? (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="line-through text-muted-foreground text-sm">
+                                                                {formatCurrency(subtotalBeforePaymentDiscount)}
+                                                            </span>
+                                                            <span className="text-green-600 text-lg">
+                                                                {formatCurrency(totalWithDiscount)}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span>{formatCurrency(totalWithDiscount)}</span>
+                                                    )
+                                                })()}
                                             </div>
-                                            <div>
-                                                <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="pix"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                >
-                                                    <QrCode className="mb-3 h-6 w-6" />
-                                                    {t("pix")}
-                                                </Label>
-                                            </div>
-                                        </RadioGroup>
+                                        </div>
                                     </div>
                                     <DialogFooter>
                                         <Button onClick={handlePayment}>{t("confirmPayment")}</Button>
@@ -240,7 +520,21 @@ export function OrderDetails() {
                     {/* Total Value Card - PROMINENT */}
                     <section className="bg-white p-6 rounded-xl shadow-lg border border-gray-100">
                         <h2 className="text-base font-medium text-gray-700 mb-1">{t("total")}</h2>
-                        <p className="text-4xl font-bold text-gray-900">{formatCurrency(order.total)}</p>
+                        {(() => {
+                            const hasDiscount = totalWithDiscount < order.total
+                            return hasDiscount ? (
+                                <div className="flex flex-col">
+                                    <span className="line-through text-muted-foreground text-xl">
+                                        {formatCurrency(order.total)}
+                                    </span>
+                                    <span className="text-4xl font-bold text-green-600">
+                                        {formatCurrency(totalWithDiscount)}
+                                    </span>
+                                </div>
+                            ) : (
+                                <p className="text-4xl font-bold text-gray-900">{formatCurrency(order.total)}</p>
+                            )
+                        })()}
                     </section>
 
                     {/* Order Status Card */}
@@ -250,6 +544,17 @@ export function OrderDetails() {
                             {getStatusIcon(order.status)}
                             <span>{t(order.status.toLowerCase() as any) || order.status}</span>
                         </div>
+                        {order.status === "Closed" && order.paymentMethod && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-700">{t("paymentMethod")}:</span>
+                                    <div className="flex items-center gap-2">
+                                        {getPaymentMethodIcon(order.paymentMethod, "h-4 w-4 text-gray-600")}
+                                        <span className="text-sm font-semibold text-gray-900">{t(order.paymentMethod.toLowerCase() as any)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </section>
 
                     {/* Order Summary Card */}
@@ -258,13 +563,69 @@ export function OrderDetails() {
                         <div className="space-y-2 text-sm text-gray-600 mb-4">
                             <div className="flex justify-between">
                                 <span>{t("subtotal")}</span>
-                                <span>{formatCurrency(order.total)}</span>
+                                <span>{formatCurrency(order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0))}</span>
                             </div>
-                            <div className="flex justify-between font-bold">
+                            {/* Desconto do pedido se existir */}
+                            {order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0 && (
+                                <div className="flex justify-between text-green-600">
+                                    <span>Desconto do Pedido:</span>
+                                    <span>
+                                        {order.order_discount_type === 'fixed' 
+                                            ? `-${formatCurrency(order.order_discount_value || 0)}`
+                                            : `-${formatCurrency((order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0) * (order.order_discount_value || 0)) / 100)}`
+                                        }
+                                    </span>
+                                </div>
+                            )}
+                            {/* Desconto por método de pagamento */}
+                            {(() => {
+                                const subtotal = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
+                                const orderDiscount = order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0
+                                    ? (order.order_discount_type === 'fixed' 
+                                        ? order.order_discount_value 
+                                        : (subtotal * order.order_discount_value) / 100)
+                                    : 0
+                                const subtotalAfterOrderDiscount = subtotal - orderDiscount
+                                const hasPaymentDiscount = totalWithDiscount < subtotalAfterOrderDiscount
+                                
+                                if (hasPaymentDiscount) {
+                                    return (
+                                        <div className="flex justify-between text-green-600">
+                                            <span>Desconto por Pagamento:</span>
+                                            <span>-{formatCurrency(subtotalAfterOrderDiscount - totalWithDiscount)}</span>
+                                        </div>
+                                    )
+                                }
+                                return null
+                            })()}
+                            <div className="flex justify-between font-bold pt-2 border-t">
                                 <span>{t("total")}:</span>
-                                <span>{formatCurrency(order.total)}</span>
+                                {(() => {
+                                    const hasDiscount = totalWithDiscount < order.total
+                                    return hasDiscount ? (
+                                        <div className="flex flex-col items-end">
+                                            <span className="line-through text-muted-foreground text-sm">
+                                                {formatCurrency(order.total)}
+                                            </span>
+                                            <span className="text-green-600">{formatCurrency(totalWithDiscount)}</span>
+                                        </div>
+                                    ) : (
+                                        <span>{formatCurrency(order.total)}</span>
+                                    )
+                                })()}
                             </div>
                         </div>
+                        {order.status === "Closed" && order.paymentMethod && (
+                            <div className="mt-4 pt-4 border-t border-gray-200">
+                                <div className="flex items-center justify-between">
+                                    <span className="text-sm font-medium text-gray-700">{t("paymentMethod")}:</span>
+                                    <div className="flex items-center gap-2">
+                                        {getPaymentMethodIcon(order.paymentMethod, "h-4 w-4 text-gray-600")}
+                                        <span className="text-sm font-semibold text-gray-900">{t(order.paymentMethod.toLowerCase() as any)}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                         {order.status !== "Closed" && (
                             <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
                                 <DialogTrigger asChild>
@@ -277,56 +638,184 @@ export function OrderDetails() {
                                     <DialogHeader>
                                         <DialogTitle>{t("confirmPayment")}</DialogTitle>
                                         <DialogDescription>
-                                            {t("selectPaymentMethod")} {formatCurrency(order.total)}.
+                                            {t("selectPaymentMethod")} {formatCurrency(totalWithDiscount)}.
                                         </DialogDescription>
                                     </DialogHeader>
                                     <div className="grid gap-4 py-4">
-                                        <RadioGroup
-                                            value={paymentMethod}
-                                            onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
-                                            className="grid grid-cols-2 gap-4"
-                                        >
-                                            <div>
-                                                <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="cash"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
+                                        <div className="space-y-2">
+                                            <Label>{t("paymentMethod")}</Label>
+                                            <RadioGroup
+                                                value={paymentMethod}
+                                                onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
+                                                className="grid grid-cols-2 gap-4"
+                                            >
+                                                <div>
+                                                    <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="cash"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <Wallet className="mb-3 h-6 w-6" />
+                                                        {t("cash")}
+                                                    </Label>
+                                                </div>
+                                                <div>
+                                                    <RadioGroupItem value="Card" id="card" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="card"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <CreditCard className="mb-3 h-6 w-6" />
+                                                        {t("card")}
+                                                    </Label>
+                                                </div>
+                                                <div>
+                                                    <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="voucher"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <Ticket className="mb-3 h-6 w-6" />
+                                                        {t("voucher")}
+                                                    </Label>
+                                                </div>
+                                                <div>
+                                                    <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
+                                                    <Label
+                                                        htmlFor="pix"
+                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                    >
+                                                        <QrCode className="mb-3 h-6 w-6" />
+                                                        {t("pix")}
+                                                    </Label>
+                                                </div>
+                                            </RadioGroup>
+                                        </div>
+
+                                        {/* Campo de Desconto no Pagamento */}
+                                        <div className="space-y-2">
+                                            <Label>Desconto no Pagamento</Label>
+                                            <div className="flex gap-2">
+                                                <Select
+                                                    value={paymentDiscountType || 'none'}
+                                                    onValueChange={(value) => {
+                                                        if (value === 'none') {
+                                                            setPaymentDiscountType(null)
+                                                            setPaymentDiscountValue(null)
+                                                            setDiscountError(null)
+                                                        } else {
+                                                            setPaymentDiscountType(value as "fixed" | "percentage")
+                                                            if (paymentDiscountValue === null) {
+                                                                setPaymentDiscountValue(0)
+                                                            }
+                                                            // Validar se já há valor definido
+                                                            if (paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    value as "fixed" | "percentage",
+                                                                    paymentDiscountValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                            }
+                                                        }
+                                                    }}
                                                 >
-                                                    <Wallet className="mb-3 h-6 w-6" />
-                                                    {t("cash")}
-                                                </Label>
+                                                    <SelectTrigger className="flex-1">
+                                                        <SelectValue placeholder="Tipo" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="none">Sem desconto</SelectItem>
+                                                        <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                                        <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                                {paymentDiscountType && (
+                                                    <Input
+                                                        type="number"
+                                                        step={paymentDiscountType === 'fixed' ? "0.01" : "0.1"}
+                                                        min="0"
+                                                        max={paymentDiscountType === 'percentage' ? "100" : undefined}
+                                                        value={paymentDiscountValue || ''}
+                                                        onChange={(e) => {
+                                                            const value = e.target.value
+                                                            const numValue = value ? parseFloat(value) : null
+                                                            setPaymentDiscountValue(numValue)
+                                                            
+                                                            // Validação em tempo real
+                                                            if (numValue !== null && numValue > 0 && order) {
+                                                                const validation = validatePaymentDiscount(
+                                                                    paymentDiscountType,
+                                                                    numValue,
+                                                                    settings.paymentDiscountLimitType,
+                                                                    settings.paymentDiscountLimitValue,
+                                                                    subtotalBeforePaymentDiscount
+                                                                )
+                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                            } else {
+                                                                setDiscountError(null)
+                                                            }
+                                                        }}
+                                                        placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
+                                                        className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
+                                                    />
+                                                )}
                                             </div>
-                                            <div>
-                                                <RadioGroupItem value="Card" id="card" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="card"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                >
-                                                    <CreditCard className="mb-3 h-6 w-6" />
-                                                    {t("card")}
-                                                </Label>
+                                            {discountError && (
+                                                <div className="text-sm text-red-600 mt-1">
+                                                    {discountError}
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        {/* Resumo de valores */}
+                                        <div className="space-y-2 pt-2 border-t">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-muted-foreground">Subtotal:</span>
+                                                <span>{formatCurrency(subtotalWithPaymentDiscount)}</span>
                                             </div>
-                                            <div>
-                                                <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="voucher"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                >
-                                                    <Ticket className="mb-3 h-6 w-6" />
-                                                    {t("voucher")}
-                                                </Label>
+                                            {order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0 && (
+                                                <div className="flex justify-between text-sm text-green-600">
+                                                    <span>Desconto do Pedido:</span>
+                                                    <span>
+                                                        {order.order_discount_type === 'fixed' 
+                                                            ? `-${formatCurrency(order.order_discount_value)}`
+                                                            : `-${formatCurrency((subtotalWithPaymentDiscount * order.order_discount_value) / 100)}`
+                                                        }
+                                                    </span>
+                                                </div>
+                                            )}
+                                            {paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && (
+                                                <div className="flex justify-between text-sm text-green-600">
+                                                    <span>Desconto no Pagamento:</span>
+                                                    <span>
+                                                        {paymentDiscountType === 'fixed' 
+                                                            ? `-${formatCurrency(paymentDiscountValue)}`
+                                                            : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
+                                                        }
+                                                    </span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between font-bold pt-2 border-t">
+                                                <span>Total:</span>
+                                                {(() => {
+                                                    const hasDiscount = totalWithDiscount < subtotalBeforePaymentDiscount
+                                                    return hasDiscount ? (
+                                                        <div className="flex flex-col items-end">
+                                                            <span className="line-through text-muted-foreground text-sm">
+                                                                {formatCurrency(subtotalBeforePaymentDiscount)}
+                                                            </span>
+                                                            <span className="text-green-600 text-lg">
+                                                                {formatCurrency(totalWithDiscount)}
+                                                            </span>
+                                                        </div>
+                                                    ) : (
+                                                        <span>{formatCurrency(totalWithDiscount)}</span>
+                                                    )
+                                                })()}
                                             </div>
-                                            <div>
-                                                <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
-                                                <Label
-                                                    htmlFor="pix"
-                                                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary [&:has([data-state=checked])]:border-primary"
-                                                >
-                                                    <QrCode className="mb-3 h-6 w-6" />
-                                                    {t("pix")}
-                                                </Label>
-                                            </div>
-                                        </RadioGroup>
+                                        </div>
                                     </div>
                                     <DialogFooter>
                                         <Button onClick={handlePayment}>{t("confirmPayment")}</Button>

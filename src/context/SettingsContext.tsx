@@ -18,6 +18,8 @@ interface Settings {
   enableTables: boolean
   enableOrderDisplay: boolean
   printer: PrinterSettings
+  paymentDiscountLimitType: "fixed" | "percentage" | null
+  paymentDiscountLimitValue: number | null
 }
 
 interface SettingsContextType {
@@ -46,7 +48,9 @@ const defaultSettings: Settings = {
   language: 'pt',
   enableTables: true,
   enableOrderDisplay: false,
-  printer: defaultPrinterSettings
+  printer: defaultPrinterSettings,
+  paymentDiscountLimitType: null,
+  paymentDiscountLimitValue: null
 }
 
 const SettingsContext = createContext<SettingsContextType | undefined>(undefined)

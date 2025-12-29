@@ -11,6 +11,10 @@ export interface InventoryItem {
   image: string | null
   description: string | null
   status: "Available" | "Sold Out" | null
+  is_cold: boolean | null
+  discount_type: "fixed" | "percentage" | null
+  discount_value: number | null
+  discount_applies_to: string[] | null
   product_type: string | null
   ncm: string | null
   cst_icms: string | null
@@ -78,6 +82,10 @@ export interface CreateInventoryItemInput {
   image?: string | null
   description?: string | null
   status?: "Available" | "Sold Out" | null
+  is_cold?: boolean | null
+  discount_type?: "fixed" | "percentage" | null
+  discount_value?: number | null
+  discount_applies_to?: string[] | null
   product_type?: string | null
   ncm?: string | null
   cst_icms?: string | null

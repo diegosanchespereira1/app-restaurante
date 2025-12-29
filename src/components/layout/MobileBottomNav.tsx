@@ -1,5 +1,5 @@
 import React from "react"
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Package, TrendingUp, DollarSign } from "lucide-react"
+import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Package, TrendingUp, DollarSign, Tag } from "lucide-react"
 import { NavLink, useNavigate, useLocation } from "react-router-dom"
 import { cn } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
@@ -42,6 +42,12 @@ export function MobileBottomNav() {
     let visibleCards: AdminCard[] = []
     if (isSettingsPage) {
         const adminCards: AdminCard[] = [
+            { 
+                href: "/promotions", 
+                label: "Promoções", 
+                icon: Tag, 
+                requiredRole: ['admin', 'gerente', 'usuario'] as any 
+            },
             { 
                 href: "/stock", 
                 label: t("stockManagement") || "Estoque", 

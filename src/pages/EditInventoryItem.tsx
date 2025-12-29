@@ -55,6 +55,11 @@ export function EditInventoryItem() {
         image: DEFAULT_IMAGE,
         description: null as string | null,
         status: null as "Available" | "Sold Out" | null,
+        is_cold: false as boolean | null,
+        // Campos de desconto por método de pagamento
+        discount_type: null as "fixed" | "percentage" | null,
+        discount_value: null as number | null,
+        discount_applies_to: null as string[] | null,
         product_type: '',
         ncm: '',
         cst_icms: '',
@@ -88,6 +93,11 @@ export function EditInventoryItem() {
                     image: imageToUse, // Preservar imagem atual se existir
                     description: currentItem.description || null,
                     status: currentItem.status || null,
+                    is_cold: (currentItem as any).is_cold ?? false,
+                    // Campos de desconto por método de pagamento
+                    discount_type: (currentItem as any).discount_type ?? null,
+                    discount_value: (currentItem as any).discount_value ?? null,
+                    discount_applies_to: (currentItem as any).discount_applies_to ?? null,
                     product_type: currentItem.product_type || '',
                     ncm: currentItem.ncm || '',
                     cst_icms: currentItem.cst_icms || '',
@@ -571,6 +581,11 @@ export function EditInventoryItem() {
                 image: imageToSave,
                 description: formData.description || null,
                 status: formData.status || null,
+                is_cold: formData.is_cold || null,
+                // Campos de desconto por método de pagamento
+                discount_type: formData.discount_type || null,
+                discount_value: formData.discount_value || null,
+                discount_applies_to: formData.discount_applies_to || null,
                 product_type: formData.product_type || null,
                 ncm: formData.ncm || null,
                 cst_icms: formData.cst_icms || null,
@@ -842,6 +857,20 @@ export function EditInventoryItem() {
                             />
                         </div>
 
+                        {/* Campo Bebida Gelada - sempre visível */}
+                        <div className="flex items-center space-x-2">
+                            <input
+                                type="checkbox"
+                                id="is_cold"
+                                checked={formData.is_cold || false}
+                                onChange={(e) => setFormData({ ...formData, is_cold: e.target.checked })}
+                                className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <Label htmlFor="is_cold" className="cursor-pointer">
+                                Bebida gelada (mostra ícone de floco de neve)
+                            </Label>
+                        </div>
+
                         {formData.selling_price && (
                             <div>
                                 <Label htmlFor="status">Status</Label>
@@ -859,6 +888,127 @@ export function EditInventoryItem() {
                                 </Select>
                             </div>
                         )}
+
+                        {/* Campos de Desconto por Método de Pagamento */}
+                        <div className="border-t pt-4 mt-4 space-y-4">
+                            <div>
+                                <Label className="text-base font-semibold">Desconto por Método de Pagamento</Label>
+                                <p className="text-sm text-muted-foreground mb-3">
+                                    Configure desconto para pagamentos em dinheiro e PIX
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <Label htmlFor="discount_type">Tipo de Desconto</Label>
+                                <Select
+                                    value={formData.discount_type || 'none'}
+                                    onValueChange={(value) => {
+                                        if (value === 'none') {
+                                            setFormData({ 
+                                                ...formData, 
+                                                discount_type: null, 
+                                                discount_value: null,
+                                                discount_applies_to: null
+                                            })
+                                        } else {
+                                            setFormData({ 
+                                                ...formData, 
+                                                discount_type: value as "fixed" | "percentage",
+                                                discount_value: formData.discount_value || null
+                                            })
+                                        }
+                                    }}
+                                >
+                                    <SelectTrigger id="discount_type">
+                                        <SelectValue placeholder="Selecione o tipo" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">Sem desconto</SelectItem>
+                                        <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                        <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {formData.discount_type && (
+                                <>
+                                    <div>
+                                        <Label htmlFor="discount_value">
+                                            {formData.discount_type === 'fixed' ? 'Valor do Desconto (R$)' : 'Percentual do Desconto (%)'}
+                                        </Label>
+                                        <Input
+                                            id="discount_value"
+                                            type="number"
+                                            step={formData.discount_type === 'fixed' ? "0.01" : "0.1"}
+                                            min="0"
+                                            max={formData.discount_type === 'percentage' ? "100" : undefined}
+                                            value={formData.discount_value || ''}
+                                            onChange={(e) => setFormData({ 
+                                                ...formData, 
+                                                discount_value: e.target.value ? parseFloat(e.target.value) : null 
+                                            })}
+                                            placeholder={formData.discount_type === 'fixed' ? "0.00" : "0"}
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <Label>Aplicar desconto para:</Label>
+                                        <div className="space-y-2 mt-2">
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="discount_cash"
+                                                    checked={formData.discount_applies_to?.includes('Cash') || false}
+                                                    onChange={(e) => {
+                                                        const current = formData.discount_applies_to || []
+                                                        if (e.target.checked) {
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                discount_applies_to: [...current, 'Cash']
+                                                            })
+                                                        } else {
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                discount_applies_to: current.filter(m => m !== 'Cash')
+                                                            })
+                                                        }
+                                                    }}
+                                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <Label htmlFor="discount_cash" className="cursor-pointer">
+                                                    Dinheiro (Cash)
+                                                </Label>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <input
+                                                    type="checkbox"
+                                                    id="discount_pix"
+                                                    checked={formData.discount_applies_to?.includes('PIX') || false}
+                                                    onChange={(e) => {
+                                                        const current = formData.discount_applies_to || []
+                                                        if (e.target.checked) {
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                discount_applies_to: [...current, 'PIX']
+                                                            })
+                                                        } else {
+                                                            setFormData({ 
+                                                                ...formData, 
+                                                                discount_applies_to: current.filter(m => m !== 'PIX')
+                                                            })
+                                                        }
+                                                    }}
+                                                    className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                />
+                                                <Label htmlFor="discount_pix" className="cursor-pointer">
+                                                    PIX
+                                                </Label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
 

@@ -11,6 +11,12 @@ export interface Product {
   price: number | null // preço de venda
   description: string | null
   status: "Available" | "Sold Out" | null
+  is_cold: boolean | null // indica se a bebida é gelada
+  
+  // Campos de desconto por método de pagamento
+  discount_type: "fixed" | "percentage" | null // tipo de desconto: valor fixo ou percentual
+  discount_value: number | null // valor do desconto (em reais se fixed, em % se percentage)
+  discount_applies_to: string[] | null // métodos de pagamento que o desconto se aplica: ['Cash', 'PIX']
   
   // Campos de estoque (pode ser NULL se produto não tem controle de estoque)
   unit: string | null
@@ -42,6 +48,12 @@ export interface CreateProductInput {
   price?: number | null
   description?: string | null
   status?: "Available" | "Sold Out" | null
+  is_cold?: boolean | null
+  
+  // Campos de desconto por método de pagamento
+  discount_type?: "fixed" | "percentage" | null
+  discount_value?: number | null
+  discount_applies_to?: string[] | null
   
   // Campos de estoque
   unit?: string | null

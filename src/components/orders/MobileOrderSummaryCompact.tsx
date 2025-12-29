@@ -26,6 +26,11 @@ interface MobileOrderSummaryCompactProps {
     setCustomerName: (name: string) => void
     handleCreateOrder: () => Promise<void>
     calculateTotal: () => number
+    orderDiscountType: "fixed" | "percentage" | null
+    orderDiscountValue: number | null
+    setOrderDiscountType: (type: "fixed" | "percentage" | null) => void
+    setOrderDiscountValue: (value: number | null) => void
+    calculateSubtotal: () => number
 }
 
 export function MobileOrderSummaryCompact({
@@ -42,7 +47,12 @@ export function MobileOrderSummaryCompact({
     setSelectedTable,
     setCustomerName,
     handleCreateOrder,
-    calculateTotal
+    calculateTotal,
+    orderDiscountType,
+    orderDiscountValue,
+    setOrderDiscountType,
+    setOrderDiscountValue,
+    calculateSubtotal
 }: MobileOrderSummaryCompactProps) {
     const { t } = useLanguage()
     const [isDrawerOpen, setIsDrawerOpen] = useState(false)
@@ -103,6 +113,11 @@ export function MobileOrderSummaryCompact({
                 setCustomerName={setCustomerName}
                 handleCreateOrder={handleCreateOrder}
                 calculateTotal={calculateTotal}
+                orderDiscountType={orderDiscountType}
+                orderDiscountValue={orderDiscountValue}
+                setOrderDiscountType={setOrderDiscountType}
+                setOrderDiscountValue={setOrderDiscountValue}
+                calculateSubtotal={calculateSubtotal}
             />
         </>
     )
