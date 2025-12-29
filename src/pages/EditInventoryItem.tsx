@@ -872,8 +872,8 @@ export function EditInventoryItem() {
                         <div>
                             <Label htmlFor="unit">Unidade de Medida</Label>
                             <Select
-                                value={formData.unit || ''}
-                                onValueChange={(value) => setFormData({ ...formData, unit: value || null })}
+                                value={formData.unit ?? ''}
+                                onValueChange={(value: string) => setFormData({ ...formData, unit: value })}
                             >
                                 <SelectTrigger id="unit">
                                     <SelectValue placeholder="Selecione uma unidade" />
