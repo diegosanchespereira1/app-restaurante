@@ -446,17 +446,17 @@ export function Menu() {
                                     <article
                                         key={item.id}
                                         className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden flex flex-col hover:shadow-md transition-shadow w-full max-w-[169px] sm:max-w-[169px]"
-                                        style={{ height: '350px' }}
+                                        style={{ minHeight: '380px' }}
                                     >
                                         {/* Image Area */}
-                                        <div className="relative bg-orange-50/30 flex items-center justify-center aspect-square w-full" style={{ height: '110px', paddingTop: '0px', paddingBottom: '0px', marginTop: '7px', marginBottom: '7px' }}>
+                                        <div className="relative bg-orange-50/30 flex items-center justify-center aspect-square w-full" style={{ paddingTop: '0px', paddingBottom: '0px', marginTop: '7px', marginBottom: '7px' }}>
                                             {item.is_cold && (
                                                 <div className="absolute top-3 left-3 bg-blue-100 text-blue-700 rounded-full p-1.5 shadow-sm">
                                                     <Snowflake className="h-4 w-4" />
                                                 </div>
                                             )}
                                             {isAvailable && (
-                                                <span className="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded" style={{ paddingLeft: '8px', paddingRight: '8px', width: '74px' }}>
+                                                <span className="absolute top-3 right-3 bg-green-100 text-green-700 text-xs font-semibold px-2 py-1 rounded" style={{ left: '90px', paddingLeft: '5px', paddingRight: '5px', width: '80px', marginLeft: '0px', marginRight: '0px' }}>
                                                     Disponível
                                                 </span>
                                             )}
@@ -465,7 +465,7 @@ export function Menu() {
                                                     alt={item.name}
                                                     className="object-cover"
                                                     src={item.image}
-                                                    style={{ width: '120px', height: '120px', overflow: 'visible', marginTop: '7px', marginBottom: '7px' }}
+                                                    style={{ marginTop: '7px', marginBottom: '7px', height: '120px' }}
                                                     onError={(e) => {
                                                         e.currentTarget.src = "materialApoio/imagem-nao-disponivel.gif"
                                                     }}
@@ -480,57 +480,57 @@ export function Menu() {
                                         {/* Content Area */}
                                         <div className="p-4 flex-1 flex flex-col">
                                             <h3 className="text-base font-semibold text-gray-900" style={{ fontSize: '14px', height: '18px' }}>{item.name}</h3>
-                                            <p className="text-sm text-gray-400 mt-1" style={{ marginTop: '4px', marginBottom: '10px', minHeight: '36px', lineHeight: '18px' }}>
+                                            <p className="text-sm text-gray-400 mt-1" style={{ marginTop: '4px', marginBottom: '8px', minHeight: '36px', lineHeight: '18px', height: '18px' }}>
                                                 {item.description || "Sem descrição"}
                                             </p>
                                             
-                                            <div className="mt-auto" style={{ paddingTop: '5px', marginTop: '0px' }}>
+                                            <div className="mt-auto" style={{ paddingTop: '5px', marginTop: 'auto' }}>
                                                 <p className="text-sm font-bold text-gray-900 mb-3" style={{ marginBottom: '10px' }}>
                                                     {formatCurrency(item.price)}
                                                 </p>
                                                 <div className="flex justify-center items-center">
-                                                    <div className="flex justify-center items-center border border-gray-200 rounded-lg bg-gray-50 h-9 flex-shrink-0" style={{ width: '150px', marginTop: '5px', marginBottom: '5px', textAlign: 'center', justifyContent: 'center' }}>
+                                                    <div className="flex justify-center items-center border border-gray-200 rounded-lg bg-gray-50 flex-shrink-0 overflow-hidden" style={{ width: '115px', height: '35px', marginTop: '5px', marginBottom: '5px', textAlign: 'center', justifyContent: 'center' }}>
                                                         <button
                                                             onClick={() => handleRemoveFromOrder(item.id)}
                                                             disabled={quantity === 0}
-                                                            className="px-2 sm:px-3 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed"
+                                                            className="px-1 text-gray-400 hover:text-gray-600 disabled:cursor-not-allowed flex-shrink-0 flex items-center justify-center"
+                                                            style={{ minWidth: '24px', paddingLeft: '6px', paddingRight: '6px' }}
                                                         >
-                                                            <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                                            <Minus className="h-3 w-3" />
                                                         </button>
-                                                        <span className={`text-sm ${
+                                                        <span className={`text-sm flex-1 text-center min-w-0 ${
                                                             quantity > 0
                                                                 ? 'text-gray-800 font-medium'
                                                                 : 'hidden'
-                                                        }`} style={{ paddingLeft: '33px', paddingRight: '33px' }}>
+                                                        }`} style={{ lineHeight: '35px' }}>
                                                             {quantity}
                                                         </span>
                                                         <input
-                                                            className={`w-6 sm:w-8 text-center bg-transparent border-none p-0 text-xs sm:text-sm text-gray-500 focus:ring-0 ${
+                                                            className={`flex-1 text-center bg-transparent border-none p-0 text-xs text-gray-500 focus:ring-0 min-w-0 ${
                                                                 quantity > 0 ? 'hidden' : ''
                                                             }`}
                                                             readOnly
                                                             type="number"
                                                             value={quantity}
-                                                            style={{ WebkitAppearance: 'none', MozAppearance: 'textfield', marginLeft: '29px', marginRight: '29px' }}
+                                                            style={{ WebkitAppearance: 'none', MozAppearance: 'textfield', lineHeight: '35px' }}
                                                         />
                                                         <button
                                                             onClick={() => handleAddToOrder(item.id)}
-                                                            className="px-2 sm:px-3 text-gray-400 hover:text-gray-600"
+                                                            className="px-1 text-gray-400 hover:text-gray-600 flex-shrink-0 flex items-center justify-center"
+                                                            style={{ minWidth: '24px', paddingLeft: '6px', paddingRight: '6px' }}
                                                         >
-                                                            <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                                            <Plus className="h-3 w-3" />
                                                         </button>
                                                     </div>
                                                 </div>
-                                                {quantity > 0 && (
-                                                    <div className="mt-2">
-                                                        <p className="text-xs text-gray-500 leading-tight" style={{ marginTop: '0px', marginBottom: '0px' }}>
-                                                            Total:
-                                                        </p>
-                                                        <p className="text-sm sm:text-base font-bold text-gray-900 leading-tight">
-                                                            {formatCurrency(total)}
-                                                        </p>
-                                                    </div>
-                                                )}
+                                                <div className="mt-2">
+                                                    <p className="text-xs text-gray-500 leading-tight" style={{ marginTop: '0px', marginBottom: '0px' }}>
+                                                        TOTAL:
+                                                    </p>
+                                                    <p className="text-sm sm:text-base font-bold text-gray-900 leading-tight">
+                                                        {quantity > 0 ? formatCurrency(total) : '-'}
+                                                    </p>
+                                                </div>
                                             </div>
                                         </div>
                                     </article>
