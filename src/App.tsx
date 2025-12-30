@@ -10,6 +10,7 @@ import { Menu } from "./pages/Menu"
 import { Settings } from "./pages/Settings"
 import { Finance } from "./pages/Finance"
 import { SalesChart } from "./pages/SalesChart"
+import { IfoodIntegration } from "./pages/IfoodIntegration"
 import { OrderDisplay } from "./pages/OrderDisplay"
 import { OrderDisplayStandalone } from "./pages/OrderDisplayStandalone"
 import { Login } from "./pages/Login"
@@ -79,6 +80,14 @@ function AuthenticatedRoutes() {
           element={
             <ProtectedRoute requiredRole={['admin', 'gerente']}>
               <Settings />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/ifood" 
+          element={
+            <ProtectedRoute requiredRole="admin">
+              <IfoodIntegration />
             </ProtectedRoute>
           } 
         />

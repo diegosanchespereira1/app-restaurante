@@ -18,6 +18,13 @@ cp .env.example .env
 - `BACKEND_PORT`: Porta do servidor (padrão: 3000)
 - `FRONTEND_URL`: URL do frontend para CORS
 - `PRINTER_TIMEOUT`: Timeout de conexão com impressora em ms (padrão: 5000)
+- `SUPABASE_URL`: URL do projeto Supabase (obrigatório para integração iFood)
+- `SUPABASE_SERVICE_ROLE_KEY`: Service Role Key do Supabase (obrigatório para integração iFood)
+- `IFOOD_ENCRYPTION_KEY`: Chave para criptografar credenciais do iFood (opcional, usa chave padrão se não fornecido)
+- `IFOOD_API_TIMEOUT`: Timeout para requisições à API do iFood em ms (padrão: 30000)
+- `BACKEND_URL` ou `BACKEND_PUBLIC_URL`: URL pública do backend para webhooks (opcional)
+
+**Importante**: Consulte `IFOOD_BEST_PRACTICES.md` antes de fazer alterações no código de integração com iFood.
 
 ## Desenvolvimento
 
@@ -41,7 +48,23 @@ npm start
 
 ## Endpoints
 
-### POST `/api/printer/test`
+### Integração iFood
+
+#### POST `/api/ifood/config`
+Configura credenciais da integração com iFood.
+
+#### GET `/api/ifood/config`
+Obtém configuração atual da integração.
+
+#### POST `/api/ifood/webhook`
+Endpoint para receber webhooks do iFood.
+
+#### GET `/api/ifood/status`
+Obtém status da integração.
+
+### Impressora
+
+#### POST `/api/printer/test`
 Testa conexão com impressora de rede.
 
 **Body:**

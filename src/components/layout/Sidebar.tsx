@@ -1,4 +1,4 @@
-import { LayoutDashboard, ClipboardList, Settings, Armchair, Menu, DollarSign, TrendingUp, LogOut, User, Package, Tag } from "lucide-react"
+import { LayoutDashboard, ClipboardList, Settings, Armchair, Menu, DollarSign, TrendingUp, LogOut, User, Package, Tag, ShoppingBag } from "lucide-react"
 import { cn } from "../../lib/utils"
 import { NavLink, useNavigate } from "react-router-dom"
 import { useLanguage } from "../../context/LanguageContext"
@@ -31,6 +31,7 @@ export function Sidebar({ className, onClose }: SidebarProps) {
         { href: "/stock", label: t("stockManagement") || "Estoque", icon: Package, requiredRole: 'admin' as any },
         { href: "/sales", label: t("salesAnalysis"), icon: TrendingUp, requiredRole: ['admin', 'gerente'] as any },
         { href: "/finance", label: t("finance"), icon: DollarSign, requiredRole: ['admin', 'gerente'] as any },
+        { href: "/ifood", label: "iFood", icon: ShoppingBag, requiredRole: 'admin' as any },
         { href: "/settings", label: t("settings"), icon: Settings, requiredRole: ['admin', 'gerente'] as any },
     ]
 

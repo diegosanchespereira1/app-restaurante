@@ -2,6 +2,8 @@ import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
 import printerRoutes from './routes/printer.js'
+import ifoodRoutes from './routes/ifood.js'
+import { IfoodPollingService } from './services/ifood-polling.js'
 
 // Carregar variáveis de ambiente
 dotenv.config()
@@ -26,6 +28,7 @@ app.use((req, res, next) => {
 
 // Rotas
 app.use('/api/printer', printerRoutes)
+app.use('/api/ifood', ifoodRoutes)
 
 // Rota de health check
 app.get('/health', (req, res) => {
@@ -55,10 +58,20 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
 })
 
 // Iniciar servidor
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`🚀 Servidor backend rodando na porta ${PORT}`)
   console.log(`📡 Frontend esperado em: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`)
   console.log(`⏱️  Timeout de impressora: ${process.env.PRINTER_TIMEOUT || '5000'}ms`)
+  
+  // Inicializar serviço de polling do iFood
+  try {
+    const pollingService = new IfoodPollingService()
+    await pollingService.start()
+    console.log('✅ Serviço de polling do iFood inicializado')
+  } catch (error) {
+    console.error('⚠️  Erro ao inicializar serviço de polling do iFood:', error)
+    console.log('   (Isso é normal se a integração não estiver configurada)')
+  }
 })
 
 

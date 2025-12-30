@@ -5,6 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useSettings } from "../context/SettingsContext"
 import { Input } from "../components/ui/input"
+import { IfoodOrderBadge } from "../components/ifood/IfoodOrderBadge"
 
 import { formatCurrency } from "../lib/utils"
 
@@ -207,8 +208,13 @@ export function Orders() {
                                 <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-3">
                                     <div className="flex items-center justify-between">
                                         <span className="text-sm font-medium text-primary">ID do Pedido</span>
-                                        <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full">
-                                            <span className="font-mono font-bold text-sm tracking-wider">{order.id}</span>
+                                        <div className="flex items-center gap-2">
+                                            {order.source === 'ifood' && (
+                                                <IfoodOrderBadge ifoodStatus={order.ifood_status} />
+                                            )}
+                                            <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full">
+                                                <span className="font-mono font-bold text-sm tracking-wider">{order.id}</span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
