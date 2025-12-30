@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select'
 import { Button } from '../components/ui/button'
@@ -10,7 +11,7 @@ import { useLanguage } from '../context/LanguageContext'
 import { useAuth } from '../context/AuthContext'
 import { formatCurrency } from '../lib/utils'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts'
-import { TrendingUp, Filter, X, Wallet, CreditCard, Ticket, QrCode, ChevronLeft, ChevronRight } from 'lucide-react'
+import { TrendingUp, Filter, X, Wallet, CreditCard, Ticket, QrCode, ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 
 interface SalesData {
@@ -24,6 +25,7 @@ interface SalesData {
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8', '#82CA9D', '#FFC658', '#FF7C7C']
 
 export function SalesChart() {
+    const navigate = useNavigate()
     const { orders, menuItems, categories, cancelOrder } = useRestaurant()
     const { t } = useLanguage()
     const { profile, user } = useAuth()
@@ -549,6 +551,7 @@ export function SalesChart() {
                                                 <th className="text-left py-2 px-4 font-medium">ID</th>
                                                 <th className="text-left py-2 px-4 font-medium">Cliente</th>
                                                 <th className="text-left py-2 px-4 font-medium">Data/Hora</th>
+                                                <th className="text-left py-2 px-4 font-medium">Status Pagamento</th>
                                                 <th className="text-left py-2 px-4 font-medium">Método Pagamento</th>
                                                 <th className="text-right py-2 px-4 font-medium">Total</th>
                                                 {canCancelOrder && (
@@ -558,7 +561,11 @@ export function SalesChart() {
                                         </thead>
                                         <tbody>
                                             {paginatedOrders.map((order) => (
-                                                <tr key={order.id} className="border-b hover:bg-muted/50">
+                                                <tr 
+                                                    key={order.id} 
+                                                    className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
+                                                    onClick={() => navigate(`/orders/${order.id}`)}
+                                                >
                                                     <td className="py-3 px-4 font-mono text-sm">{order.id}</td>
                                                     <td className="py-3 px-4">{order.customer}</td>
                                                     <td className="py-3 px-4 text-sm text-muted-foreground">
@@ -568,6 +575,16 @@ export function SalesChart() {
                                                                 ? new Date(order.created_at).toLocaleString('pt-BR')
                                                                 : order.time
                                                         }
+                                                    </td>
+                                                    <td className="py-3 px-4">
+                                                        {order.status === "Closed" && order.paymentMethod ? (
+                                                            <div className="flex items-center gap-2 text-green-600">
+                                                                <CheckCircle className="h-4 w-4" />
+                                                                <span className="font-medium">Pago</span>
+                                                            </div>
+                                                        ) : (
+                                                            <span className="text-muted-foreground">-</span>
+                                                        )}
                                                     </td>
                                                     <td className="py-3 px-4">
                                                         {order.paymentMethod ? (
@@ -583,7 +600,7 @@ export function SalesChart() {
                                                         {formatCurrency(order.total)}
                                                     </td>
                                                     {canCancelOrder && (
-                                                        <td className="py-3 px-4 text-center">
+                                                        <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
                                                             <Button
                                                                 variant="destructive"
                                                                 size="sm"

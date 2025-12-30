@@ -41,6 +41,8 @@ export interface Order {
     // Campos de desconto do pedido
     order_discount_type?: "fixed" | "percentage" | null
     order_discount_value?: number | null
+    // Campo de cancelamento
+    cancellation_reason?: string | null
 }
 
 export interface Table {
@@ -115,6 +117,7 @@ interface RestaurantContextType {
     processPayment: (orderId: string, method: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     closeTable: (tableId: number, paymentMethod: "Cash" | "Card" | "Voucher" | "PIX") => Promise<{ success: boolean; error?: string }>
     cancelOrder: (orderId: string) => Promise<{ success: boolean; error?: string }>
+    cancelUnpaidOrder: (orderId: string, password: string, cancellationReason: string) => Promise<{ success: boolean; error?: string }>
     addMenuItem: (item: Omit<MenuItem, "id">) => Promise<{ success: boolean; error?: string; data?: MenuItem }>
     updateMenuItem: (id: number, item: Partial<MenuItem>) => Promise<{ success: boolean; error?: string }>
     deleteMenuItem: (id: number) => Promise<{ success: boolean; error?: string }>
@@ -219,6 +222,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     closedAt: o.closed_at,
                     notes: o.notes,
                     paymentMethod: o.payment_method,
+                    cancellation_reason: o.cancellation_reason || null,
                     items: o.items.map((i: any) => ({
                         id: i.product_id || i.menu_item_id, // suporta ambos durante transição
                         name: i.name,
@@ -388,6 +392,40 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             console.error("Error adding items:", itemsError)
             // We might want to delete the order if items fail, but for now just report error
             return { success: false, error: itemsError.message }
+        }
+
+        // Reduce stock for order items when order is created
+        try {
+            // Get current user for stock movement
+            const { data: { user } } = await supabase.auth.getUser()
+
+            // For each item in the order, find matching product and reduce stock
+            for (const orderItem of order.items) {
+                // Try to find product by id (product_id) or by name
+                const { data: products } = await supabase
+                    .from('products')
+                    .select('id')
+                    .or(`id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                    .limit(1)
+
+                if (products && products.length > 0) {
+                    const productId = products[0].id
+
+                    // Create stock movement (exit) - estoque reduzido na criação do pedido
+                    await supabase.from('stock_movements').insert({
+                        product_id: productId,
+                        movement_type: 'exit',
+                        quantity: orderItem.quantity,
+                        reference_id: parseInt(order.id.replace(/\D/g, '')) || null,
+                        reference_type: 'order',
+                        notes: `Saída via pedido ${order.id} (criação do pedido)`,
+                        created_by: user?.id || null
+                    })
+                }
+            }
+        } catch (stockError) {
+            console.error("Error reducing stock:", stockError)
+            // Don't fail the order creation if stock reduction fails, but log the error
         }
 
         // Update Table Status
@@ -748,6 +786,277 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     .in('status', ['Pending', 'Preparing', 'Ready', 'Delivered', 'Closed'])
 
                 // Se não há mais pedidos (excluindo cancelados), liberar a mesa
+                if (!activeOrders || activeOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+
+            return { success: true }
+        } catch (error: any) {
+            console.error("Error cancelling order:", error)
+            setOrders(previousOrders)
+            return { success: false, error: error.message || "Erro ao cancelar pedido" }
+        }
+    }
+
+    const cancelUnpaidOrder = async (
+        orderId: string,
+        password: string,
+        cancellationReason: string
+    ): Promise<{ success: boolean; error?: string }> => {
+        const order = orders.find(o => o.id === orderId)
+        if (!order) return { success: false, error: "Pedido não encontrado" }
+
+        // Validar que pedido não está fechado ou cancelado
+        if (order.status === "Closed") {
+            return { success: false, error: "Pedidos pagos não podem ser cancelados" }
+        }
+        if (order.status === "Cancelled") {
+            return { success: false, error: "Pedido já está cancelado" }
+        }
+
+        // Demo mode: apenas atualizar estado local
+        if (!isSupabaseConfigured) {
+            const previousOrders = [...orders]
+            setOrders(prev =>
+                prev.map(o => {
+                    if (o.id === orderId) {
+                        return {
+                            ...o,
+                            status: "Cancelled" as const,
+                            cancellation_reason: cancellationReason
+                        }
+                    }
+                    return o
+                })
+            )
+            // Liberar mesa se necessário
+            if (order.table) {
+                const otherActiveOrders = orders.filter(
+                    o => o.table === order.table && o.id !== orderId && o.status !== "Closed" && o.status !== "Cancelled"
+                )
+                if (otherActiveOrders.length === 0) {
+                    const table = tables.find(t => t.number === order.table)
+                    if (table) {
+                        updateTableStatus(table.id, "Available")
+                    }
+                }
+            }
+            return { success: true }
+        }
+
+        // Validar senha de admin ou gerente
+        // Salvar sessão original para restaurar depois
+        const { data: { session: originalSession } } = await supabase.auth.getSession()
+        const originalUserId = originalSession?.user?.id
+
+        try {
+            // Primeiro, tentar validar com o usuário atual se ele for admin/gerente
+            let validPassword = false
+            let authenticatedUser = null
+            let currentUserProfile = null
+
+            if (originalUserId) {
+                const { data: profileData } = await supabase
+                    .from('user_profiles')
+                    .select('email, role')
+                    .eq('id', originalUserId)
+                    .single()
+
+                currentUserProfile = profileData
+
+                if (currentUserProfile && (currentUserProfile.role === 'admin' || currentUserProfile.role === 'gerente')) {
+                    // Tentar autenticar com o usuário atual
+                    try {
+                        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+                            email: currentUserProfile.email,
+                            password: password,
+                        })
+
+                        if (!signInError && data.user) {
+                            validPassword = true
+                            authenticatedUser = data.user
+                        }
+                    } catch (err) {
+                        // Senha incorreta para o usuário atual, continuar
+                    }
+                }
+            }
+
+            // Se não validou com o usuário atual, tentar com outros admins/gerentes
+            if (!validPassword) {
+                const { data: adminGerenteProfiles, error: profileError } = await supabase
+                    .from('user_profiles')
+                    .select('email, role')
+                    .in('role', ['admin', 'gerente'])
+
+                if (profileError || !adminGerenteProfiles || adminGerenteProfiles.length === 0) {
+                    // Restaurar sessão original antes de retornar
+                    if (originalSession) {
+                        await supabase.auth.setSession({
+                            access_token: originalSession.access_token,
+                            refresh_token: originalSession.refresh_token
+                        })
+                    }
+                    return { success: false, error: "Erro ao validar permissões" }
+                }
+
+                // Tentar autenticar com cada admin/gerente até encontrar senha válida
+                for (const profile of adminGerenteProfiles) {
+                    // Pular se já tentamos com este usuário
+                    if (originalUserId && currentUserProfile && profile.email === currentUserProfile.email) {
+                        continue
+                    }
+
+                    try {
+                        const { data, error: signInError } = await supabase.auth.signInWithPassword({
+                            email: profile.email,
+                            password: password,
+                        })
+
+                        if (!signInError && data.user) {
+                            // Verificar se o perfil do usuário autenticado é admin ou gerente
+                            const { data: userProfile } = await supabase
+                                .from('user_profiles')
+                                .select('role')
+                                .eq('id', data.user.id)
+                                .single()
+
+                            if (userProfile && (userProfile.role === 'admin' || userProfile.role === 'gerente')) {
+                                validPassword = true
+                                authenticatedUser = data.user
+                                break
+                            } else {
+                                // Fazer logout se não for admin/gerente
+                                await supabase.auth.signOut()
+                            }
+                        }
+                    } catch (err) {
+                        // Continuar tentando com próximo usuário
+                        continue
+                    }
+                }
+            }
+
+            if (!validPassword || !authenticatedUser) {
+                // Restaurar sessão original antes de retornar
+                if (originalSession) {
+                    await supabase.auth.setSession({
+                        access_token: originalSession.access_token,
+                        refresh_token: originalSession.refresh_token
+                    })
+                }
+                return { success: false, error: "Senha de admin/gerente inválida" }
+            }
+
+            // Restaurar sessão original se não era o mesmo usuário
+            if (originalSession && originalUserId !== authenticatedUser.id) {
+                await supabase.auth.setSession({
+                    access_token: originalSession.access_token,
+                    refresh_token: originalSession.refresh_token
+                })
+            }
+
+        } catch (authError: any) {
+            // Restaurar sessão original em caso de erro
+            if (originalSession) {
+                try {
+                    await supabase.auth.setSession({
+                        access_token: originalSession.access_token,
+                        refresh_token: originalSession.refresh_token
+                    })
+                } catch (restoreError) {
+                    console.error("Error restoring session:", restoreError)
+                }
+            }
+            return { success: false, error: authError.message || "Erro ao validar senha" }
+        }
+
+        const previousOrders = [...orders]
+
+        // Atualizar estado local
+        setOrders(prev =>
+            prev.map(o => {
+                if (o.id === orderId) {
+                    return {
+                        ...o,
+                        status: "Cancelled" as const,
+                        cancellation_reason: cancellationReason
+                    }
+                }
+                return o
+            })
+        )
+
+        // Atualizar no banco de dados
+        try {
+            const { error: updateError } = await supabase
+                .from('orders')
+                .update({
+                    status: 'Cancelled',
+                    cancellation_reason: cancellationReason
+                })
+                .eq('id', orderId)
+
+            if (updateError) {
+                console.error("Error cancelling order:", updateError)
+                setOrders(previousOrders)
+                return { success: false, error: updateError.message }
+            }
+
+            // Devolver estoque: criar movimento do tipo 'entry' para cada item
+            try {
+                const { data: { user } } = await supabase.auth.getUser()
+
+                for (const orderItem of order.items) {
+                    // Try to find product by id (product_id) or by name
+                    const { data: products } = await supabase
+                        .from('products')
+                        .select('id')
+                        .or(`id.eq.${orderItem.id},name.ilike.%${orderItem.name}%`)
+                        .limit(1)
+
+                    if (products && products.length > 0) {
+                        const productId = products[0].id
+
+                        // Create stock movement (entry) - devolver estoque
+                        await supabase.from('stock_movements').insert({
+                            product_id: productId,
+                            movement_type: 'entry',
+                            quantity: orderItem.quantity,
+                            reference_id: parseInt(orderId.replace(/\D/g, '')) || null,
+                            reference_type: 'order_cancellation',
+                            notes: `Entrada via cancelamento do pedido ${orderId} - ${cancellationReason}`,
+                            created_by: user?.id || null
+                        })
+                    }
+                }
+            } catch (stockError) {
+                console.error("Error returning stock:", stockError)
+                // Reverter cancelamento se devolução de estoque falhar
+                setOrders(previousOrders)
+                await supabase
+                    .from('orders')
+                    .update({
+                        status: order.status,
+                        cancellation_reason: null
+                    })
+                    .eq('id', orderId)
+                return { success: false, error: "Erro ao devolver estoque. Cancelamento revertido." }
+            }
+
+            // Se o pedido tinha uma mesa, verificar se precisa atualizar status da mesa
+            if (order.table) {
+                const { data: activeOrders } = await supabase
+                    .from('orders')
+                    .select('id')
+                    .eq('table_number', order.table)
+                    .in('status', ['Pending', 'Preparing', 'Ready', 'Delivered', 'Closed'])
+
+                // Se não há mais pedidos ativos (excluindo cancelados), liberar a mesa
                 if (!activeOrders || activeOrders.length === 0) {
                     const table = tables.find(t => t.number === order.table)
                     if (table) {
@@ -1151,6 +1460,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 processPayment,
                 closeTable,
                 cancelOrder,
+                cancelUnpaidOrder,
                 addMenuItem,
                 updateMenuItem,
                 deleteMenuItem,

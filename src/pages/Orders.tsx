@@ -1,8 +1,9 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "../components/ui/button"
 import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
+import { useSettings } from "../context/SettingsContext"
 import { Input } from "../components/ui/input"
 
 import { formatCurrency } from "../lib/utils"
@@ -10,8 +11,16 @@ import { formatCurrency } from "../lib/utils"
 export function Orders() {
     const navigate = useNavigate()
     const { orders } = useRestaurant()
+    const { isTablesEnabled } = useSettings()
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+
+    // Resetar filtro "mesa" se a feature for desabilitada
+    useEffect(() => {
+        if (!isTablesEnabled && statusFilter === "mesa") {
+            setStatusFilter("all")
+        }
+    }, [isTablesEnabled, statusFilter])
 
     const filteredOrders = orders.filter(order => {
         const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -48,6 +57,12 @@ export function Orders() {
                     className: "bg-green-100 text-green-700 border-green-200",
                     icon: CheckCircle
                 }
+            case "cancelled":
+                return {
+                    label: "CANCELADO",
+                    className: "bg-red-100 text-red-700 border-red-200",
+                    icon: Clock
+                }
             default:
                 return {
                     label: status,
@@ -61,8 +76,10 @@ export function Orders() {
         switch (orderType) {
             case "delivery":
                 return Truck
-            case "pickup":
+            case "takeout":
                 return ShoppingBag
+            case "dine_in":
+                return Armchair
             default:
                 return ShoppingBag
         }
@@ -72,8 +89,10 @@ export function Orders() {
         switch (orderType) {
             case "delivery":
                 return "Delivery"
-            case "pickup":
+            case "takeout":
                 return "Retirada"
+            case "dine_in":
+                return "Mesa"
             default:
                 return "Mesa"
         }
@@ -149,18 +168,20 @@ export function Orders() {
                         <ShoppingBag className="w-4 h-4" />
                         Retirada
                     </Button>
-                    <Button
-                        variant={statusFilter === "mesa" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "mesa"
-                                ? "text-primary bg-primary/10 border border-primary/20"
-                                : "text-muted-foreground hover:bg-accent"
-                        }`}
-                        onClick={() => setStatusFilter(statusFilter === "mesa" ? "all" : "mesa")}
-                    >
-                        <Armchair className="w-4 h-4" />
-                        Mesa
-                    </Button>
+                    {isTablesEnabled && (
+                        <Button
+                            variant={statusFilter === "mesa" ? "default" : "ghost"}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                                statusFilter === "mesa"
+                                    ? "text-primary bg-primary/10 border border-primary/20"
+                                    : "text-muted-foreground hover:bg-accent"
+                            }`}
+                            onClick={() => setStatusFilter(statusFilter === "mesa" ? "all" : "mesa")}
+                        >
+                            <Armchair className="w-4 h-4" />
+                            Mesa
+                        </Button>
+                    )}
                 </div>
             </section>
 
@@ -222,6 +243,12 @@ export function Orders() {
                                             <span>Hora:</span>
                                             <span className="font-mono">{order.time.split(' ')[1]}</span>
                                         </div>
+                                        {order.status === "Cancelled" && order.cancellation_reason && (
+                                            <div className="flex flex-col gap-1 pt-2 border-t border-border">
+                                                <span className="text-xs text-muted-foreground">Justificativa:</span>
+                                                <span className="text-sm font-medium text-red-600">{order.cancellation_reason}</span>
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
                                 
