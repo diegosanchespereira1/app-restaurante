@@ -23,15 +23,22 @@ import { formatCurrency, calculatePriceWithDiscount, validatePaymentDiscount } f
 import { printReceipt } from "../lib/printer"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
 import type { Product } from "../types/product"
+import { useAuth } from "../context/AuthContext"
+import { X } from "lucide-react"
 
 export function OrderDetails() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const { orders, updateOrderStatus, processPayment, menuItems } = useRestaurant()
+    const { orders, updateOrderStatus, processPayment, menuItems, cancelUnpaidOrder } = useRestaurant()
     const { t } = useLanguage()
     const { printerSettings, settings } = useSettings()
+    const { hasPermission } = useAuth()
     const [note, setNote] = useState("")
     const [isPaymentOpen, setIsPaymentOpen] = useState(false)
+    const [isCancelOpen, setIsCancelOpen] = useState(false)
+    const [cancelPassword, setCancelPassword] = useState("")
+    const [cancellationReason, setCancellationReason] = useState<string>("")
+    const [cancelError, setCancelError] = useState<string | null>(null)
     const [paymentMethod, setPaymentMethod] = useState<"Cash" | "Card" | "Voucher" | "PIX">("Cash")
     const [products, setProducts] = useState<Product[]>([])
     const [paymentDiscountType, setPaymentDiscountType] = useState<"fixed" | "percentage" | null>(null)
@@ -195,6 +202,32 @@ export function OrderDetails() {
         }
     }
 
+    const handleCancel = async () => {
+        if (!order) return
+        
+        if (!cancelPassword) {
+            setCancelError("Por favor, insira a senha de admin/gerente")
+            return
+        }
+
+        if (!cancellationReason) {
+            setCancelError("Por favor, selecione uma justificativa para o cancelamento")
+            return
+        }
+
+        setCancelError(null)
+        const result = await cancelUnpaidOrder(order.id, cancelPassword, cancellationReason)
+        
+        if (result.success) {
+            setIsCancelOpen(false)
+            setCancelPassword("")
+            setCancellationReason("")
+            navigate("/orders")
+        } else {
+            setCancelError(result.error || "Erro ao cancelar pedido")
+        }
+    }
+
     const handlePrint = async () => {
         if (printerSettings.enabled) {
             // Usa o módulo de impressão configurado
@@ -303,7 +336,7 @@ export function OrderDetails() {
                         <Printer className="h-5 w-5" />
                         {t("printReceipt")}
                     </Button>
-                    {order.status !== "Closed" && (
+                    {order.status !== "Closed" && order.status !== "Cancelled" && (
                         <>
                             {order.status !== "Delivered" && (
                                 <Button 
@@ -312,6 +345,77 @@ export function OrderDetails() {
                                 >
                                     {t("updateStatus")} ({t(getNextStatus(order.status)?.toLowerCase() as any) || getNextStatus(order.status)})
                                 </Button>
+                            )}
+                            {hasPermission(['admin', 'gerente']) && (
+                                <Dialog open={isCancelOpen} onOpenChange={setIsCancelOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button className="flex-1 md:flex-none bg-red-600 hover:bg-red-700 text-white">
+                                            <X className="h-4 w-4 mr-2" />
+                                            {t("cancelOrder")}
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>{t("cancelOrderConfirmation")}</DialogTitle>
+                                            <DialogDescription>
+                                                {t("cancelOrderDescription") || "Esta ação não pode ser desfeita. O estoque será devolvido automaticamente."}
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="grid gap-4 py-4">
+                                            <div className="space-y-2">
+                                                <Label>{t("enterManagerPassword")}</Label>
+                                                <Input
+                                                    type="password"
+                                                    value={cancelPassword}
+                                                    onChange={(e) => {
+                                                        setCancelPassword(e.target.value)
+                                                        setCancelError(null)
+                                                    }}
+                                                    placeholder={t("enterManagerPassword")}
+                                                    className={cancelError ? 'border-red-500' : ''}
+                                                />
+                                            </div>
+                                            <div className="space-y-2">
+                                                <Label>{t("cancellationReason")}</Label>
+                                                <Select
+                                                    value={cancellationReason}
+                                                    onValueChange={(value) => {
+                                                        setCancellationReason(value)
+                                                        setCancelError(null)
+                                                    }}
+                                                >
+                                                    <SelectTrigger className={cancelError && !cancellationReason ? 'border-red-500' : ''}>
+                                                        <SelectValue placeholder={t("selectCancellationReason") || "Selecione uma justificativa"} />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="cliente desistiu">Cliente desistiu</SelectItem>
+                                                        <SelectItem value="problema no pagamento do cliente">Problema no pagamento do cliente</SelectItem>
+                                                        <SelectItem value="mercadoria danificada">Mercadoria danificada</SelectItem>
+                                                        <SelectItem value="sem estoque">Sem estoque</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                            {cancelError && (
+                                                <div className="text-sm text-red-600 mt-1">
+                                                    {cancelError}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <DialogFooter>
+                                            <Button variant="outline" onClick={() => {
+                                                setIsCancelOpen(false)
+                                                setCancelPassword("")
+                                                setCancellationReason("")
+                                                setCancelError(null)
+                                            }}>
+                                                {t("cancel") || "Cancelar"}
+                                            </Button>
+                                            <Button onClick={handleCancel} className="bg-red-600 hover:bg-red-700">
+                                                {t("confirmCancel") || "Confirmar Cancelamento"}
+                                            </Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
                             )}
                             <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
                                 <DialogTrigger asChild>

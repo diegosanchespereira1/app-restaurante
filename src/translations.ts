@@ -239,6 +239,20 @@ export const translations = {
         eanCode: "EAN Code",
         taxCalculation: "Tax Calculation",
         priceWithTaxes: "Price with Taxes",
+        cancelOrder: "Cancel Order",
+        cancelOrderConfirmation: "Cancel Order",
+        cancelOrderDescription: "This action cannot be undone. Stock will be automatically returned.",
+        enterManagerPassword: "Enter Admin/Manager Password",
+        cancellationReason: "Cancellation Reason",
+        selectCancellationReason: "Select a reason",
+        confirmCancel: "Confirm Cancellation",
+        cancelled: "Cancelled",
+        cancellationReasons: {
+            clientDesisted: "Client desisted",
+            paymentProblem: "Payment problem",
+            damagedGoods: "Damaged goods",
+            noStock: "Out of stock"
+        },
     },
     pt: {
         appTitle: "JE BEBIDAS",
@@ -484,6 +498,20 @@ export const translations = {
         priceInfo: "Informações de Preço",
         fiscalInfo: "Informações Fiscais",
         fiscalInfoDescription: "Dados necessários para emissão de nota fiscal e cálculo de impostos",
+        cancelOrder: "Cancelar Pedido",
+        cancelOrderConfirmation: "Cancelar Pedido",
+        cancelOrderDescription: "Esta ação não pode ser desfeita. O estoque será devolvido automaticamente.",
+        enterManagerPassword: "Digite a Senha de Admin/Gerente",
+        cancellationReason: "Justificativa do Cancelamento",
+        selectCancellationReason: "Selecione uma justificativa",
+        confirmCancel: "Confirmar Cancelamento",
+        cancelled: "CANCELADO",
+        cancellationReasons: {
+            clientDesisted: "Cliente desistiu",
+            paymentProblem: "Problema no pagamento do cliente",
+            damagedGoods: "Mercadoria danificada",
+            noStock: "Sem estoque"
+        },
     },
 }
 
