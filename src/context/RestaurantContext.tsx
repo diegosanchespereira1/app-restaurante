@@ -820,7 +820,6 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
 
         // Demo mode: apenas atualizar estado local
         if (!isSupabaseConfigured) {
-            const previousOrders = [...orders]
             setOrders(prev =>
                 prev.map(o => {
                     if (o.id === orderId) {

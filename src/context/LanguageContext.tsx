@@ -22,7 +22,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const t = (key: ExtendedTranslationKey) => {
         const translation = translations[language]
         if (key in translation) {
-            return (translation as Record<string, string>)[key] || key
+            const value = (translation as any)[key]
+            // Se o valor é uma string, retornar. Se for objeto, retornar a chave
+            return typeof value === 'string' ? value : key
         }
         return key
     }
