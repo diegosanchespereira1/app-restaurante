@@ -43,6 +43,10 @@ export interface Order {
     order_discount_value?: number | null
     // Campo de cancelamento
     cancellation_reason?: string | null
+    // Campos do iFood
+    source?: "manual" | "ifood"
+    ifood_order_id?: string | null
+    ifood_status?: string | null
 }
 
 export interface Table {
@@ -223,6 +227,9 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     notes: o.notes,
                     paymentMethod: o.payment_method,
                     cancellation_reason: o.cancellation_reason || null,
+                    source: o.source || 'manual',
+                    ifood_order_id: o.ifood_order_id || null,
+                    ifood_status: o.ifood_status || null,
                     items: o.items.map((i: any) => ({
                         id: i.product_id || i.menu_item_id, // suporta ambos durante transição
                         name: i.name,

@@ -24,7 +24,8 @@ import { printReceipt } from "../lib/printer"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
 import type { Product } from "../types/product"
 import { useAuth } from "../context/AuthContext"
-import { X } from "lucide-react"
+import { X, ShoppingBag } from "lucide-react"
+import { IfoodOrderBadge } from "../components/ifood/IfoodOrderBadge"
 
 export function OrderDetails() {
     const { id } = useParams()
@@ -315,6 +316,12 @@ export function OrderDetails() {
                         <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
                         <span>•</span>
                         <span>{t("customer")}: {order.customer}</span>
+                        {order.source === 'ifood' && (
+                            <>
+                                <span>•</span>
+                                <IfoodOrderBadge ifoodStatus={order.ifood_status} />
+                            </>
+                        )}
                         {order.status === "Closed" && order.paymentMethod && (
                             <>
                                 <span>•</span>
@@ -928,6 +935,28 @@ export function OrderDetails() {
                             </Dialog>
                         )}
                     </section>
+
+                    {/* iFood Information Card */}
+                    {order.source === 'ifood' && order.ifood_order_id && (
+                        <section className="bg-blue-50 p-6 rounded-xl shadow-md border border-blue-200">
+                            <div className="flex items-center gap-2 mb-3">
+                                <ShoppingBag className="h-5 w-5 text-blue-600" />
+                                <h3 className="text-base font-medium text-blue-900">Informações do iFood</h3>
+                            </div>
+                            <div className="space-y-2 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-blue-700 font-medium">ID do Pedido iFood:</span>
+                                    <span className="text-blue-900 font-mono">{order.ifood_order_id}</span>
+                                </div>
+                                {order.ifood_status && (
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-blue-700 font-medium">Status no iFood:</span>
+                                        <IfoodOrderBadge ifoodStatus={order.ifood_status} />
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    )}
 
                     {/* Observations Card */}
                     <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
