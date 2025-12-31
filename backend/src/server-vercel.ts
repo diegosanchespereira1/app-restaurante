@@ -1,3 +1,4 @@
+// Serverless handler for Vercel
 import express from 'express'
 import cors from 'cors'
 import dotenv from 'dotenv'
@@ -9,28 +10,10 @@ import { IfoodPollingService } from './services/ifood-polling.js'
 dotenv.config()
 
 const app = express()
-const PORT = parseInt(process.env.BACKEND_PORT || '3000', 10)
 
 // Middlewares
-// CORS: Permitir GitHub Pages e localhost
-const allowedOrigins = [
-  process.env.FRONTEND_URL,
-  'https://diegosanchespereira1.github.io',
-  'http://localhost:5173',
-  'http://localhost:3000'
-].filter(Boolean) as string[]
-
 app.use(cors({
-  origin: (origin, callback) => {
-    // Permitir requisições sem origin (mobile apps, Postman, etc)
-    if (!origin) return callback(null, true)
-    
-    if (allowedOrigins.includes(origin) || origin.includes('github.io')) {
-      callback(null, true)
-    } else {
-      callback(new Error('Not allowed by CORS'))
-    }
-  },
+  origin: process.env.FRONTEND_URL || 'https://diegosanchespereira1.github.io',
   credentials: true
 }))
 
@@ -60,7 +43,8 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       testConnection: 'POST /api/printer/test',
-      print: 'POST /api/printer/print'
+      print: 'POST /api/printer/print',
+      ifood: '/api/ifood'
     }
   })
 })
@@ -74,13 +58,15 @@ app.use((err: Error, req: express.Request, res: express.Response, next: express.
   })
 })
 
-// Exportar app para Vercel (serverless)
-// No Vercel, este será o handler da função serverless
-export default app
-
-// Iniciar servidor apenas se não estiver no Vercel
-// O Vercel não executa este código, apenas usa o export default
-if (typeof process !== 'undefined' && !process.env.VERCEL) {
+// Para Vercel, exportar como handler
+// Para desenvolvimento local, manter o app.listen
+if (process.env.VERCEL) {
+  // Vercel serverless mode
+  module.exports = app
+} else {
+  // Local development mode
+  const PORT = parseInt(process.env.BACKEND_PORT || '3000', 10)
+  
   app.listen(PORT, async () => {
     console.log(`🚀 Servidor backend rodando na porta ${PORT}`)
     console.log(`📡 Frontend esperado em: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`)
@@ -97,7 +83,4 @@ if (typeof process !== 'undefined' && !process.env.VERCEL) {
     }
   })
 }
-
-
-
 

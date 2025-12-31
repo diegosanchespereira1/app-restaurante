@@ -1,12 +1,14 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Switch } from "../components/ui/switch"
 import { Badge } from "../components/ui/badge"
-import { Save, RefreshCw, CheckCircle, XCircle, Clock, ShoppingBag, Copy, ExternalLink } from "lucide-react"
+import { Save, RefreshCw, CheckCircle, XCircle, Clock, ShoppingBag, Copy, ExternalLink, Check } from "lucide-react"
 import { useAuth } from "../context/AuthContext"
+import { getBackendUrl } from "../lib/backend-config"
+import { formatCurrency } from "../lib/utils"
 
 interface IfoodConfig {
   merchant_id: string
@@ -21,6 +23,7 @@ interface IfoodStatus {
   configured: boolean
   active: boolean
   authenticated: boolean
+  auth_error?: string | null
   last_sync: string | null
   polling_interval: number | null
   webhook_url: string | null
@@ -39,6 +42,45 @@ interface ProductMapping {
   } | null
 }
 
+interface IfoodPendingOrder {
+  id: string
+  shortReference: string
+  displayId: string
+  orderTiming: string
+  salesChannel: string
+  createdAt: string
+  preparationTimeInSeconds?: number
+  items: Array<{
+    id: string
+    name: string
+    quantity: number
+    unitPrice: number
+    totalPrice: number
+    externalCode?: string
+    sku?: string
+  }>
+  customer: {
+    id: string
+    name: string
+    phoneNumber?: string
+  }
+  delivery?: {
+    address: {
+      street: string
+      number: string
+      complement?: string
+      neighborhood: string
+      city: string
+      state: string
+      zipCode: string
+    }
+  }
+  totalPrice: {
+    amount: number
+    currency: string
+  }
+}
+
 export function IfoodIntegration() {
   const { hasPermission } = useAuth()
   const [config, setConfig] = useState<IfoodConfig>({
@@ -51,19 +93,57 @@ export function IfoodIntegration() {
   })
   const [status, setStatus] = useState<IfoodStatus | null>(null)
   const [mappings, setMappings] = useState<ProductMapping[]>([])
+  const [pendingOrders, setPendingOrders] = useState<IfoodPendingOrder[]>([])
+  const pendingOrdersRef = useRef<IfoodPendingOrder[]>([])
+  
+  // Keep ref in sync with state
+  useEffect(() => {
+    pendingOrdersRef.current = pendingOrders
+  }, [pendingOrders])
+  const [activeOrders, setActiveOrders] = useState<any[]>([])
+  const [dispatchedOrders, setDispatchedOrders] = useState<any[]>([])
+  const [concludedOrders, setConcludedOrders] = useState<any[]>([])
+  const [loadingOrders, setLoadingOrders] = useState(false)
+  const [loadingActiveOrders, setLoadingActiveOrders] = useState(false)
+  const [loadingDispatchedOrders, setLoadingDispatchedOrders] = useState(false)
+  const [loadingConcludedOrders, setLoadingConcludedOrders] = useState(false)
+  const [acceptingOrder, setAcceptingOrder] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [orderUuid, setOrderUuid] = useState("")
+  const [orderDetails, setOrderDetails] = useState<IfoodPendingOrder | null>(null)
+  const [loadingOrderDetails, setLoadingOrderDetails] = useState(false)
+  const [orderDetailsError, setOrderDetailsError] = useState<string | null>(null)
 
-  const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+  const backendUrl = getBackendUrl()
 
   useEffect(() => {
     if (hasPermission('admin')) {
       loadConfig()
       loadStatus()
       loadMappings()
+      loadPendingOrders()
+      loadActiveOrders()
+      loadDispatchedOrders()
+      loadConcludedOrders()
     }
   }, [hasPermission])
+
+  // Auto-refresh all orders every 30 seconds
+  useEffect(() => {
+    if (!hasPermission('admin') || !status?.active) return
+
+    const interval = setInterval(() => {
+      loadPendingOrders()
+      loadActiveOrders()
+      loadDispatchedOrders()
+      loadConcludedOrders()
+    }, 30000) // 30 seconds
+
+    return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPermission, status?.active])
 
   const loadConfig = async () => {
     try {
@@ -109,6 +189,234 @@ export function IfoodIntegration() {
     } catch (error) {
       console.error('Error loading mappings:', error)
     }
+  }
+
+  const loadPendingOrders = useCallback(async () => {
+    if (!status?.active) return
+    
+    // Prevent multiple simultaneous calls
+    if (loadingOrders) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:189',message:'loadPendingOrders already in progress, skipping',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      return
+    }
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:195',message:'loadPendingOrders called',data:{statusActive:status?.active,loadingOrders,hasBackendUrl:!!backendUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    // #endregion
+    
+    setLoadingOrders(true)
+    try {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:193',message:'frontend calling pending-orders',data:{url:`${backendUrl}/api/ifood/pending-orders`,before_fetch:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
+      // Add timeout to prevent hanging
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 35000) // 35 second timeout
+      
+      const response = await fetch(`${backendUrl}/api/ifood/pending-orders`, {
+        signal: controller.signal
+      })
+      
+      clearTimeout(timeoutId)
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:202',message:'frontend response received',data:{status:response.status,statusText:response.statusText,ok:response.ok},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        throw new Error(`Erro HTTP ${response.status}: ${errorText || response.statusText}`)
+      }
+      
+      const result = await response.json()
+      
+      // Log full response for debugging
+      console.log('[Frontend] Pending orders response:', {
+        success: result.success,
+        ordersCount: result.orders?.length || 0,
+        hasOrders: !!result.orders,
+        isArray: Array.isArray(result.orders),
+        debug: result.debug,
+        fullResult: JSON.stringify(result).substring(0, 1000)
+      })
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:205',message:'frontend result parsed',data:{success:result.success,ordersCount:result.orders?.length||0,hasOrders:!!result.orders,resultSample:JSON.stringify(result).substring(0,500)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      
+      if (result.success) {
+        const newOrders = Array.isArray(result.orders) ? result.orders : []
+        
+        console.log('[Frontend] Processing orders:', {
+          newOrdersCount: newOrders.length,
+          firstOrder: newOrders[0] ? {
+            id: newOrders[0].id,
+            displayId: newOrders[0].displayId,
+            customer: newOrders[0].customer
+          } : null
+        })
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:228',message:'before setPendingOrders',data:{newOrdersCount:newOrders.length,newOrderIds:newOrders.filter((o: any) => o && o.id).map((o: any) => o.id).join(',')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+        // #endregion
+        
+        // Always update state if we have new orders, regardless of comparison
+        // The comparison was preventing updates when orders were the same
+        if (newOrders.length > 0) {
+          console.log('[Frontend] Setting pending orders:', newOrders.length)
+          setPendingOrders(newOrders)
+        } else {
+          // Only update if current state has orders (to clear them)
+          if (pendingOrdersRef.current.length > 0) {
+            console.log('[Frontend] Clearing pending orders (no new orders)')
+            setPendingOrders([])
+          }
+        }
+      } else {
+        console.error('[Frontend] API returned error:', result.message || result.error)
+        setMessage({ type: 'error', text: result.message || result.error || 'Erro ao buscar pedidos' })
+        setTimeout(() => setMessage(null), 5000)
+      }
+    } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:212',message:'frontend error loading orders',data:{error:error instanceof Error?error.message:String(error),isAbortError:error instanceof Error && error.name === 'AbortError'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      // #endregion
+      console.error('Error loading pending orders:', error)
+      if (error instanceof Error && error.name === 'AbortError') {
+        setMessage({ type: 'error', text: 'Timeout ao buscar pedidos. A requisição demorou muito para responder.' })
+      } else {
+        const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido ao buscar pedidos'
+        setMessage({ type: 'error', text: errorMessage })
+        // Clear message after 5 seconds
+        setTimeout(() => setMessage(null), 5000)
+      }
+    } finally {
+      setLoadingOrders(false)
+    }
+  }, [status?.active, backendUrl, loadingOrders])
+
+  const loadActiveOrders = useCallback(async () => {
+    if (!status?.active) return
+    
+    setLoadingActiveOrders(true)
+    try {
+      const response = await fetch(`${backendUrl}/api/ifood/active-orders`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setActiveOrders(result.orders || [])
+      }
+    } catch (error) {
+      console.error('Error loading active orders:', error)
+    } finally {
+      setLoadingActiveOrders(false)
+    }
+  }, [status?.active, backendUrl])
+
+  const loadDispatchedOrders = useCallback(async () => {
+    if (!status?.active) return
+    
+    setLoadingDispatchedOrders(true)
+    try {
+      const response = await fetch(`${backendUrl}/api/ifood/dispatched-orders`)
+      
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('Error loading dispatched orders - HTTP error:', response.status, errorText)
+        setDispatchedOrders([])
+        return
+      }
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        console.log('Dispatched orders loaded:', result.orders?.length || 0, 'orders')
+        setDispatchedOrders(Array.isArray(result.orders) ? result.orders : [])
+      } else {
+        console.error('Error loading dispatched orders - API error:', result.message || 'Unknown error')
+        setDispatchedOrders([])
+      }
+    } catch (error) {
+      console.error('Error loading dispatched orders:', error)
+      setDispatchedOrders([])
+    } finally {
+      setLoadingDispatchedOrders(false)
+    }
+  }, [status?.active, backendUrl])
+
+  const loadConcludedOrders = useCallback(async () => {
+    if (!status?.active) return
+    
+    setLoadingConcludedOrders(true)
+    try {
+      const response = await fetch(`${backendUrl}/api/ifood/concluded-orders`)
+      const result = await response.json()
+      
+      if (result.success) {
+        setConcludedOrders(result.orders || [])
+      }
+    } catch (error) {
+      console.error('Error loading concluded orders:', error)
+    } finally {
+      setLoadingConcludedOrders(false)
+    }
+  }, [status?.active, backendUrl])
+
+  const handleAcceptOrder = useCallback(async (orderId: string) => {
+    setAcceptingOrder(orderId)
+    setMessage(null)
+    
+    try {
+      const response = await fetch(`${backendUrl}/api/ifood/accept-order/${orderId}`, {
+        method: 'POST'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Pedido aceito e criado no sistema com sucesso!' })
+        // Reload all orders
+        await loadPendingOrders()
+        await loadActiveOrders()
+        await loadDispatchedOrders()
+        await loadConcludedOrders()
+        // Clear message after 3 seconds
+        setTimeout(() => setMessage(null), 3000)
+      } else {
+        setMessage({ type: 'error', text: result.message || 'Erro ao aceitar pedido' })
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Erro de conexão com o servidor' })
+    } finally {
+      setAcceptingOrder(null)
+    }
+  }, [backendUrl, loadPendingOrders, loadActiveOrders, loadDispatchedOrders, loadConcludedOrders])
+  
+  const getIfoodStatusLabel = (status: string | null | undefined) => {
+    switch (status) {
+      case 'CONFIRMED':
+        return 'Confirmado'
+      case 'PREPARATION_STARTED':
+        return 'Em Preparação'
+      case 'DISPATCHED':
+        return 'Despachado'
+      case 'READY_TO_PICKUP':
+        return 'Pronto para Retirada'
+      case 'CONCLUDED':
+        return 'Concluído'
+      case 'CANCELLED':
+        return 'Cancelado'
+      default:
+        return status || 'Desconhecido'
+    }
+  }
+
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleString('pt-BR')
   }
 
   const handleSave = async () => {
@@ -158,9 +466,17 @@ export function IfoodIntegration() {
       }
     } catch (error) {
       console.error('Erro ao salvar configuração:', error)
-      const errorMessage = error instanceof Error 
-        ? `Erro de conexão: ${error.message}. Verifique se o backend está rodando em ${backendUrl}`
-        : 'Erro de conexão com o servidor. Verifique se o backend está rodando.'
+      let errorMessage = 'Erro de conexão com o servidor. Verifique se o backend está rodando.'
+      
+      if (error instanceof Error) {
+        // Se a URL do backend não for a padrão/localhost, mostrar na mensagem
+        if (backendUrl && !backendUrl.includes('localhost') && !backendUrl.includes('127.0.0.1')) {
+          errorMessage = `Erro de conexão: ${error.message}. Verifique se o backend está rodando em ${backendUrl}`
+        } else {
+          errorMessage = `Erro de conexão: ${error.message}. Verifique se o backend está rodando.`
+        }
+      }
+      
       setMessage({ type: 'error', text: errorMessage })
     } finally {
       setSaving(false)
@@ -194,9 +510,74 @@ export function IfoodIntegration() {
     }
   }
 
-  const formatDate = (dateString: string | null) => {
+  const formatDateString = (dateString: string | null) => {
     if (!dateString) return 'Nunca'
     return new Date(dateString).toLocaleString('pt-BR')
+  }
+
+  const handleFetchOrderDetails = async () => {
+    if (!orderUuid.trim()) {
+      setOrderDetailsError('Por favor, informe o UUID do pedido')
+      return
+    }
+
+    setLoadingOrderDetails(true)
+    setOrderDetailsError(null)
+    setOrderDetails(null)
+
+    try {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:489',message:'fetching order details',data:{orderUuid:orderUuid.trim(),url:`${backendUrl}/api/ifood/order-details/${orderUuid.trim()}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
+      const response = await fetch(`${backendUrl}/api/ifood/order-details/${orderUuid.trim()}`)
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:494',message:'order details response received',data:{status:response.status,statusText:response.statusText,ok:response.ok,contentType:response.headers.get('content-type')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      
+      if (!response.ok) {
+        // Try to parse error message
+        let errorMessage = `Erro ${response.status}: ${response.statusText}`
+        try {
+          const errorResult = await response.json()
+          errorMessage = errorResult.message || errorMessage
+        } catch {
+          // If response is not JSON, use status text
+        }
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:505',message:'order details error response',data:{status:response.status,errorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+        // #endregion
+        
+        setOrderDetailsError(errorMessage)
+        setOrderDetails(null)
+        return
+      }
+      
+      const result = await response.json()
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:515',message:'order details result parsed',data:{success:result.success,hasOrder:!!result.order,message:result.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+
+      if (result.success && result.order) {
+        setOrderDetails(result.order)
+        setOrderDetailsError(null)
+      } else {
+        setOrderDetailsError(result.message || 'Erro ao buscar detalhes do pedido')
+        setOrderDetails(null)
+      }
+    } catch (error) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:525',message:'order details fetch error',data:{error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'F'})}).catch(()=>{});
+      // #endregion
+      console.error('Error fetching order details:', error)
+      setOrderDetailsError('Erro de conexão com o servidor')
+      setOrderDetails(null)
+    } finally {
+      setLoadingOrderDetails(false)
+    }
   }
 
   if (!hasPermission('admin')) {
@@ -284,11 +665,28 @@ export function IfoodIntegration() {
             )}
           </div>
 
+          {status?.auth_error && (
+            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+              <p className="text-sm font-medium text-red-800 mb-1">Erro de Autenticação:</p>
+              <p className="text-xs text-red-700 mb-2">{status.auth_error}</p>
+              <div className="text-xs text-red-600 space-y-1">
+                <p>Verifique:</p>
+                <ul className="list-disc list-inside ml-2 space-y-1">
+                  <li>Client ID está correto</li>
+                  <li>Client Secret está correto</li>
+                  <li>Merchant ID está correto</li>
+                  <li>Se necessário, Authorization Code está preenchido</li>
+                  <li>Credenciais estão ativas no painel do iFood</li>
+                </ul>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Última Sincronização:</span>
             <span className="text-sm text-muted-foreground flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {formatDate(status?.last_sync || null)}
+              {formatDateString(status?.last_sync || null)}
             </span>
           </div>
 
@@ -309,6 +707,587 @@ export function IfoodIntegration() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Active Orders Card (Accepted and In Preparation) */}
+      {status?.active && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Pedidos em Andamento</CardTitle>
+                <CardDescription>
+                  Pedidos aceitos e em preparação do iFood
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadActiveOrders}
+                disabled={loadingActiveOrders}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingActiveOrders ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingActiveOrders ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+              </div>
+            ) : activeOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Nenhum pedido em andamento</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Pedidos aceitos e em preparação aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {activeOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="border rounded-lg p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-lg">Pedido #{order.id}</span>
+                          <Badge variant="outline" className={
+                            order.ifood_status === 'CONFIRMED' 
+                              ? 'bg-blue-50 text-blue-700 border-blue-200'
+                              : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                          }>
+                            {getIfoodStatusLabel(order.ifood_status)}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Cliente:</span>
+                            <span>{order.customer}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3" />
+                            <span>{order.time}</span>
+                          </div>
+                          {order.notes && (
+                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                              <span className="font-medium">Observações:</span>{' '}
+                              {order.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right ml-4">
+                        <div className="font-bold text-lg text-primary">
+                          {formatCurrency(order.total)}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => window.location.href = `/orders/${order.id}`}
+                        >
+                          Ver Detalhes
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="border-t pt-3">
+                      <div className="text-sm font-medium mb-2">Itens do Pedido ({order.items.length}):</div>
+                      <div className="space-y-2">
+                        {order.items.slice(0, 3).map((item: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{item.quantity}x</span>
+                              <span>{item.name}</span>
+                            </div>
+                            <span className="text-muted-foreground">
+                              {formatCurrency(item.price * item.quantity)}
+                            </span>
+                          </div>
+                        ))}
+                        {order.items.length > 3 && (
+                          <div className="text-xs text-muted-foreground pt-1">
+                            +{order.items.length - 3} mais item(ns)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dispatched Orders Card */}
+      {status?.active && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Pedidos Despachados</CardTitle>
+                <CardDescription>
+                  Pedidos em entrega do iFood
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadDispatchedOrders}
+                disabled={loadingDispatchedOrders}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingDispatchedOrders ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingDispatchedOrders ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+              </div>
+            ) : dispatchedOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Nenhum pedido despachado</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Pedidos em entrega aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {dispatchedOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="border rounded-lg p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-lg">Pedido #{order.id}</span>
+                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
+                            Despachado
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Cliente:</span>
+                            <span>{order.customer}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3" />
+                            <span>{order.time}</span>
+                          </div>
+                          {order.notes && (
+                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                              <span className="font-medium">Observações:</span>{' '}
+                              {order.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right ml-4">
+                        <div className="font-bold text-lg text-primary">
+                          {formatCurrency(order.total)}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => window.location.href = `/orders/${order.id}`}
+                        >
+                          Ver Detalhes
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="border-t pt-3">
+                      <div className="text-sm font-medium mb-2">Itens do Pedido ({order.items.length}):</div>
+                      <div className="space-y-2">
+                        {order.items.slice(0, 3).map((item: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{item.quantity}x</span>
+                              <span>{item.name}</span>
+                            </div>
+                            <span className="text-muted-foreground">
+                              {formatCurrency(item.price * item.quantity)}
+                            </span>
+                          </div>
+                        ))}
+                        {order.items.length > 3 && (
+                          <div className="text-xs text-muted-foreground pt-1">
+                            +{order.items.length - 3} mais item(ns)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Concluded Orders Card */}
+      {status?.active && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Pedidos Finalizados</CardTitle>
+                <CardDescription>
+                  Pedidos entregues e finalizados do iFood
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadConcludedOrders}
+                disabled={loadingConcludedOrders}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingConcludedOrders ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingConcludedOrders ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+              </div>
+            ) : concludedOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Nenhum pedido finalizado</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Pedidos entregues aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {concludedOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="border rounded-lg p-4 space-y-3"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="font-semibold text-lg">Pedido #{order.id}</span>
+                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                            Finalizado
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">Cliente:</span>
+                            <span>{order.customer}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-3 w-3" />
+                            <span>Finalizado em: {order.closedAt ? new Date(order.closedAt).toLocaleString('pt-BR') : order.time}</span>
+                          </div>
+                          {order.paymentMethod && (
+                            <div className="text-xs">
+                              <span className="font-medium">Pagamento:</span>{' '}
+                              {order.paymentMethod === 'Cash' ? 'Dinheiro' : 
+                               order.paymentMethod === 'Card' ? 'Cartão' :
+                               order.paymentMethod === 'PIX' ? 'PIX' : order.paymentMethod}
+                            </div>
+                          )}
+                          {order.notes && (
+                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                              <span className="font-medium">Observações:</span>{' '}
+                              {order.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="text-right ml-4">
+                        <div className="font-bold text-lg text-primary">
+                          {formatCurrency(order.total)}
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-2"
+                          onClick={() => window.location.href = `/orders/${order.id}`}
+                        >
+                          Ver Detalhes
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="border-t pt-3">
+                      <div className="text-sm font-medium mb-2">Itens do Pedido ({order.items.length}):</div>
+                      <div className="space-y-2">
+                        {order.items.slice(0, 3).map((item: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{item.quantity}x</span>
+                              <span>{item.name}</span>
+                            </div>
+                            <span className="text-muted-foreground">
+                              {formatCurrency(item.price * item.quantity)}
+                            </span>
+                          </div>
+                        ))}
+                        {order.items.length > 3 && (
+                          <div className="text-xs text-muted-foreground pt-1">
+                            +{order.items.length - 3} mais item(ns)
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Pending Orders Card */}
+      {status?.active && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Pedidos Pendentes</CardTitle>
+                <CardDescription>
+                  Pedidos recebidos do iFood aguardando aceitação
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadPendingOrders}
+                disabled={loadingOrders}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingOrders ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+              </div>
+            ) : pendingOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Nenhum pedido pendente</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Os pedidos recebidos do iFood aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {useMemo(() => {
+                  // #region agent log
+                  fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:995',message:'rendering pending orders list',data:{ordersCount:pendingOrders.length,orderIds:pendingOrders.map(o => o.id)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                  // #endregion
+                  return pendingOrders.map((order) => {
+                    try {
+                      // Handle different customer structures
+                      const customerName = typeof order.customer === 'object' && order.customer?.name 
+                        ? order.customer.name 
+                        : typeof order.customer === 'string' 
+                          ? order.customer 
+                          : 'Cliente iFood'
+                      const customerPhone = typeof order.customer === 'object' ? order.customer?.phoneNumber : null
+                      const orderTiming = order.orderTiming || 'DELIVERY'
+                      const isDelivery = orderTiming === 'DELIVERY' || orderTiming === 'IMMEDIATE'
+                      const totalAmount = order.totalPrice?.amount || 0
+                      
+                      return (
+                    <div
+                      key={order.id}
+                      className="border rounded-lg p-4 space-y-3"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-lg">Pedido #{order.displayId || order.shortReference || order.id}</span>
+                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                              {isDelivery ? 'Delivery' : 'Retirada'}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">Cliente:</span>
+                              <span>{customerName}</span>
+                              {customerPhone && (
+                                <span className="ml-2">• {customerPhone}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3 w-3" />
+                              <span>{formatDate(order.createdAt)}</span>
+                            </div>
+                            {order.delivery?.address && (
+                              <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
+                                <span className="font-medium">Endereço:</span>{' '}
+                                {order.delivery.address.street}, {order.delivery.address.number}
+                                {order.delivery.address.complement && ` - ${order.delivery.address.complement}`}
+                                {', '}
+                                {order.delivery.address.neighborhood}, {order.delivery.address.city} - {order.delivery.address.state}
+                                {', '}
+                                {order.delivery.address.zipCode}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="font-bold text-lg text-primary">
+                              {formatCurrency(totalAmount)}
+                          </div>
+                          <Button
+                            onClick={() => handleAcceptOrder(order.id)}
+                            disabled={acceptingOrder === order.id}
+                            className="mt-2"
+                            size="sm"
+                          >
+                            {acceptingOrder === order.id ? (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                                Processando...
+                              </>
+                            ) : (
+                              <>
+                                <Check className="h-4 w-4 mr-2" />
+                                Aceitar Pedido
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="border-t pt-3">
+                        <div className="text-sm font-medium mb-2">Itens do Pedido:</div>
+                        <div className="space-y-2">
+                          {(order.items || []).map((item: any, idx: number) => (
+                            <div key={item.id || idx} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{item.quantity}x</span>
+                                <span>{item.name}</span>
+                              </div>
+                              <span className="text-muted-foreground">
+                                {formatCurrency(item.totalPrice || (item.unitPrice * item.quantity) || 0)}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    )
+                  } catch (error) {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                    // #endregion
+                    console.error('Error rendering order:', error, order)
+                    return (
+                      <div key={order.id} className="border rounded-lg p-4 bg-red-50">
+                        <p className="text-red-800 text-sm">Erro ao renderizar pedido {order.id}</p>
+                      </div>
+                    )
+                  }
+                  })
+                }, [pendingOrders])}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Buscar Detalhes do Pedido */}
+      {status?.configured && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Buscar Detalhes do Pedido</CardTitle>
+            <CardDescription>
+              Busque os detalhes de um pedido do iFood usando o UUID do pedido
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="order_uuid">UUID do Pedido (iFood)</Label>
+              <div className="flex items-center gap-2">
+                <Input
+                  id="order_uuid"
+                  type="text"
+                  placeholder="Ex: 269a9284-76f9-4846-a04c-c564bb10868d"
+                  value={orderUuid}
+                  onChange={(e) => setOrderUuid(e.target.value)}
+                  className="font-mono text-sm"
+                />
+                <Button
+                  onClick={handleFetchOrderDetails}
+                  disabled={loadingOrderDetails || !orderUuid.trim()}
+                >
+                  {loadingOrderDetails ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Buscando...
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingBag className="h-4 w-4 mr-2" />
+                      Buscar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            {orderDetails && (
+              <div className="mt-4 p-4 border rounded-lg bg-gray-50">
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-semibold">Pedido #{orderDetails.displayId || orderDetails.shortReference}</span>
+                    <Badge variant="outline">
+                      {orderDetails.orderTiming === 'DELIVERY' ? 'Delivery' : 'Retirada'}
+                    </Badge>
+                  </div>
+                  <div className="text-sm space-y-1">
+                    <div><span className="font-medium">Cliente:</span> {orderDetails.customer?.name}</div>
+                    <div><span className="font-medium">Total:</span> {formatCurrency(orderDetails.totalPrice?.amount || 0)}</div>
+                    <div><span className="font-medium">Criado em:</span> {formatDate(orderDetails.createdAt)}</div>
+                    {orderDetails.items && orderDetails.items.length > 0 && (
+                      <div className="mt-2">
+                        <span className="font-medium">Itens ({orderDetails.items.length}):</span>
+                        <ul className="list-disc list-inside ml-2 mt-1">
+                          {orderDetails.items.slice(0, 5).map((item: any, idx: number) => (
+                            <li key={idx} className="text-xs">
+                              {item.quantity}x {item.name} - {formatCurrency(item.totalPrice)}
+                            </li>
+                          ))}
+                          {orderDetails.items.length > 5 && (
+                            <li className="text-xs text-muted-foreground">
+                              +{orderDetails.items.length - 5} mais item(ns)
+                            </li>
+                          )}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+            {orderDetailsError && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-800">{orderDetailsError}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Webhook URL Card */}
       {status?.configured && status?.webhook_url && (

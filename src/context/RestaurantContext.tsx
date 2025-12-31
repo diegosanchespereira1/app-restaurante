@@ -217,6 +217,9 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     customer: o.customer,
                     table: o.table_number,
                     orderType: o.order_type || 'dine_in',
+                    source: o.source || 'manual',
+                    ifood_order_id: o.ifood_order_id || null,
+                    ifood_status: o.ifood_status || null,
                     order_discount_type: o.order_discount_type || null,
                     order_discount_value: o.order_discount_value || null,
                     total: o.total,
@@ -227,9 +230,6 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     notes: o.notes,
                     paymentMethod: o.payment_method,
                     cancellation_reason: o.cancellation_reason || null,
-                    source: o.source || 'manual',
-                    ifood_order_id: o.ifood_order_id || null,
-                    ifood_status: o.ifood_status || null,
                     items: o.items.map((i: any) => ({
                         id: i.product_id || i.menu_item_id, // suporta ambos durante transição
                         name: i.name,
@@ -374,7 +374,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             created_at: new Date().toISOString(),
             notes: order.notes,
             order_discount_type: order.order_discount_type || null,
-            order_discount_value: order.order_discount_value || null
+            order_discount_value: order.order_discount_value || null,
+            source: order.source || 'manual'
         })
 
         if (orderError) {
@@ -460,6 +461,10 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: true }
         }
 
+        // Get order info before update to check if it's an iFood order
+        const orderBeforeUpdate = orders.find(o => o.id === orderId)
+        const isIfoodOrder = orderBeforeUpdate?.source === 'ifood' && orderBeforeUpdate.ifood_order_id
+        
         const { error } = await supabase.from('orders').update({ status }).eq('id', orderId)
         if (error) {
             console.error("Error updating order status:", error)
@@ -467,6 +472,31 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             return { success: false, error: error.message }
         }
         console.log('Order status updated successfully in database')
+        
+        // Sync status to iFood if this is an iFood order
+        if (isIfoodOrder) {
+            try {
+                const { getBackendUrl } = await import('../lib/backend-config')
+                const backendUrl = getBackendUrl()
+                const syncResponse = await fetch(`${backendUrl}/api/ifood/sync-order-status/${orderId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ status })
+                })
+                // Don't fail the operation if sync fails, just log it
+                if (syncResponse.ok) {
+                    console.log('Order status synced to iFood successfully')
+                } else {
+                    console.warn('Failed to sync order status to iFood, but order was updated in system')
+                }
+            } catch (syncError) {
+                console.warn('Error syncing order status to iFood:', syncError)
+                // Don't fail the operation if sync fails
+            }
+        }
+        
         return { success: true }
     }
 
@@ -679,6 +709,9 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                         closedAt: o.closed_at,
                         notes: o.notes,
                         paymentMethod: o.payment_method,
+                        source: o.source || 'manual',
+                        ifood_order_id: o.ifood_order_id || null,
+                        ifood_status: o.ifood_status || null,
                         items: o.items.map((i: any) => ({
                             id: i.product_id || i.menu_item_id, // suporta ambos durante transição
                             name: i.name,

@@ -26,6 +26,19 @@ cp .env.example .env
 
 **Importante**: Consulte `IFOOD_BEST_PRACTICES.md` antes de fazer alterações no código de integração com iFood.
 
+## Documentação iFood
+
+Para referência completa da API do iFood, consulte:
+
+- **`IFOOD_API_REFERENCE.md`** - Referência completa com links para documentação oficial
+- **`IFOOD_BEST_PRACTICES.md`** - Boas práticas recomendadas pelo iFood
+- **`TROUBLESHOOTING_IFOOD.md`** - Guia de resolução de problemas
+
+**Documentação Oficial do iFood**:
+- Swagger/API Reference: https://developer.ifood.com.br/pt-BR/docs/references/
+- Guia de Documentação: https://developer.ifood.com.br/pt-BR/docs/guides/
+- Endpoint OAuth Token: https://developer.ifood.com.br/pt-BR/docs/references/#operations-OAuth-oauthTokenV1
+
 ## Desenvolvimento
 
 ```bash

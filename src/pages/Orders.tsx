@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Button } from "../components/ui/button"
-import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair } from "lucide-react"
+import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair, Smartphone } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useSettings } from "../context/SettingsContext"
@@ -31,7 +31,8 @@ export function Orders() {
         const matchesStatus = statusFilter === "all" ||
             (statusFilter === "delivery" && order.orderType === "delivery") ||
             (statusFilter === "pickup" && order.orderType === "takeout") ||
-            (statusFilter === "mesa" && order.orderType === "dine_in")
+            (statusFilter === "mesa" && order.orderType === "dine_in") ||
+            (statusFilter === "ifood" && order.source === "ifood")
         
         return matchesSearch && matchesStatus
     })
@@ -183,6 +184,18 @@ export function Orders() {
                             Mesa
                         </Button>
                     )}
+                    <Button
+                        variant={statusFilter === "ifood" ? "default" : "ghost"}
+                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                            statusFilter === "ifood"
+                                ? "text-primary bg-primary/10 border border-primary/20"
+                                : "text-muted-foreground hover:bg-accent"
+                        }`}
+                        onClick={() => setStatusFilter(statusFilter === "ifood" ? "all" : "ifood")}
+                    >
+                        <Smartphone className="w-4 h-4" />
+                        iFood
+                    </Button>
                 </div>
             </section>
 

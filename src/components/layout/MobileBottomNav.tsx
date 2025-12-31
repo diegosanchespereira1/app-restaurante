@@ -1,5 +1,5 @@
 import React from "react"
-import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Package, TrendingUp, DollarSign, Tag } from "lucide-react"
+import { LayoutDashboard, ClipboardList, UtensilsCrossed, Settings, Armchair, Package, TrendingUp, DollarSign, Tag, ShoppingBag } from "lucide-react"
 import { NavLink, useNavigate, useLocation } from "react-router-dom"
 import { cn } from "../../lib/utils"
 import { useLanguage } from "../../context/LanguageContext"
@@ -52,6 +52,12 @@ export function MobileBottomNav() {
                 href: "/stock", 
                 label: t("stockManagement") || "Estoque", 
                 icon: Package, 
+                requiredRole: 'admin' as any 
+            },
+            { 
+                href: "/ifood", 
+                label: "iFood", 
+                icon: ShoppingBag, 
                 requiredRole: 'admin' as any 
             },
             { 

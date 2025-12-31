@@ -1,4 +1,5 @@
 import type { PrinterSettings } from "../context/SettingsContext"
+import { getBackendUrl } from "./backend-config"
 
 export interface PrintData {
   orderId: string
@@ -263,7 +264,7 @@ async function printViaNetwork(data: PrintData, settings: PrinterSettings): Prom
       protocol = 'lpr'
     }
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+    const backendUrl = getBackendUrl()
     
     const response = await fetch(`${backendUrl}/api/printer/print`, {
       method: 'POST',
@@ -322,7 +323,7 @@ export async function testNetworkPrinter(
       }
     }
 
-    const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:3000'
+    const backendUrl = getBackendUrl()
     
     const response = await fetch(`${backendUrl}/api/printer/test`, {
       method: 'POST',

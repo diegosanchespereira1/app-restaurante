@@ -4,8 +4,11 @@ import { encrypt, decrypt } from '../utils/encryption.js'
 import { withRetry, isTimeoutError } from '../utils/retry.js'
 
 // iFood API base URLs (sandbox and production)
-const IFOOD_API_BASE_SANDBOX = 'https://merchant-api.ifood.com.br'
-const IFOOD_API_BASE_PRODUCTION = 'https://merchant-api.ifood.com.br'
+// Base URL for authentication endpoints
+const IFOOD_API_BASE_SANDBOX = 'https://merchant-api.ifood.com.br/authentication/v1.0'
+const IFOOD_API_BASE_PRODUCTION = 'https://merchant-api.ifood.com.br/authentication/v1.0'
+// Base URL for other endpoints (order, merchants, catalog)
+const IFOOD_API_BASE_OTHER = 'https://merchant-api.ifood.com.br'
 
 interface IfoodConfig {
   id?: number
@@ -13,6 +16,7 @@ interface IfoodConfig {
   client_id: string
   client_secret: string
   authorization_code?: string | null
+  authorization_code_verifier?: string | null
   access_token?: string | null
   token_expires_at?: string | null
   refresh_token?: string | null
@@ -22,10 +26,14 @@ interface IfoodConfig {
 }
 
 interface IfoodTokenResponse {
-  access_token: string
-  token_type: string
-  expires_in: number
-  refresh_token?: string
+  accessToken?: string
+  access_token?: string // Support both formats
+  token_type?: string
+  type?: string // Support both formats
+  expiresIn?: number
+  expires_in?: number // Support both formats
+  refreshToken?: string
+  refresh_token?: string // Support both formats
 }
 
 export interface IfoodOrder {
@@ -182,9 +190,56 @@ export class IfoodService {
   }
 
   /**
-   * Authenticate with iFood API and get access token
+   * Get authorization code verifier from /oauth/userCode API
+   * The API requires application/x-www-form-urlencoded format with only clientId in body
+   * 
+   * Documentation: See IFOOD_AUTHENTICATION.md for official authentication documentation
    */
-  async authenticate(): Promise<{ success: boolean; error?: string }> {
+  async getUserCodeVerifier(clientId: string): Promise<{ success: boolean; verifier?: string; error?: string }> {
+    try {
+      const baseUrl = this.useSandbox ? IFOOD_API_BASE_SANDBOX : IFOOD_API_BASE_PRODUCTION
+      
+      // The API requires only clientId as form data (x-www-form-urlencoded)
+      const formData = new URLSearchParams()
+      formData.append('clientId', clientId)
+      
+      const response = await axios.post<{ authorizationCodeVerifier: string }>(
+        `${baseUrl}/oauth/userCode`,
+        formData.toString(),
+        {
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'accept': 'application/json'
+          },
+          timeout: 30000
+        }
+      )
+
+      return {
+        success: true,
+        verifier: response.data.authorizationCodeVerifier
+      }
+    } catch (error: any) {
+      console.error('Error fetching userCode verifier:', error.response?.data || error.message)
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Failed to fetch authorization code verifier'
+      }
+    }
+  }
+
+  /**
+   * Authenticate with iFood API and get access token
+   * Supports client_credentials, authorization_code, and refresh_token flows
+   * 
+   * Documentation: See IFOOD_AUTHENTICATION.md for official authentication documentation
+   * API Reference: https://developer.ifood.com.br/pt-BR/docs/references/#operations-OAuth-oauthTokenV1
+   */
+  async authenticate(
+    useRefreshToken: boolean = false, 
+    authorizationCode?: string,
+    authorizationCodeVerifier?: string
+  ): Promise<{ success: boolean; error?: string }> {
     if (!this.config) {
       const config = await this.getConfig()
       if (!config) {
@@ -192,78 +247,367 @@ export class IfoodService {
       }
     }
 
+    // Determine grant type based on available credentials (outside try for error handling)
+    // refresh_token is the DEFAULT grant type when refresh_token is available
+    // The authorizationCodeVerifier is required when using refresh_token
+    let grantType: 'client_credentials' | 'authorization_code' | 'refresh_token' = 'client_credentials'
+    
+    // Get authorizationCodeVerifier from parameter or config
+    let verifier: string | null | undefined = authorizationCodeVerifier || this.config!.authorization_code_verifier
+    // Normalize: convert null/undefined to null, ensure it's a string if it exists
+    if (verifier === undefined || verifier === null || (typeof verifier === 'string' && verifier.trim() === '')) {
+      verifier = null
+    }
+    console.log('AuthorizationCodeVerifier check:', {
+      from_param: authorizationCodeVerifier ? 'provided' : 'not provided',
+      from_config: this.config!.authorization_code_verifier ? 'exists' : 'missing',
+      final_verifier: verifier ? 'exists' : 'null/empty',
+      verifier_length: verifier ? String(verifier).length : 0
+    })
+    
+    // refresh_token is the DEFAULT - use it if we have refresh_token
+    if (this.config!.refresh_token) {
+      grantType = 'refresh_token'
+      // Validate that authorizationCodeVerifier is available when using refresh_token
+      if (!verifier) {
+        console.error('authorizationCodeVerifier is missing for refresh_token flow. Config:', {
+          has_verifier_param: !!authorizationCodeVerifier,
+          has_verifier_config: !!this.config!.authorization_code_verifier,
+          verifier_value: verifier
+        })
+        return {
+          success: false,
+          error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. Obtenha via /api/ifood/user-code primeiro.'
+        }
+      }
+    } else {
+      // No refresh_token - use authorization_code or client_credentials
+      const authCode = authorizationCode || this.config!.authorization_code
+      const hasAuthorizationCode = authCode && authCode.trim() !== ''
+      grantType = hasAuthorizationCode ? 'authorization_code' : 'client_credentials'
+    }
+    
     try {
       const baseUrl = this.useSandbox ? IFOOD_API_BASE_SANDBOX : IFOOD_API_BASE_PRODUCTION
       
-      const response = await axios.post<IfoodTokenResponse>(
-        `${baseUrl}/authentication/v1.0/oauth/token`,
-        new URLSearchParams({
-          grant_type: 'client_credentials',
-          client_id: this.config!.client_id,
-          client_secret: this.config!.client_secret
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/x-www-form-urlencoded'
+      // Build params object using camelCase as per iFood API documentation
+      // Keys must be exactly: grantType, clientId, clientSecret, refreshToken, authorizationCode, authorizationCodeVerifier
+      // Reference: https://developer.ifood.com.br/pt-BR/docs/references/#operations-OAuth-oauthTokenV1
+      const params: Record<string, string> = {
+        grantType: grantType,
+        clientId: String(this.config!.client_id || ''),
+        clientSecret: String(this.config!.client_secret || '')
+      }
+      
+      // Get authorization code (from parameter or config)
+      const authCode = authorizationCode || this.config!.authorization_code
+      
+      // When using refresh_token flow, also include refreshToken and authorizationCodeVerifier in body
+      // authorizationCodeVerifier is REQUIRED when using refresh_token
+      // Keys must be exactly: grantType, clientId, clientSecret, refreshToken, authorizationCodeVerifier (and optionally authorizationCode)
+      if (grantType === 'refresh_token' && this.config!.refresh_token) {
+        params.refreshToken = String(this.config!.refresh_token)
+        // authorizationCodeVerifier is REQUIRED for refresh_token flow - must be a valid non-empty string
+        if (!verifier) {
+          return {
+            success: false,
+            error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. Obtenha via /api/ifood/user-code primeiro.'
           }
+        }
+        params.authorizationCodeVerifier = String(verifier)
+        // Include authorizationCode if available (optional)
+        if (authCode && authCode.trim() !== '') {
+          params.authorizationCode = String(authCode)
+        }
+      }
+      
+      // Add authorization code if using authorization_code flow
+      if (grantType === 'authorization_code' && authCode) {
+        params.code = String(authCode)
+        // Also include authorizationCode in body (not just code)
+        params.authorizationCode = String(authCode)
+        // When using authorization_code flow, also include refreshToken in body if available
+        if (this.config!.refresh_token) {
+          params.refreshToken = String(this.config!.refresh_token)
+        }
+        // Include authorizationCodeVerifier if available (from parameter or config)
+        if (verifier) {
+          params.authorizationCodeVerifier = String(verifier)
+        }
+      }
+      
+      console.log(`Tentando autenticar com grantType: ${grantType}`)
+      console.log(`Params sendo enviados:`, { 
+        grantType: params.grantType,
+        clientId: params.clientId,
+        clientSecret: '***', 
+        refreshToken: params.refreshToken ? '***' : undefined, 
+        code: params.code ? '***' : undefined, 
+        authorizationCode: params.authorizationCode ? '***' : undefined, 
+        authorizationCodeVerifier: params.authorizationCodeVerifier ? '***' : 'MISSING' 
+      })
+      
+      // Create URLSearchParams ensuring all values are strings
+      // Keys must be exactly as expected: grantType, clientId, clientSecret, refreshToken, authorizationCode, authorizationCodeVerifier
+      const searchParams = new URLSearchParams()
+      searchParams.append('grantType', grantType)
+      searchParams.append('clientId', params.clientId)
+      searchParams.append('clientSecret', params.clientSecret)
+      
+      // Add refresh token if present (for refresh_token flow)
+      if (params.refreshToken) {
+        searchParams.append('refreshToken', params.refreshToken)
+      }
+      
+      // Add authorization code if present (for authorization_code flow)
+      if (params.code) {
+        searchParams.append('code', params.code)
+      }
+      
+      // Add authorizationCode in body (optional for refresh_token, required for authorization_code)
+      if (params.authorizationCode) {
+        searchParams.append('authorizationCode', params.authorizationCode)
+      }
+      
+      // Add authorizationCodeVerifier in body (REQUIRED for refresh_token, optional for authorization_code)
+      // This must be present when using refresh_token flow
+      if (params.authorizationCodeVerifier) {
+        searchParams.append('authorizationCodeVerifier', params.authorizationCodeVerifier)
+      } else if (grantType === 'refresh_token') {
+        // This should never happen because we validate earlier, but double-check
+        console.error('ERROR: authorizationCodeVerifier is missing in params but grantType is refresh_token')
+        return {
+          success: false,
+          error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. Obtenha via /api/ifood/user-code primeiro.'
+        }
+      }
+      
+      // Log the final URLSearchParams (without sensitive data)
+      const logParams = searchParams.toString().replace(/clientSecret=[^&]+/g, 'clientSecret=***').replace(/refreshToken=[^&]+/g, 'refreshToken=***').replace(/authorizationCodeVerifier=[^&]+/g, 'authorizationCodeVerifier=***')
+      console.log(`URLSearchParams final (sanitized):`, logParams)
+      
+      // Build headers - grantType, authorizationCode and authorizationCodeVerifier go in body, not header
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'accept': 'application/json'
+      }
+      
+      const response = await axios.post<IfoodTokenResponse>(
+        `${baseUrl}/oauth/token`,
+        searchParams.toString(),
+        {
+          headers: headers,
+          timeout: 30000
         }
       )
 
-      const { access_token, expires_in, refresh_token } = response.data
+      // Handle both camelCase and snake_case response formats
+      const accessToken = response.data.accessToken || response.data.access_token
+      const expiresIn = response.data.expiresIn || response.data.expires_in
+      const refreshToken = response.data.refreshToken || response.data.refresh_token
+
+      if (!accessToken || !expiresIn) {
+        return {
+          success: false,
+          error: 'Resposta inválida da API: accessToken e expiresIn são obrigatórios'
+        }
+      }
 
       // Calculate expiration time
-      const expiresAt = new Date(Date.now() + expires_in * 1000)
+      const expiresAt = new Date(Date.now() + expiresIn * 1000)
+
+      // Preserve existing refresh_token if new one is not provided
+      const finalRefreshToken = refreshToken || this.config!.refresh_token || null
 
       // Update config with new token
       await this.supabase
         .from('ifood_integration')
         .update({
-          access_token: access_token,
+          access_token: accessToken,
           token_expires_at: expiresAt.toISOString(),
-          refresh_token: refresh_token || null
+          refresh_token: finalRefreshToken
         })
         .eq('id', this.config!.id)
 
-      this.config!.access_token = access_token
+      this.config!.access_token = accessToken
       this.config!.token_expires_at = expiresAt.toISOString()
-      if (refresh_token) {
-        this.config!.refresh_token = refresh_token
-      }
+      this.config!.refresh_token = finalRefreshToken
 
       // Initialize API client
-      this.initializeApiClient(access_token)
+      this.initializeApiClient(accessToken)
 
       return { success: true }
     } catch (error: any) {
-      console.error('iFood authentication error:', error.response?.data || error.message)
+      console.error('iFood authentication error:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        message: error.message,
+        url: error.config?.url
+      })
+      
+      // Mensagens de erro mais específicas com informações de troubleshooting
+      let errorMessage = 'Falha na autenticação com iFood'
+      let troubleshootingTips: string[] = []
+      
+      if (error.response) {
+        const status = error.response.status
+        const data = error.response.data
+        
+        switch (status) {
+          case 400:
+            errorMessage = 'Credenciais inválidas ou parâmetros incorretos.'
+            if (data?.error?.message) {
+              errorMessage += ` Erro: ${data.error.message}`
+            }
+            if (data?.error_description) {
+              errorMessage += ` Detalhes: ${data.error_description}`
+            }
+            troubleshootingTips.push('Verifique se o Client ID está correto')
+            troubleshootingTips.push('Verifique se o Client Secret está correto')
+            if (grantType === 'authorization_code') {
+              troubleshootingTips.push('Verifique se o Authorization Code está válido e não expirou')
+              troubleshootingTips.push('O Authorization Code pode ter sido usado apenas uma vez - gere um novo se necessário')
+            }
+            troubleshootingTips.push('Verifique se as credenciais estão ativas no painel do iFood')
+            break
+          case 401:
+            errorMessage = 'Não autorizado. As credenciais fornecidas não foram aceitas.'
+            troubleshootingTips.push('Verifique se o Client ID está correto')
+            troubleshootingTips.push('Verifique se o Client Secret está correto')
+            troubleshootingTips.push('Verifique se as credenciais não expiraram no painel do iFood')
+            break
+          case 403:
+            errorMessage = 'Acesso negado. O merchant pode não ter permissão para usar a API.'
+            troubleshootingTips.push('Verifique se o Merchant ID está correto')
+            troubleshootingTips.push('Verifique se o merchant tem acesso à API do iFood')
+            troubleshootingTips.push('Entre em contato com o suporte do iFood para verificar permissões')
+            break
+          case 404:
+            errorMessage = 'Endpoint não encontrado. A URL da API do iFood pode estar incorreta.'
+            troubleshootingTips.push('Verifique se está usando a URL correta da API do iFood')
+            troubleshootingTips.push('Verifique se o ambiente (sandbox/produção) está correto')
+            break
+          case 500:
+          case 502:
+          case 503:
+          case 504:
+            errorMessage = `Erro no servidor do iFood (HTTP ${status}). O servidor pode estar temporariamente indisponível.`
+            troubleshootingTips.push('Aguarde alguns minutos e tente novamente')
+            troubleshootingTips.push('Verifique o status da API do iFood')
+            break
+          default:
+            errorMessage = `Erro HTTP ${status}: ${error.response.statusText}`
+            if (data?.message) {
+              errorMessage += ` - ${data.message}`
+            }
+            if (data?.error_description) {
+              errorMessage += ` - ${data.error_description}`
+            }
+        }
+      } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+        errorMessage = 'Não foi possível conectar ao servidor do iFood.'
+        troubleshootingTips.push('Verifique sua conexão com a internet')
+        troubleshootingTips.push('Verifique se o servidor do iFood está acessível')
+        troubleshootingTips.push('Verifique se há firewall ou proxy bloqueando a conexão')
+      } else if (isTimeoutError(error)) {
+        errorMessage = 'Timeout na conexão com iFood. A requisição demorou muito para responder.'
+        troubleshootingTips.push('Verifique sua conexão com a internet')
+        troubleshootingTips.push('Tente novamente em alguns instantes')
+        troubleshootingTips.push('Verifique se há problemas de rede ou firewall')
+      } else {
+        errorMessage = `Erro desconhecido: ${error.message || 'Erro na autenticação'}`
+      }
+      
+      // Adicionar informações de contexto
+      const contextInfo = []
+      if (grantType) {
+        contextInfo.push(`Grant Type: ${grantType}`)
+      }
+      if (this.config?.merchant_id) {
+        contextInfo.push(`Merchant ID: ${this.config.merchant_id}`)
+      }
+      if (this.config?.client_id) {
+        contextInfo.push(`Client ID: ${this.config.client_id.substring(0, 8)}...`)
+      }
+      
+      if (contextInfo.length > 0) {
+        errorMessage += ` (${contextInfo.join(', ')})`
+      }
+      
+      // Adicionar dicas de troubleshooting se houver
+      if (troubleshootingTips.length > 0) {
+        errorMessage += `\n\nDicas para resolver:\n${troubleshootingTips.map((tip, i) => `${i + 1}. ${tip}`).join('\n')}`
+      }
+      
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message || 'Authentication failed' 
+        error: errorMessage
       }
     }
   }
 
   /**
    * Check if token is valid and refresh if needed
+   * Returns detailed error information for troubleshooting
    */
-  async ensureAuthenticated(): Promise<boolean> {
+  async ensureAuthenticated(): Promise<{ success: boolean; error?: string }> {
     if (!this.config) {
-      await this.getConfig()
+      const config = await this.getConfig()
+      if (!config) {
+        return {
+          success: false,
+          error: 'Configuração do iFood não encontrada. Configure as credenciais primeiro.'
+        }
+      }
+    }
+
+    // Check if config has required fields
+    if (!this.config?.client_id || !this.config?.client_secret) {
+      return {
+        success: false,
+        error: 'Credenciais do iFood não configuradas. Verifique se Client ID e Client Secret estão preenchidos.'
+      }
     }
 
     if (!this.config?.access_token) {
       const authResult = await this.authenticate()
-      return authResult.success
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error || 'Falha na autenticação com iFood. Verifique as credenciais e tente novamente.'
+        }
+      }
+      return { success: true }
     }
 
     // Check if token is expired (with 5 minute buffer)
-    const expiresAt = this.config.token_expires_at 
+    const expiresAt = this.config.token_expires_at
       ? new Date(this.config.token_expires_at)
       : null
 
     if (expiresAt && expiresAt.getTime() - Date.now() < 5 * 60 * 1000) {
-      // Token expired or about to expire, refresh
-      return (await this.authenticate()).success
+      // Token expired or about to expire, try refresh_token first, then fallback to full auth
+      let authResult
+      if (this.config!.refresh_token) {
+        // When using refresh_token, we need authorizationCodeVerifier
+        // For now, skip refresh_token if we don't have verifier and fallback to other flows
+        // The verifier should be obtained from frontend via /api/ifood/user-code endpoint
+        authResult = await this.authenticate(true) // Use refresh_token flow
+      }
+      
+      // If refresh_token failed or doesn't exist, fallback to full authentication
+      if (!authResult || !authResult.success) {
+        authResult = await this.authenticate(false) // Use client_credentials or authorization_code
+      }
+      
+      if (!authResult.success) {
+        return {
+          success: false,
+          error: authResult.error || 'Falha ao renovar token de autenticação. Verifique as credenciais.'
+        }
+      }
+      return { success: true }
     }
 
     // Initialize API client if not already done
@@ -271,7 +615,22 @@ export class IfoodService {
       this.initializeApiClient(this.config.access_token!)
     }
 
-    return true
+    return { success: true }
+  }
+
+  /**
+   * Check if token is expired
+   */
+  async isTokenExpired(): Promise<boolean> {
+    if (!this.config?.token_expires_at) {
+      return true // No expiration time means expired
+    }
+
+    const expiresAt = new Date(this.config.token_expires_at)
+    const now = new Date()
+    
+    // Token is expired if current time is after expiration time
+    return now >= expiresAt
   }
 
   /**
@@ -279,7 +638,8 @@ export class IfoodService {
    * Following iFood best practices: timeout configurável, retry para 5XX
    */
   private initializeApiClient(accessToken: string) {
-    const baseUrl = this.useSandbox ? IFOOD_API_BASE_SANDBOX : IFOOD_API_BASE_PRODUCTION
+    // Use base URL for other endpoints (not authentication)
+    const baseUrl = IFOOD_API_BASE_OTHER
     const timeout = parseInt(process.env.IFOOD_API_TIMEOUT || '30000', 10)
 
     this.apiClient = axios.create({
@@ -325,41 +685,89 @@ export class IfoodService {
   }
 
   /**
-   * Get orders from iFood
-   * Following iFood best practices: retry on 5XX, use x-polling-merchants header when needed
+   * Poll events from iFood (polling endpoint)
+   * Format: GET /events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD
+   * Following iFood best practices: retry on 5XX, use Bearer token
+   * Documentation: https://developer.ifood.com.br/pt-BR/docs/guides/modules/events/polling-overview
    */
-  async getOrders(status?: string): Promise<{ success: boolean; orders?: IfoodOrder[]; error?: string }> {
-    const authenticated = await this.ensureAuthenticated()
-    if (!authenticated) {
-      return { success: false, error: 'Failed to authenticate with iFood' }
+  async pollEvents(): Promise<{ success: boolean; orders?: IfoodOrder[]; error?: string }> {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:693',message:'pollEvents called',data:{before_auth:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    const authResult = await this.ensureAuthenticated()
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:696',message:'auth result',data:{success:authResult.success,error:authResult.error||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    if (!authResult.success) {
+      return { 
+        success: false, 
+        error: authResult.error || 'Falha na autenticação com iFood ao buscar eventos.' 
+      }
     }
 
     try {
       const merchantId = this.config!.merchant_id
-      const endpoint = status 
-        ? `/order/v1.0/events/orders:${status}`
-        : `/order/v1.0/events/orders:placed`
-
-      // Use retry for 5XX errors (iFood best practice)
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:703',message:'starting polling',data:{merchantId,hasApiClient:!!this.apiClient},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
+      // According to iFood API documentation (https://developer.ifood.com.br/pt-BR/docs/guides/modules/events/polling-overview):
+      // Endpoint format: GET /events/v1.0/polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD
+      const endpoint = `/events/v1.0/polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:714',message:'calling polling endpoint',data:{endpoint,fullUrl:`${this.apiClient!.defaults.baseURL}${endpoint}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       const response = await withRetry(
-        () => this.apiClient!.get<IfoodOrder[]>(
-          `/merchants/${merchantId}${endpoint}`,
-          {
-            // Add x-polling-merchants header if needed (for 100+ merchants)
-            // headers: {
-            //   'x-polling-merchants': merchantId
-            // }
-          }
-        ),
+        () => this.apiClient!.get(endpoint),
         {
-          maxRetries: 3,
-          retryDelay: 1000
+          maxRetries: 2,
+          retryDelay: 500
         }
       )
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:722',message:'polling endpoint response',data:{status:response.status,statusText:response.statusText,hasData:!!response.data,dataType:Array.isArray(response.data)?'array':typeof response.data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
 
-      return { success: true, orders: response.data }
+      // Response codes: 200 = events available, 204 = no new events
+      if (response.status === 204) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:748',message:'204 no content - returning empty',data:{status:204},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+        // #endregion
+        return { success: true, orders: [] }
+      }
+
+      // Response data may be an array of events or an object with events array
+      // According to iFood API, events structure can vary:
+      // - Direct array: [event1, event2, ...]
+      // - Object with events property: { events: [event1, event2, ...] }
+      // - Object with data property: { data: [event1, event2, ...] }
+      let events: any[] = []
+      
+      if (Array.isArray(response.data)) {
+        events = response.data
+      } else if (response.data && typeof response.data === 'object') {
+        // Try different possible structures
+        events = response.data.events || response.data.data || response.data.items || []
+        
+        // If still empty, check if response.data itself is an event (single event)
+        if (events.length === 0 && response.data.id) {
+          events = [response.data]
+        }
+      }
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:753',message:'events extracted',data:{eventsCount:events.length,isArray:Array.isArray(response.data),responseDataType:typeof response.data,hasEvents:!!response.data?.events,hasData:!!response.data?.data,hasItems:!!response.data?.items,responseDataKeys:response.data?Object.keys(response.data):null,firstEventSample:events[0]?JSON.stringify(events[0]).substring(0,500):null,fullResponseDataSample:response.data?JSON.stringify(response.data).substring(0,500):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      
+      return { success: true, orders: events }
     } catch (error: any) {
-      console.error('Error fetching orders from iFood:', error.response?.data || error.message)
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:757',message:'pollEvents error',data:{errorMessage:error.message,status:error.response?.status,errorData:error.response?.data?JSON.stringify(error.response.data).substring(0,200):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      console.error('Error polling events from iFood:', error.response?.data || error.message)
       
       // If timeout, notify about connectivity issues (iFood best practice)
       if (isTimeoutError(error)) {
@@ -371,7 +779,52 @@ export class IfoodService {
 
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message || 'Failed to fetch orders' 
+        error: error.response?.data?.message || error.message || 'Failed to poll events' 
+      }
+    }
+  }
+
+  /**
+   * Get orders from iFood (legacy method - using status filter)
+   * Following iFood best practices: retry on 5XX, use x-polling-merchants header when needed
+   */
+  async getOrders(status?: string): Promise<{ success: boolean; orders?: IfoodOrder[]; error?: string }> {
+    const authResult = await this.ensureAuthenticated()
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error || 'Falha na autenticação com iFood ao buscar pedidos.'
+      }
+    }
+
+    try {
+      const merchantId = this.config!.merchant_id
+      const endpoint = `/merchants/${merchantId}/orders?status=${status || 'PLACED'}`
+
+      // Use retry for 5XX errors (iFood best practice)
+      const response = await withRetry(
+        () => this.apiClient!.get<IfoodOrder[]>(endpoint),
+        {
+          maxRetries: 3,
+          retryDelay: 1000
+        }
+      )
+
+      return { success: true, orders: Array.isArray(response.data) ? response.data : [] }
+    } catch (error: any) {
+      console.error('Error fetching orders from iFood:', error.response?.data || error.message)
+
+      // If timeout, notify about connectivity issues (iFood best practice)
+      if (isTimeoutError(error)) {
+        return {
+          success: false,
+          error: 'Timeout na conexão com iFood. Verifique sua conectividade.'
+        }
+      }
+
+      return {
+        success: false,
+        error: error.response?.data?.message || error.message || 'Failed to fetch orders'
       }
     }
   }
@@ -382,19 +835,22 @@ export class IfoodService {
    * Não consultar pedidos após 8 horas do horário de entrega.
    */
   async getOrderDetails(orderId: string): Promise<{ success: boolean; order?: IfoodOrder; error?: string }> {
-    const authenticated = await this.ensureAuthenticated()
-    if (!authenticated) {
-      return { success: false, error: 'Failed to authenticate with iFood' }
+    const authResult = await this.ensureAuthenticated()
+    if (!authResult.success) {
+      return {
+        success: false,
+        error: authResult.error || `Falha na autenticação com iFood ao buscar detalhes do pedido ${orderId}.`
+      }
     }
 
     try {
-      const merchantId = this.config!.merchant_id
-      
       // Use retry for 5XX errors
+      // According to iFood API: GET /order/v1.0/orders/{orderId}
+      // Verified working endpoint format (not /merchants/{merchantId}/orders/{orderId})
+      const endpoint = `/order/v1.0/orders/${orderId}`
+
       const response = await withRetry(
-        () => this.apiClient!.get<IfoodOrder>(
-          `/merchants/${merchantId}/orders/${orderId}`
-        ),
+        () => this.apiClient!.get<IfoodOrder>(endpoint),
         {
           maxRetries: 3,
           retryDelay: 1000
@@ -418,10 +874,67 @@ export class IfoodService {
 
       return { success: true, order }
     } catch (error: any) {
+      const statusCode = error.response?.status || error.status
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to fetch order details'
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:913',message:'getOrderDetails error',data:{orderId,statusCode,errorMessage,hasResponse:!!error.response},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       console.error('Error fetching order details from iFood:', error.response?.data || error.message)
+      
+      // Preserve 404 status from iFood API
+      if (statusCode === 404) {
+        return { 
+          success: false, 
+          error: `Pedido não encontrado no iFood (404): ${errorMessage}`
+        }
+      }
+      
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message || 'Failed to fetch order details' 
+        error: errorMessage
+      }
+    }
+  }
+
+  /**
+   * Acknowledge events after processing
+   * Following iFood best practices:
+   * - Send acknowledgment after persisting events
+   * - Send acknowledgment for all events, even unused ones
+   * - Send acknowledgment only once per event
+   * - Limit: up to 2000 IDs per request
+   */
+  async acknowledgeEvents(eventIds: string[]): Promise<{ success: boolean; error?: string }> {
+    const authResult = await this.ensureAuthenticated()
+    if (!authResult.success) {
+      return { 
+        success: false, 
+        error: authResult.error || 'Falha na autenticação com iFood ao enviar acknowledgment.' 
+      }
+    }
+
+    try {
+      // iFood API: POST /events/acknowledgment
+      // Can send array of event IDs or full event payloads (API uses only the 'id' field)
+      // Limit: up to 2000 IDs per request
+      const endpoint = `/events/acknowledgment`
+      
+      const response = await withRetry(
+        () => this.apiClient!.post(endpoint, eventIds),
+        {
+          maxRetries: 3,
+          retryDelay: 1000
+        }
+      )
+
+      return { success: true }
+    } catch (error: any) {
+      console.error('Error acknowledging events:', error.response?.data || error.message)
+      return { 
+        success: false, 
+        error: error.response?.data?.message || error.message || 'Failed to acknowledge events' 
       }
     }
   }
@@ -435,11 +948,14 @@ export class IfoodService {
    */
   async updateOrderStatus(
     orderId: string, 
-    status: 'PLACED' | 'CONFIRMED' | 'SEPARATION_STARTED' | 'SEPARATION_ENDED' | 'READY_TO_PICKUP' | 'DISPATCHED' | 'CONCLUDED' | 'CANCELLED'
+    status: 'PLACED' | 'CONFIRMED' | 'PREPARATION_STARTED' | 'SEPARATION_STARTED' | 'SEPARATION_ENDED' | 'READY_TO_PICKUP' | 'DISPATCHED' | 'CONCLUDED' | 'CANCELLED'
   ): Promise<{ success: boolean; error?: string; isAsync?: boolean }> {
-    const authenticated = await this.ensureAuthenticated()
-    if (!authenticated) {
-      return { success: false, error: 'Failed to authenticate with iFood' }
+    const authResult = await this.ensureAuthenticated()
+    if (!authResult.success) {
+      return { 
+        success: false, 
+        error: authResult.error || `Falha na autenticação com iFood ao atualizar status do pedido ${orderId} para ${status}.` 
+      }
     }
 
     try {
@@ -477,9 +993,12 @@ export class IfoodService {
    * Get products from iFood
    */
   async getProducts(): Promise<{ success: boolean; products?: IfoodProduct[]; error?: string }> {
-    const authenticated = await this.ensureAuthenticated()
-    if (!authenticated) {
-      return { success: false, error: 'Failed to authenticate with iFood' }
+    const authResult = await this.ensureAuthenticated()
+    if (!authResult.success) {
+      return { 
+        success: false, 
+        error: authResult.error || 'Falha na autenticação com iFood ao buscar produtos.' 
+      }
     }
 
     try {
