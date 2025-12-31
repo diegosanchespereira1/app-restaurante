@@ -204,10 +204,23 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
             if (tableData) setTables(tableData)
 
             // Fetch Orders
+            // Note: Supabase PostgREST automatically handles JOINs and groups results
+            // But we'll deduplicate anyway to be safe
             const { data: orderData, error: orderError } = await supabase
                 .from('orders')
                 .select('*, items:order_items(*)')
                 .order('created_at', { ascending: false })
+            
+            // Debug: Log if we see duplicate IDs in raw data
+            if (orderData) {
+                const orderIds = orderData.map(o => o.id)
+                const uniqueIds = new Set(orderIds)
+                if (orderIds.length !== uniqueIds.size) {
+                    console.warn(`[DEDUP] Raw query returned ${orderIds.length} orders but only ${uniqueIds.size} unique IDs`)
+                    const duplicates = orderIds.filter((id, index) => orderIds.indexOf(id) !== index)
+                    console.warn(`[DEDUP] Duplicate IDs in raw query:`, [...new Set(duplicates)])
+                }
+            }
 
             if (orderError) throw orderError
 
@@ -237,10 +250,73 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                         quantity: i.quantity
                     }))
                 }))
-                setOrders(formattedOrders)
+                
+                // Remove duplicates by ifood_order_id (for iFood orders) or by id (for manual orders)
+                // Keep the most recent order if duplicates exist
+                const uniqueOrders: Order[] = []
+                const seenIfoodIds = new Set<string>()
+                const seenOrderIds = new Set<string>()
+                const duplicatesFound: string[] = []
+                
+                // Sort by created_at descending to keep most recent duplicates
+                formattedOrders.sort((a, b) => {
+                    const dateA = new Date(a.created_at).getTime()
+                    const dateB = new Date(b.created_at).getTime()
+                    return dateB - dateA
+                })
+                
+                for (const order of formattedOrders) {
+                    if (!order || !order.id) {
+                        console.warn(`[DEDUP] Skipping order without id:`, order)
+                        continue
+                    }
+                    
+                    // Normalize IDs to strings for consistent comparison
+                    const orderId = String(order.id).trim()
+                    const ifoodOrderId = order.ifood_order_id ? String(order.ifood_order_id).trim() : null
+                    
+                    // For iFood orders, use ifood_order_id as deduplication key
+                    if (ifoodOrderId) {
+                        if (seenIfoodIds.has(ifoodOrderId)) {
+                            duplicatesFound.push(`iFood order ${ifoodOrderId} (ID: ${orderId}) - duplicate detected`)
+                            console.warn(`[DEDUP] Duplicate iFood order detected: ifood_order_id=${ifoodOrderId}, order_id=${orderId}, status=${order.status}`)
+                            continue // Skip duplicate
+                        }
+                        // Add to unique orders and mark as seen
+                        uniqueOrders.push(order)
+                        seenIfoodIds.add(ifoodOrderId)
+                        seenOrderIds.add(orderId) // Also track order.id to prevent duplicates
+                    } else {
+                        // For manual orders, use id as deduplication key
+                        if (seenOrderIds.has(orderId)) {
+                            duplicatesFound.push(`Manual order ${orderId} - duplicate detected`)
+                            console.warn(`[DEDUP] Duplicate manual order detected: order_id=${orderId}`)
+                            continue // Skip duplicate
+                        }
+                        uniqueOrders.push(order)
+                        seenOrderIds.add(orderId)
+                    }
+                }
+                
+                if (duplicatesFound.length > 0) {
+                    console.warn(`[DEDUP] Found ${duplicatesFound.length} duplicate orders:`, duplicatesFound)
+                }
+                
+                console.log(`[DEDUP] Total orders from DB: ${formattedOrders.length}, Unique orders: ${uniqueOrders.length}, Duplicates removed: ${formattedOrders.length - uniqueOrders.length}`)
+                
+                console.log(`[DEDUP] Total orders: ${formattedOrders.length}, Unique orders: ${uniqueOrders.length}, Duplicates removed: ${formattedOrders.length - uniqueOrders.length}`)
+                
+                // Sort again by created_at descending for display
+                uniqueOrders.sort((a, b) => {
+                    const dateA = new Date(a.created_at).getTime()
+                    const dateB = new Date(b.created_at).getTime()
+                    return dateB - dateA
+                })
+                
+                setOrders(uniqueOrders)
                 
                 // Calcular o próximo número de pedido baseado no maior ID existente
-                const numericIds = formattedOrders
+                const numericIds = uniqueOrders
                     .map(o => {
                         const num = parseInt(o.id, 10)
                         return isNaN(num) ? 0 : num

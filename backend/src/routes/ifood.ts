@@ -1558,11 +1558,32 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       
       console.log(`[pending-orders] After filtering: ${placedOrders.length} orders with PLACED status`)
       
-      // Remove duplicates by order ID (keep first occurrence)
+      // Remove duplicates by order ID and ifood_order_id (keep first occurrence)
+      // Use ifood_order_id as primary key for deduplication if available
       const uniqueOrdersMap = new Map<string, any>()
+      const seenIfoodIds = new Set<string>()
+      
       for (const order of placedOrders) {
-        if (order && order.id && !uniqueOrdersMap.has(order.id)) {
-          uniqueOrdersMap.set(order.id, order)
+        if (!order) continue
+        
+        // Use ifood_order_id as primary deduplication key for iFood orders
+        const dedupKey = order.ifood_order_id || order.id
+        
+        if (dedupKey) {
+          // Check both maps to prevent duplicates
+          if (order.ifood_order_id && seenIfoodIds.has(order.ifood_order_id)) {
+            console.log(`[pending-orders] Skipping duplicate order with ifood_order_id: ${order.ifood_order_id}`)
+            continue
+          }
+          
+          if (!uniqueOrdersMap.has(dedupKey)) {
+            uniqueOrdersMap.set(dedupKey, order)
+            if (order.ifood_order_id) {
+              seenIfoodIds.add(order.ifood_order_id)
+            }
+          } else {
+            console.log(`[pending-orders] Skipping duplicate order with key: ${dedupKey}`)
+          }
         }
       }
       const uniqueOrders = Array.from(uniqueOrdersMap.values())

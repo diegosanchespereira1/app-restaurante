@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react"
+import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -1007,7 +1008,7 @@ export function IfoodIntegration() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className={`space-y-4 ${activeOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
                 {activeOrders.map((order) => (
                   <div
                     key={order.id}
@@ -1050,9 +1051,11 @@ export function IfoodIntegration() {
                           variant="outline"
                           size="sm"
                           className="mt-2"
-                          onClick={() => window.location.href = `/orders/${order.id}`}
+                          asChild
                         >
-                          Ver Detalhes
+                          <Link to={`/orders/${order.id}`}>
+                            Ver Detalhes
+                          </Link>
                         </Button>
                       </div>
                     </div>
@@ -1122,7 +1125,7 @@ export function IfoodIntegration() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className={`space-y-4 ${dispatchedOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
                 {dispatchedOrders.map((order) => (
                   <div
                     key={order.id}
@@ -1161,9 +1164,11 @@ export function IfoodIntegration() {
                           variant="outline"
                           size="sm"
                           className="mt-2"
-                          onClick={() => window.location.href = `/orders/${order.id}`}
+                          asChild
                         >
-                          Ver Detalhes
+                          <Link to={`/orders/${order.id}`}>
+                            Ver Detalhes
+                          </Link>
                         </Button>
                       </div>
                     </div>
@@ -1233,7 +1238,7 @@ export function IfoodIntegration() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className={`space-y-4 ${concludedOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
                 {concludedOrders.map((order) => (
                   <div
                     key={order.id}
@@ -1280,9 +1285,11 @@ export function IfoodIntegration() {
                           variant="outline"
                           size="sm"
                           className="mt-2"
-                          onClick={() => window.location.href = `/orders/${order.id}`}
+                          asChild
                         >
-                          Ver Detalhes
+                          <Link to={`/orders/${order.id}`}>
+                            Ver Detalhes
+                          </Link>
                         </Button>
                       </div>
                     </div>
@@ -1352,7 +1359,7 @@ export function IfoodIntegration() {
                 </p>
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className={`space-y-4 ${pendingOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
                 {pendingOrders.map((order) => {
                     try {
                       console.log('[Frontend] Rendering order:', {

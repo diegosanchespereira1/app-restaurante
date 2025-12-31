@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react"
 import { Button } from "../components/ui/button"
-import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair, Smartphone } from "lucide-react"
+import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useSettings } from "../context/SettingsContext"
@@ -31,8 +31,7 @@ export function Orders() {
         const matchesStatus = statusFilter === "all" ||
             (statusFilter === "delivery" && order.orderType === "delivery") ||
             (statusFilter === "pickup" && order.orderType === "takeout") ||
-            (statusFilter === "mesa" && order.orderType === "dine_in") ||
-            (statusFilter === "ifood" && order.source === "ifood")
+            (statusFilter === "mesa" && order.orderType === "dine_in")
         
         return matchesSearch && matchesStatus
     })
@@ -184,18 +183,6 @@ export function Orders() {
                             Mesa
                         </Button>
                     )}
-                    <Button
-                        variant={statusFilter === "ifood" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "ifood"
-                                ? "text-primary bg-primary/10 border border-primary/20"
-                                : "text-muted-foreground hover:bg-accent"
-                        }`}
-                        onClick={() => setStatusFilter(statusFilter === "ifood" ? "all" : "ifood")}
-                    >
-                        <Smartphone className="w-4 h-4" />
-                        iFood
-                    </Button>
                 </div>
             </section>
 
@@ -215,7 +202,7 @@ export function Orders() {
                             <article
                                 key={order.id}
                                 className="bg-card rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)] cursor-pointer hover:shadow-lg transition-shadow"
-                                onClick={() => navigate(`/orders/${order.id}`, { replace: false })}
+                                onClick={() => navigate(`/orders/${order.id}`)}
                             >
                                 {/* Order ID - Highlighted */}
                                 <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-3">

@@ -548,6 +548,23 @@ export class IfoodPollingService {
    */
   async createOrder(processedOrder: ProcessedOrder): Promise<{ success: boolean; orderId?: string; error?: string }> {
     try {
+      // IMPORTANT: Check if order already exists by ifood_order_id to prevent duplicates
+      if (processedOrder.ifoodOrderId) {
+        const { data: existingOrder } = await this.supabase
+          .from('orders')
+          .select('id, status, ifood_status')
+          .eq('ifood_order_id', processedOrder.ifoodOrderId)
+          .single()
+
+        if (existingOrder) {
+          console.log(`Order with ifood_order_id ${processedOrder.ifoodOrderId} already exists with ID ${existingOrder.id}. Skipping creation.`)
+          return {
+            success: true,
+            orderId: existingOrder.id
+          }
+        }
+      }
+
       // Generate order ID
       const now = new Date()
       const day = String(now.getDate()).padStart(2, '0')
@@ -596,6 +613,24 @@ export class IfoodPollingService {
         })
 
       if (orderError) {
+        // Check if error is due to duplicate ifood_order_id (unique constraint violation)
+        if (orderError.code === '23505' || orderError.message?.includes('duplicate') || orderError.message?.includes('unique')) {
+          console.log(`Order with ifood_order_id ${processedOrder.ifoodOrderId} already exists (unique constraint). Fetching existing order...`)
+          // Fetch the existing order
+          const { data: existingOrder } = await this.supabase
+            .from('orders')
+            .select('id')
+            .eq('ifood_order_id', processedOrder.ifoodOrderId)
+            .single()
+          
+          if (existingOrder) {
+            return {
+              success: true,
+              orderId: existingOrder.id
+            }
+          }
+        }
+        
         console.error('Error creating order:', orderError)
         return { 
           success: false, 
