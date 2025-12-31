@@ -1172,6 +1172,108 @@ export class IfoodService {
   }
 
   /**
+   * Get cancellation reasons/codes available for an order
+   * According to iFood API documentation:
+   * - GET /orders/{id}/cancellationReasons
+   * Returns available cancellation codes for the specific order
+   */
+  async getCancellationReasons(orderId: string): Promise<{ success: boolean; reasons?: Array<{ code: string; description?: string }>; error?: string }> {
+    const authResult = await this.ensureAuthenticated()
+    if (!authResult.success) {
+      return { 
+        success: false, 
+        error: authResult.error || `Falha na autenticação com iFood ao buscar motivos de cancelamento para o pedido ${orderId}.` 
+      }
+    }
+
+    try {
+      if (!this.config) {
+        await this.getConfig()
+        if (!this.config) {
+          return {
+            success: false,
+            error: 'Configuração do iFood não encontrada'
+          }
+        }
+      }
+      
+      const accessToken = this.config.access_token
+      if (!accessToken) {
+        return {
+          success: false,
+          error: 'Access token não configurado. Verifique a autenticação do iFood.'
+        }
+      }
+
+      const orderClient = this.createApiClientForModule('ORDER', accessToken)
+      const endpoint = `/orders/${orderId}/cancellationReasons`
+      
+      const response = await withRetry(
+        () => orderClient.get(endpoint),
+        {
+          maxRetries: 3,
+          retryDelay: 1000
+        }
+      )
+
+      // Response format can vary:
+      // - Array of { code: string, description?: string }
+      // - Array of { reason_code: string, description?: string }
+      // - Array of objects with different structures
+      const reasons = response.data || []
+      
+      console.log(`[getCancellationReasons] Fetched ${reasons.length} cancellation reasons for order ${orderId}`)
+      console.log(`[getCancellationReasons] Reasons structure:`, JSON.stringify(reasons.slice(0, 2), null, 2))
+      
+      // Normalize the reasons to always have a 'code' field
+      // API can return: cancelCodeId, code, reason_code, id, value, etc.
+      const normalizedReasons = reasons.map((reason: any) => {
+        // Handle different response formats
+        if (reason.cancelCodeId) {
+          // Most common format from iFood API
+          return { code: String(reason.cancelCodeId), description: reason.description }
+        } else if (reason.code) {
+          return { code: String(reason.code), description: reason.description }
+        } else if (reason.reason_code) {
+          return { code: String(reason.reason_code), description: reason.description }
+        } else if (typeof reason === 'string') {
+          return { code: reason }
+        } else {
+          // Try to extract code from any field (fallback)
+          const code = reason.cancelCodeId || reason.code || reason.reason_code || reason.id || reason.value || String(reason)
+          return { code: String(code), description: reason.description || reason.details }
+        }
+      })
+      
+      return { success: true, reasons: normalizedReasons }
+    } catch (error: any) {
+      console.error('[getCancellationReasons] Error fetching cancellation reasons:', error.response?.data || error.message)
+      
+      let errorMessage = 'Failed to fetch cancellation reasons'
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data
+        } else if (error.response.data.error?.message) {
+          errorMessage = error.response.data.error.message
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message
+        } else if (error.response.data.error) {
+          errorMessage = typeof error.response.data.error === 'string' 
+            ? error.response.data.error 
+            : JSON.stringify(error.response.data.error)
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      return { 
+        success: false, 
+        error: errorMessage
+      }
+    }
+  }
+
+  /**
    * Update order status in iFood
    * According to iFood API Swagger documentation:
    * - POST /orders/{id}/confirm (to confirm an order)
@@ -1189,7 +1291,9 @@ export class IfoodService {
    */
   async updateOrderStatus(
     orderId: string, 
-    status: 'PLACED' | 'CONFIRMED' | 'PREPARATION_STARTED' | 'SEPARATION_STARTED' | 'SEPARATION_ENDED' | 'READY_TO_PICKUP' | 'DISPATCHED' | 'CONCLUDED' | 'CANCELLED'
+    status: 'PLACED' | 'CONFIRMED' | 'PREPARATION_STARTED' | 'SEPARATION_STARTED' | 'SEPARATION_ENDED' | 'READY_TO_PICKUP' | 'DISPATCHED' | 'CONCLUDED' | 'CANCELLED',
+    cancellationCode?: string,
+    cancellationReason?: string
   ): Promise<{ success: boolean; error?: string; isAsync?: boolean }> {
     const authResult = await this.ensureAuthenticated()
     if (!authResult.success) {
@@ -1258,10 +1362,71 @@ export class IfoodService {
           break
         case 'CANCELLED':
           // POST /orders/{id}/requestCancellation
-          // Note: May need cancellation reason - check documentation
+          // Requires cancellationCode in payload according to iFood API documentation
+          // Must fetch valid codes from GET /orders/{id}/cancellationReasons first
           endpoint = `/orders/${orderId}/requestCancellation`
           method = 'post'
-          payload = {}
+          
+          // If cancellationCode not provided, fetch available reasons and use the first one
+          let finalCancellationCode = cancellationCode
+          let finalCancellationReason = cancellationReason
+          
+          if (!finalCancellationCode) {
+            console.log(`[updateOrderStatus] No cancellationCode provided, fetching available reasons for order ${orderId}...`)
+            const reasonsResult = await this.getCancellationReasons(orderId)
+            if (reasonsResult.success && reasonsResult.reasons && reasonsResult.reasons.length > 0) {
+              // Use the code from the first available reason
+              // The code can be numeric (like "501") or string format
+              const firstReason = reasonsResult.reasons[0]
+              if (!firstReason.code) {
+                console.error(`[updateOrderStatus] First reason missing code field:`, JSON.stringify(firstReason, null, 2))
+                return {
+                  success: false,
+                  error: `Código de cancelamento inválido retornado pela API do iFood`
+                }
+              }
+              finalCancellationCode = String(firstReason.code)
+              // Use description as reason if not provided
+              if (!finalCancellationReason && firstReason.description) {
+                finalCancellationReason = firstReason.description
+              }
+              console.log(`[updateOrderStatus] Using cancellation code: ${finalCancellationCode} (from available reasons)`)
+              console.log(`[updateOrderStatus] Using cancellation reason: ${finalCancellationReason || 'N/A'}`)
+              console.log(`[updateOrderStatus] Available reasons:`, JSON.stringify(reasonsResult.reasons, null, 2))
+            } else {
+              console.warn(`[updateOrderStatus] Could not fetch cancellation reasons:`, reasonsResult.error)
+              // Don't proceed without a valid code - return error
+              return {
+                success: false,
+                error: `Não foi possível buscar os códigos de cancelamento disponíveis. ${reasonsResult.error || 'Erro desconhecido'}`
+              }
+            }
+          }
+          
+          // Payload format according to iFood API documentation:
+          // { "cancellationCode": "504", "reason": "Descrição do motivo" }
+          // Both fields are required for cancellation requests
+          // Example from iFood event:
+          // {
+          //   "metadata": {
+          //     "reason_code": "504",
+          //     "details": "MANUAL(RESTAURANT_WITHOUT_DELIVERY_MAN) - Restaurante sem entregador"
+          //   }
+          // }
+          payload = {
+            cancellationCode: String(finalCancellationCode)
+          }
+          
+          // Add reason field (required by iFood API)
+          if (finalCancellationReason) {
+            payload.reason = String(finalCancellationReason)
+          } else {
+            // If no reason provided, use a default based on the code
+            // This ensures the request is valid even if description is missing
+            payload.reason = `Cancelamento solicitado pelo restaurante (código: ${finalCancellationCode})`
+          }
+          
+          console.log(`[updateOrderStatus] Cancellation payload:`, JSON.stringify(payload, null, 2))
           break
         case 'PREPARATION_STARTED':
           // POST /orders/{id}/startPreparation
@@ -1357,10 +1522,17 @@ export class IfoodService {
       if (error.response?.data) {
         if (typeof error.response.data === 'string') {
           errorMessage = error.response.data
+        } else if (error.response.data.error) {
+          // Handle nested error object with code and message
+          if (typeof error.response.data.error === 'object' && error.response.data.error.message) {
+            errorMessage = error.response.data.error.message
+          } else if (typeof error.response.data.error === 'string') {
+            errorMessage = error.response.data.error
+          } else {
+            errorMessage = JSON.stringify(error.response.data.error)
+          }
         } else if (error.response.data.message) {
           errorMessage = error.response.data.message
-        } else if (error.response.data.error) {
-          errorMessage = error.response.data.error
         } else {
           errorMessage = JSON.stringify(error.response.data)
         }

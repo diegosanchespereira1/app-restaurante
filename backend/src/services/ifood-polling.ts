@@ -186,9 +186,13 @@ export class IfoodPollingService {
             // #endregion
             
             // Check if this is a status update event (not PLACED/PLC which creates orders)
+            // CAR = CANCELLATION_REQUESTED - cancellation was requested (pending confirmation)
+            // CARF = CANCELLATION_REQUEST_FAILED - cancellation request failed
             const isStatusUpdateEvent = ['DSP', 'DISPATCHED', 'CON', 'CONCLUDED', 'CFM', 'CONFIRMED', 
                                         'SPS', 'SEPARATION_STARTED', 'SPE', 'SEPARATION_ENDED', 
-                                        'RTP', 'READY_TO_PICKUP', 'CAN', 'CANCELLED'].includes(eventCode)
+                                        'RTP', 'READY_TO_PICKUP', 'CAN', 'CANCELLED', 
+                                        'CAR', 'CANCELLATION_REQUESTED',
+                                        'CARF', 'CANCELLATION_REQUEST_FAILED'].includes(eventCode)
             
             if (isStatusUpdateEvent) {
               // This is a status update event - update the existing order
@@ -236,12 +240,67 @@ export class IfoodPollingService {
                   systemStatus = 'Cancelled'
                   ifoodStatus = 'CANCELLED'
                   break
+                case 'CANCELLATION_REQUESTED':
+                case 'CAR':
+                  // Cancellation was requested - this is a pending state
+                  // Don't change status yet, wait for CAN (cancelled) or CARF (failed)
+                  // But we can log that cancellation was requested
+                  const requestReason = event.metadata?.reason_code || event.metadata?.details || 'N/A'
+                  const requestCode = event.metadata?.reason_code || event.metadata?.cancellationCode || 'N/A'
+                  
+                  console.log(`[CANCELLATION_REQUESTED] Order ${orderId} cancellation requested:`, {
+                    reason: requestReason,
+                    code: requestCode,
+                    eventId: eventId
+                  })
+                  
+                  // Keep current status - cancellation is pending
+                  systemStatus = existingOrder.status
+                  ifoodStatus = existingOrder.ifood_status || 'CONFIRMED'
+                  
+                  // Could add a note that cancellation is pending
+                  break
+                case 'CANCELLATION_REQUEST_FAILED':
+                case 'CARF':
+                  // Cancellation failed - don't change status, but log the failure
+                  // Extract failure reason from metadata if available
+                  const failureReason = event.metadata?.CANCELLATION_REQUEST_FAILED_REASON || 
+                                       event.metadata?.reason || 
+                                       'Unknown reason'
+                  const cancelCode = event.metadata?.CANCEL_CODE || event.metadata?.cancellationCode
+                  
+                  console.warn(`[CANCELLATION_REQUEST_FAILED] Order ${orderId} cancellation failed:`, {
+                    reason: failureReason,
+                    cancelCode: cancelCode,
+                    eventId: eventId,
+                    requestedEventId: event.metadata?.CANCELLATION_REQUESTED_EVENT_ID
+                  })
+                  
+                  // Keep current status (don't change to cancelled)
+                  systemStatus = existingOrder.status
+                  ifoodStatus = existingOrder.ifood_status || 'CONFIRMED' // Keep current or default to CONFIRMED
+                  
+                  // Log the failure - could store in a cancellation_attempts table or notes field
+                  // For now, we'll just log and acknowledge
+                  break
               }
               
               // Update order status in database
-              const updateData: { status: string; ifood_status: string; closed_at?: string } = {
+              // For CARF, we might want to add a note or not update at all
+              const updateData: { status: string; ifood_status: string; closed_at?: string; notes?: string } = {
                 status: systemStatus,
                 ifood_status: ifoodStatus
+              }
+              
+              // Add note for cancellation events
+              if (eventCode === 'CAR' || eventCode === 'CANCELLATION_REQUESTED') {
+                const requestReason = event.metadata?.details || event.metadata?.reason_code || 'N/A'
+                const requestCode = event.metadata?.reason_code || 'N/A'
+                updateData.notes = `Cancelamento solicitado: ${requestReason} (código: ${requestCode})`
+              } else if (eventCode === 'CARF' || eventCode === 'CANCELLATION_REQUEST_FAILED') {
+                const failureReason = event.metadata?.CANCELLATION_REQUEST_FAILED_REASON || 'Unknown reason'
+                const cancelCode = event.metadata?.CANCEL_CODE || 'N/A'
+                updateData.notes = `Tentativa de cancelamento falhou: ${failureReason} (código: ${cancelCode})`
               }
               
               // Set closed_at timestamp for CONCLUDED status
@@ -264,9 +323,17 @@ export class IfoodPollingService {
                 fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-polling.ts:243',message:'order status update error',data:{eventId,orderId,eventCode,existingOrderId:existingOrder.id,updateError:updateError.message},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
               } else {
-                console.log(`Order ${existingOrder.id} (iFood ${orderId}) updated to status ${ifoodStatus} via polling`)
+                if (eventCode === 'CAR' || eventCode === 'CANCELLATION_REQUESTED') {
+                  const requestReason = event.metadata?.details || event.metadata?.reason_code || 'N/A'
+                  console.log(`Order ${existingOrder.id} (iFood ${orderId}) cancellation requested: ${requestReason}. Status maintained (pending).`)
+                } else if (eventCode === 'CARF' || eventCode === 'CANCELLATION_REQUEST_FAILED') {
+                  const failureReason = event.metadata?.CANCELLATION_REQUEST_FAILED_REASON || 'Unknown reason'
+                  console.warn(`Order ${existingOrder.id} (iFood ${orderId}) cancellation failed: ${failureReason}. Status maintained.`)
+                } else {
+                  console.log(`Order ${existingOrder.id} (iFood ${orderId}) updated to status ${ifoodStatus} via polling`)
+                }
                 // #region agent log
-                fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-polling.ts:247',message:'order status updated successfully',data:{eventId,orderId,eventCode,existingOrderId:existingOrder.id,systemStatus,ifoodStatus},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+                fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-polling.ts:247',message:'order status updated successfully',data:{eventId,orderId,eventCode,existingOrderId:existingOrder.id,systemStatus,ifoodStatus,isCancellationFailure:eventCode === 'CARF' || eventCode === 'CANCELLATION_REQUEST_FAILED'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
                 // #endregion
               }
               
@@ -305,15 +372,10 @@ export class IfoodPollingService {
               console.error(`Failed to create order ${orderId}:`, createResult.error)
               // Continue processing other orders even if one fails
             } else {
-              // iFood best practice: Consultar detalhes antes de confirmar
-              // Confirm order with iFood
-              const confirmResult = await this.ifoodService.updateOrderStatus(orderId, 'CONFIRMED')
-              
-              if (confirmResult.isAsync) {
-                console.log(`Confirmação do pedido ${orderId} é assíncrona. Aguardando evento de confirmação.`)
-              }
-              
-              console.log(`Order ${orderId} created successfully`)
+              // IMPORTANT: Do NOT automatically confirm orders
+              // Orders must be manually accepted by the user via the frontend
+              // The order is created with status PLACED and waits for manual confirmation
+              console.log(`Order ${orderId} created successfully with status PLACED. Waiting for manual acceptance.`)
             }
           }
           

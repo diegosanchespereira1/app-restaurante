@@ -800,7 +800,9 @@ router.post('/webhook', async (req: Request, res: Response) => {
     // iFood best practice: Processar eventos desconhecidos sem interromper
     const knownEvents = ['PLACED', 'PLC', 'REQUESTED', 'CONFIRMED', 'CFM', 'SEPARATION_STARTED', 'SPS', 
                          'SEPARATION_ENDED', 'SPE', 'READY_TO_PICKUP', 'RTP', 'DISPATCHED', 'DSP', 
-                         'CONCLUDED', 'CON', 'CANCELLED', 'CAN']
+                         'CONCLUDED', 'CON', 'CANCELLED', 'CAN',
+                         'CAR', 'CANCELLATION_REQUESTED',
+                         'CARF', 'CANCELLATION_REQUEST_FAILED']
     
     if (!knownEvents.includes(eventCode)) {
       // iFood best practice: Enviar acknowledgment e descartar eventos desconhecidos
@@ -825,18 +827,14 @@ router.post('/webhook', async (req: Request, res: Response) => {
             // Persistir no banco primeiro
             await polling.createOrder(processedOrder)
             
-            // iFood best practice: Consultar detalhes antes de confirmar
-            // (já consultamos acima, então podemos confirmar)
-            const confirmResult = await ifoodService.updateOrderStatus(orderId, 'CONFIRMED')
-            
-            if (confirmResult.isAsync) {
-              console.log(`Confirmação do pedido ${orderId} é assíncrona. Aguardando evento de confirmação no polling.`)
-            }
+            // IMPORTANT: Do NOT automatically confirm orders
+            // Orders must be manually accepted by the user via the frontend
+            // The order is created with status PLACED and waits for manual confirmation
             
             // Atualizar última sincronização
             await ifoodService.updateLastSync()
             
-            console.log(`Pedido ${orderId} processado via webhook`)
+            console.log(`Pedido ${orderId} processado via webhook com status PLACED. Aguardando aceitação manual.`)
           }
         } else {
           // Pedido já existe (duplicação detectada) - apenas atualizar status
@@ -887,6 +885,18 @@ router.post('/webhook', async (req: Request, res: Response) => {
         case 'CAN':
           systemStatus = 'Cancelled'
           ifoodStatus = 'CANCELLED'
+          break
+        case 'CANCELLATION_REQUESTED':
+        case 'CAR':
+          // Cancellation requested - keep current status (pending confirmation)
+          systemStatus = existingOrder?.status || 'Preparing'
+          ifoodStatus = existingOrder?.ifood_status || 'CONFIRMED'
+          break
+        case 'CANCELLATION_REQUEST_FAILED':
+        case 'CARF':
+          // Cancellation failed - keep current status
+          systemStatus = existingOrder?.status || 'Preparing'
+          ifoodStatus = existingOrder?.ifood_status || 'CONFIRMED'
           break
       }
       
@@ -1152,7 +1162,9 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       if (orderId && typeof orderId === 'string' && orderId.trim() !== '' && existingIds.has(orderId)) {
         const isStatusUpdateEvent = ['DSP', 'DISPATCHED', 'CON', 'CONCLUDED', 'CFM', 'CONFIRMED', 
                                     'SPS', 'SEPARATION_STARTED', 'SPE', 'SEPARATION_ENDED', 
-                                    'RTP', 'READY_TO_PICKUP', 'CAN', 'CANCELLED'].includes(eventCode)
+                                    'RTP', 'READY_TO_PICKUP', 'CAN', 'CANCELLED',
+                                    'CAR', 'CANCELLATION_REQUESTED',
+                                    'CARF', 'CANCELLATION_REQUEST_FAILED'].includes(eventCode)
         
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1041',message:'status update check result',data:{orderId,eventCode,isStatusUpdateEvent,orderIdExists:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
@@ -1210,12 +1222,35 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
                 systemStatus = 'Cancelled'
                 ifoodStatus = 'CANCELLED'
                 break
+              case 'CANCELLATION_REQUESTED':
+              case 'CAR':
+                // Cancellation was requested - keep current status (pending)
+                systemStatus = existingOrder.status
+                ifoodStatus = existingOrder.ifood_status || 'CONFIRMED'
+                break
+              case 'CANCELLATION_REQUEST_FAILED':
+              case 'CARF':
+                // Cancellation failed - keep current status
+                systemStatus = existingOrder.status
+                ifoodStatus = existingOrder.ifood_status || 'CONFIRMED'
+                break
             }
             
             // Update order status in database
-            const updateData: { status: string; ifood_status: string; closed_at?: string } = {
+            const updateData: { status: string; ifood_status: string; closed_at?: string; notes?: string } = {
               status: systemStatus,
               ifood_status: ifoodStatus
+            }
+            
+            // Add notes for cancellation events
+            if (eventCode === 'CAR' || eventCode === 'CANCELLATION_REQUESTED') {
+              const requestReason = event.metadata?.details || event.metadata?.reason_code || 'N/A'
+              const requestCode = event.metadata?.reason_code || 'N/A'
+              updateData.notes = `Cancelamento solicitado: ${requestReason} (código: ${requestCode})`
+            } else if (eventCode === 'CARF' || eventCode === 'CANCELLATION_REQUEST_FAILED') {
+              const failureReason = event.metadata?.CANCELLATION_REQUEST_FAILED_REASON || 'Unknown reason'
+              const cancelCode = event.metadata?.CANCEL_CODE || 'N/A'
+              updateData.notes = `Tentativa de cancelamento falhou: ${failureReason} (código: ${cancelCode})`
             }
             
             // Set closed_at timestamp for CONCLUDED status
@@ -1988,10 +2023,18 @@ router.post('/cancel-order/:orderId', async (req: Request, res: Response) => {
       hasAccessToken: !!config.access_token
     })
     
+    // Get cancellation code and reason from request body (optional - will be fetched automatically if not provided)
+    const cancellationCode = req.body?.cancellationCode
+    const cancellationReason = req.body?.cancellationReason || req.body?.reason
+    
     let cancelResult
     try {
-      console.log(`[cancel-order] Calling updateOrderStatus for order ${orderId}...`)
-      cancelResult = await ifoodService.updateOrderStatus(orderId, 'CANCELLED')
+      if (cancellationCode) {
+        console.log(`[cancel-order] Calling updateOrderStatus for order ${orderId} with cancellationCode: ${cancellationCode}${cancellationReason ? ` and reason: ${cancellationReason}` : ''}`)
+      } else {
+        console.log(`[cancel-order] Calling updateOrderStatus for order ${orderId} (will fetch valid cancellation codes automatically)`)
+      }
+      cancelResult = await ifoodService.updateOrderStatus(orderId, 'CANCELLED', cancellationCode, cancellationReason)
       console.log(`[cancel-order] updateOrderStatus result:`, cancelResult)
     } catch (cancelError: any) {
       console.error(`[cancel-order] Exception during updateOrderStatus:`, cancelError)

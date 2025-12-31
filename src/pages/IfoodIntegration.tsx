@@ -281,6 +281,17 @@ export function IfoodIntegration() {
 
   const backendUrl = getBackendUrl()
 
+  // Função auxiliar para extrair mensagem de erro (pode ser string ou objeto)
+  const extractErrorMessage = (error: any): string => {
+    if (!error) return 'Erro desconhecido'
+    if (typeof error === 'string') return error
+    if (error.message) return error.message
+    if (error.error) return extractErrorMessage(error.error)
+    if (error.code && error.message) return error.message
+    if (typeof error === 'object') return JSON.stringify(error)
+    return String(error)
+  }
+
   useEffect(() => {
     if (hasPermission('admin')) {
       loadConfig()
@@ -490,7 +501,8 @@ export function IfoodIntegration() {
         }
       } else {
         console.error('[Frontend] API returned error:', result.message || result.error)
-        setMessage({ type: 'error', text: result.message || result.error || 'Erro ao buscar pedidos' })
+        const errorMessage = extractErrorMessage(result.error || result.message)
+        setMessage({ type: 'error', text: errorMessage || 'Erro ao buscar pedidos' })
         setTimeout(() => setMessage(null), 5000)
       }
     } catch (error) {
@@ -596,7 +608,8 @@ export function IfoodIntegration() {
         // Recarregar pedidos pendentes
         await loadPendingOrders()
       } else {
-        setMessage({ type: 'error', text: result.error || 'Erro ao cancelar pedido' })
+        const errorMessage = extractErrorMessage(result.error || result.message)
+        setMessage({ type: 'error', text: errorMessage || 'Erro ao cancelar pedido' })
       }
     } catch (error) {
       console.error('Error canceling order:', error)
@@ -630,7 +643,8 @@ export function IfoodIntegration() {
         // Clear message after 3 seconds
         setTimeout(() => setMessage(null), 3000)
       } else {
-        setMessage({ type: 'error', text: result.message || 'Erro ao aceitar pedido' })
+        const errorMessage = extractErrorMessage(result.error || result.message)
+        setMessage({ type: 'error', text: errorMessage || 'Erro ao aceitar pedido' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Erro de conexão com o servidor' })
@@ -702,11 +716,13 @@ export function IfoodIntegration() {
       console.log('Resultado:', result)
 
       if (result.success) {
-        setMessage({ type: 'success', text: result.message || 'Configuração salva com sucesso!' })
+        const successMessage = typeof result.message === 'string' ? result.message : 'Configuração salva com sucesso!'
+        setMessage({ type: 'success', text: successMessage })
         setConfig(prev => ({ ...prev, client_secret: "" })) // Clear secret after saving
         await loadStatus()
       } else {
-        setMessage({ type: 'error', text: result.message || 'Erro ao salvar configuração' })
+        const errorMessage = extractErrorMessage(result.error || result.message)
+        setMessage({ type: 'error', text: errorMessage || 'Erro ao salvar configuração' })
       }
     } catch (error) {
       console.error('Erro ao salvar configuração:', error)
@@ -745,7 +761,8 @@ export function IfoodIntegration() {
           loadMappings()
         }, 2000)
       } else {
-        setMessage({ type: 'error', text: result.message || 'Erro ao sincronizar' })
+        const errorMessage = extractErrorMessage(result.error || result.message)
+        setMessage({ type: 'error', text: errorMessage || 'Erro ao sincronizar' })
       }
     } catch (error) {
       setMessage({ type: 'error', text: 'Erro de conexão com o servidor' })
@@ -809,7 +826,8 @@ export function IfoodIntegration() {
         setOrderDetails(result.order)
         setOrderDetailsError(null)
       } else {
-        setOrderDetailsError(result.message || 'Erro ao buscar detalhes do pedido')
+        const errorMessage = extractErrorMessage(result.error || result.message)
+        setOrderDetailsError(errorMessage || 'Erro ao buscar detalhes do pedido')
         setOrderDetails(null)
       }
     } catch (error) {
@@ -853,7 +871,7 @@ export function IfoodIntegration() {
             ? 'bg-green-50 text-green-800 border border-green-200' 
             : 'bg-red-50 text-red-800 border border-red-200'
         }`}>
-          {message.text}
+          {typeof message.text === 'string' ? message.text : extractErrorMessage(message.text)}
         </div>
       )}
 
