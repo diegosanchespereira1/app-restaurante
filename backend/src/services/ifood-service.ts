@@ -258,26 +258,17 @@ export class IfoodService {
     if (verifier === undefined || verifier === null || (typeof verifier === 'string' && verifier.trim() === '')) {
       verifier = null
     }
-    console.log('AuthorizationCodeVerifier check:', {
-      from_param: authorizationCodeVerifier ? 'provided' : 'not provided',
-      from_config: this.config!.authorization_code_verifier ? 'exists' : 'missing',
-      final_verifier: verifier ? 'exists' : 'null/empty',
-      verifier_length: verifier ? String(verifier).length : 0
-    })
     
     // refresh_token is the DEFAULT - use it if we have refresh_token
     if (this.config!.refresh_token) {
       grantType = 'refresh_token'
       // Validate that authorizationCodeVerifier is available when using refresh_token
       if (!verifier) {
-        console.error('authorizationCodeVerifier is missing for refresh_token flow. Config:', {
-          has_verifier_param: !!authorizationCodeVerifier,
-          has_verifier_config: !!this.config!.authorization_code_verifier,
-          verifier_value: verifier
-        })
+        // Don't log error here - let ensureAuthenticated handle automatic retrieval
+        // This allows graceful fallback to other flows
         return {
           success: false,
-          error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. Obtenha via /api/ifood/user-code primeiro.'
+          error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. O sistema tentará obter automaticamente.'
         }
       }
     } else {
@@ -375,10 +366,10 @@ export class IfoodService {
         searchParams.append('authorizationCodeVerifier', params.authorizationCodeVerifier)
       } else if (grantType === 'refresh_token') {
         // This should never happen because we validate earlier, but double-check
-        console.error('ERROR: authorizationCodeVerifier is missing in params but grantType is refresh_token')
+        // Don't log error here - already handled in earlier validation
         return {
           success: false,
-          error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. Obtenha via /api/ifood/user-code primeiro.'
+          error: 'authorizationCodeVerifier é obrigatório quando usar refresh_token. O sistema tentará obter automaticamente.'
         }
       }
       
@@ -591,9 +582,35 @@ export class IfoodService {
       let authResult
       if (this.config!.refresh_token) {
         // When using refresh_token, we need authorizationCodeVerifier
-        // For now, skip refresh_token if we don't have verifier and fallback to other flows
-        // The verifier should be obtained from frontend via /api/ifood/user-code endpoint
-        authResult = await this.authenticate(true) // Use refresh_token flow
+        // Try to get verifier from config first, if not available, try to obtain it automatically
+        let verifier = this.config!.authorization_code_verifier
+        
+        // If verifier is missing, try to obtain it automatically via /oauth/userCode API
+        if (!verifier || verifier.trim() === '') {
+          console.log('authorizationCodeVerifier não encontrado na config. Tentando obter automaticamente...')
+          const verifierResult = await this.getUserCodeVerifier(this.config!.client_id)
+          
+          if (verifierResult.success && verifierResult.verifier) {
+            verifier = verifierResult.verifier
+            // Save verifier to config for future use
+            await this.supabase
+              .from('ifood_integration')
+              .update({ authorization_code_verifier: verifier })
+              .eq('id', this.config!.id)
+            // Update in-memory config
+            this.config!.authorization_code_verifier = verifier
+            console.log('authorizationCodeVerifier obtido e salvo com sucesso')
+          } else {
+            console.warn('Não foi possível obter authorizationCodeVerifier automaticamente. Fazendo fallback para outros fluxos.')
+          }
+        }
+        
+        // Try refresh_token flow if we have verifier
+        if (verifier && verifier.trim() !== '') {
+          authResult = await this.authenticate(true, undefined, verifier) // Use refresh_token flow with verifier
+        } else {
+          console.log('authorizationCodeVerifier não disponível. Fazendo fallback para outros fluxos de autenticação.')
+        }
       }
       
       // If refresh_token failed or doesn't exist, fallback to full authentication
