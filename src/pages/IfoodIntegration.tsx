@@ -308,16 +308,23 @@ export function IfoodIntegration() {
     }
   }, [hasPermission])
 
-  // Auto-refresh all orders every 30 seconds
+  // Auto-refresh all orders every 30 seconds (executa imediatamente ao carregar)
   useEffect(() => {
     if (!hasPermission('admin') || !status?.active) return
 
-    const interval = setInterval(() => {
+    // Executa imediatamente ao carregar a página
+    const refreshOrders = () => {
       loadPendingOrders()
       loadActiveOrders()
       loadDispatchedOrders()
       loadConcludedOrders()
-    }, 30000) // 30 seconds
+    }
+
+    // Executa imediatamente
+    refreshOrders()
+
+    // Depois executa a cada 30 segundos
+    const interval = setInterval(refreshOrders, 30000) // 30 seconds
 
     return () => clearInterval(interval)
     // eslint-disable-next-line react-hooks/exhaustive-deps
