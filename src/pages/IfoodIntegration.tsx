@@ -881,94 +881,83 @@ export function IfoodIntegration() {
 
       {/* Status Card */}
       <Card>
-        <CardHeader>
-          <CardTitle>Status da Integração</CardTitle>
-          <CardDescription>Informações sobre o estado atual da integração</CardDescription>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Status da Integração</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Configurado:</span>
-            {status?.configured ? (
-              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Sim
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                <XCircle className="h-3 w-3 mr-1" />
-                Não
-              </Badge>
-            )}
-          </div>
-          
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Ativo:</span>
-            {status?.active ? (
-              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Sim
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200">
-                <XCircle className="h-3 w-3 mr-1" />
-                Não
-              </Badge>
-            )}
-          </div>
+        <CardContent className="space-y-3">
+          {/* Status badges em linha */}
+          <div className="grid grid-cols-3 gap-2">
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground">Configurado</span>
+              {status?.configured ? (
+                <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs px-2 py-0.5">
+                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                  Sim
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200 text-xs px-2 py-0.5">
+                  <XCircle className="h-2.5 w-2.5 mr-1" />
+                  Não
+                </Badge>
+              )}
+            </div>
+            
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground">Ativo</span>
+              {status?.active ? (
+                <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs px-2 py-0.5">
+                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                  Sim
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-200 text-xs px-2 py-0.5">
+                  <XCircle className="h-2.5 w-2.5 mr-1" />
+                  Não
+                </Badge>
+              )}
+            </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Autenticado:</span>
-            {status?.authenticated ? (
-              <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200">
-                <CheckCircle className="h-3 w-3 mr-1" />
-                Sim
-              </Badge>
-            ) : (
-              <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200">
-                <XCircle className="h-3 w-3 mr-1" />
-                Não
-              </Badge>
-            )}
+            <div className="flex flex-col items-center gap-1">
+              <span className="text-xs text-muted-foreground">Autenticado</span>
+              {status?.authenticated ? (
+                <Badge variant="outline" className="bg-green-100 text-green-700 border-green-200 text-xs px-2 py-0.5">
+                  <CheckCircle className="h-2.5 w-2.5 mr-1" />
+                  Sim
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-red-100 text-red-700 border-red-200 text-xs px-2 py-0.5">
+                  <XCircle className="h-2.5 w-2.5 mr-1" />
+                  Não
+                </Badge>
+              )}
+            </div>
           </div>
 
           {status?.auth_error && (
-            <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-              <p className="text-sm font-medium text-red-800 mb-1">Erro de Autenticação:</p>
-              <p className="text-xs text-red-700 mb-2">{status.auth_error}</p>
-              <div className="text-xs text-red-600 space-y-1">
-                <p>Verifique:</p>
-                <ul className="list-disc list-inside ml-2 space-y-1">
-                  <li>Client ID está correto</li>
-                  <li>Client Secret está correto</li>
-                  <li>Merchant ID está correto</li>
-                  <li>Se necessário, Authorization Code está preenchido</li>
-                  <li>Credenciais estão ativas no painel do iFood</li>
-                </ul>
-              </div>
+            <div className="p-2 bg-red-50 border border-red-200 rounded text-xs">
+              <p className="font-medium text-red-800 mb-1">Erro: {status.auth_error}</p>
+              <p className="text-red-600">Verifique as credenciais no painel do iFood</p>
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Última Sincronização:</span>
-            <span className="text-sm text-muted-foreground flex items-center gap-1">
+          {/* Informações em linha compacta */}
+          <div className="flex items-center justify-between text-xs text-muted-foreground pt-1 border-t">
+            <div className="flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {formatDateString(status?.last_sync || null)}
-            </span>
-          </div>
-
-          {status?.polling_interval && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Intervalo de Polling:</span>
-              <span className="text-sm text-muted-foreground">{status.polling_interval}s</span>
+              <span>{formatDateString(status?.last_sync || null)}</span>
             </div>
-          )}
+            {status?.polling_interval && (
+              <span>Polling: {status.polling_interval}s</span>
+            )}
+          </div>
 
           <Button 
             onClick={handleSync} 
             disabled={syncing || !status?.configured}
+            size="sm"
             className="w-full"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${syncing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`h-3 w-3 mr-2 ${syncing ? 'animate-spin' : ''}`} />
             {syncing ? 'Sincronizando...' : 'Sincronizar Agora'}
           </Button>
         </CardContent>
