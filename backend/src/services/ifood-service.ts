@@ -3,12 +3,50 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import { encrypt, decrypt } from '../utils/encryption.js'
 import { withRetry, isTimeoutError } from '../utils/retry.js'
 
-// iFood API base URLs (sandbox and production)
-// Base URL for authentication endpoints
-const IFOOD_API_BASE_SANDBOX = 'https://merchant-api.ifood.com.br/authentication/v1.0'
-const IFOOD_API_BASE_PRODUCTION = 'https://merchant-api.ifood.com.br/authentication/v1.0'
-// Base URL for other endpoints (order, merchants, catalog)
-const IFOOD_API_BASE_OTHER = 'https://merchant-api.ifood.com.br'
+// ============================================================================
+// iFood API Configuration - Versionamento e URLs Base
+// ============================================================================
+// Para atualizar o versionamento da API no futuro, modifique apenas as 
+// constantes abaixo. Isso facilitará a manutenção e atualização.
+
+// Versões da API por módulo
+const IFOOD_API_VERSIONS = {
+  AUTHENTICATION: 'v1.0',
+  EVENTS: 'v1.0',
+  ORDER: 'v1.0',
+  MERCHANTS: 'v1.0',
+  CATALOG: 'v1.0'
+} as const
+
+// URL base principal da API do iFood
+const IFOOD_API_BASE = 'https://merchant-api.ifood.com.br'
+
+// URLs base por tipo de endpoint
+const IFOOD_API_BASES = {
+  // Autenticação: base + /authentication + versão
+  AUTHENTICATION: `${IFOOD_API_BASE}/authentication/${IFOOD_API_VERSIONS.AUTHENTICATION}`,
+  
+  // Eventos: base + /events + versão
+  EVENTS: `${IFOOD_API_BASE}/events/${IFOOD_API_VERSIONS.EVENTS}/`,
+  
+  // Pedidos: base + /order/v1.0 (conforme Swagger: POST /order/v1.0/orders/{id}/confirm)
+  ORDER: `${IFOOD_API_BASE}/order/v1.0`,
+  
+  // Merchants: base (sem prefixo adicional)
+  MERCHANTS: IFOOD_API_BASE,
+  
+  // Catálogo: base (sem prefixo adicional)
+  CATALOG: IFOOD_API_BASE,
+  
+  // Geral (para endpoints que não se encaixam nas categorias acima)
+  GENERAL: IFOOD_API_BASE
+} as const
+
+// URLs base para sandbox e produção (autenticação)
+const IFOOD_API_BASE_SANDBOX = IFOOD_API_BASES.AUTHENTICATION
+const IFOOD_API_BASE_PRODUCTION = IFOOD_API_BASES.AUTHENTICATION
+// Base URL para outros endpoints (mantida para compatibilidade)
+const IFOOD_API_BASE_OTHER = IFOOD_API_BASE
 
 interface IfoodConfig {
   id?: number
@@ -651,11 +689,74 @@ export class IfoodService {
   }
 
   /**
+   * Get base URL for a specific API module
+   * Facilita a atualização do versionamento no futuro
+   */
+  private getBaseUrl(module: keyof typeof IFOOD_API_BASES): string {
+    return IFOOD_API_BASES[module]
+  }
+
+  /**
+   * Create an axios instance for a specific API module
+   * Cada módulo pode ter sua própria base URL e configuração
+   */
+  private createApiClientForModule(module: keyof typeof IFOOD_API_BASES, accessToken: string): AxiosInstance {
+    const baseUrl = this.getBaseUrl(module)
+    const timeout = parseInt(process.env.IFOOD_API_TIMEOUT || '30000', 10)
+
+    const client = axios.create({
+      baseURL: baseUrl,
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json'
+      },
+      timeout: timeout
+    })
+
+    // Add response interceptor for error handling
+    client.interceptors.response.use(
+      (response) => response,
+      async (error: AxiosError) => {
+        // Handle 401 - Token expired
+        if (error.response?.status === 401) {
+          console.log('Token expired (401), refreshing...')
+          const authResult = await this.authenticate()
+          if (authResult.success) {
+            // Retry original request with new token
+            const config = error.config
+            if (config) {
+              config.headers.Authorization = `Bearer ${this.config?.access_token}`
+              // Recreate client with new token
+              const newClient = this.createApiClientForModule(module, this.config!.access_token!)
+              return newClient.request(config)
+            }
+          }
+        }
+
+        // Handle 403 - Access denied
+        if (error.response?.status === 403) {
+          console.error('Access denied (403). Check merchant access and pending requests.')
+        }
+
+        // Handle timeout
+        if (isTimeoutError(error)) {
+          console.error('Connection timeout. Test connectivity and notify user.')
+        }
+
+        return Promise.reject(error)
+      }
+    )
+
+    return client
+  }
+
+  /**
    * Initialize API client with access token
    * Following iFood best practices: timeout configurável, retry para 5XX
+   * Usa base URL geral por padrão (para compatibilidade)
    */
   private initializeApiClient(accessToken: string) {
-    // Use base URL for other endpoints (not authentication)
+    // Use base URL for general endpoints (not authentication)
     const baseUrl = IFOOD_API_BASE_OTHER
     const timeout = parseInt(process.env.IFOOD_API_TIMEOUT || '30000', 10)
 
@@ -703,9 +804,12 @@ export class IfoodService {
 
   /**
    * Poll events from iFood (polling endpoint)
-   * Format: GET /events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD
+   * Format: GET :polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD
    * Following iFood best practices: retry on 5XX, use Bearer token
    * Documentation: https://developer.ifood.com.br/pt-BR/docs/guides/modules/events/polling-overview
+   * 
+   * IMPORTANTE: Usa base URL específica para eventos: baseURL + /events/v1.0
+   * URL completa: https://merchant-api.ifood.com.br/events/v1.0:polling?types=...
    */
   async pollEvents(): Promise<{ success: boolean; orders?: IfoodOrder[]; error?: string }> {
     // #region agent log
@@ -724,20 +828,48 @@ export class IfoodService {
 
     try {
       const merchantId = this.config!.merchant_id
+      const accessToken = this.config!.access_token!
+      
+      // Create API client specifically for events module
+      // Base URL será: https://merchant-api.ifood.com.br/events/v1.0
+      const eventsClient = this.createApiClientForModule('EVENTS', accessToken)
+      
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:703',message:'starting polling',data:{merchantId,hasApiClient:!!this.apiClient},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:703',message:'starting polling',data:{merchantId,eventsBaseURL:eventsClient.defaults.baseURL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       // According to iFood API documentation (https://developer.ifood.com.br/pt-BR/docs/guides/modules/events/polling-overview):
-      // Endpoint format: GET /events/v1.0/polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD
-      const endpoint = `/events/v1.0/polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+      // Endpoint format: GET events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD
+      // IMPORTANTE: Usar dois pontos (:) após "events" - formato correto: events:polling
+      // Base URL: https://merchant-api.ifood.com.br/events/v1.0/
+      // URL completa: https://merchant-api.ifood.com.br/events/v1.0/events:polling?types=...
+      const endpoint = `events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+      
+      // Build full URL for logging and verification
+      const baseURL = eventsClient.defaults.baseURL
+      const fullUrl = `${baseURL}${endpoint}`
+      
+      // Verify URL format is correct
+      console.log(`[pollEvents] URL completa: ${fullUrl}`)
+      console.log(`[pollEvents] Base URL (EVENTS): ${baseURL}`)
+      console.log(`[pollEvents] Endpoint: ${endpoint}`)
+      
+      // Verify endpoint format (must use : not /)
+      if (!endpoint.includes(':polling')) {
+        console.error(`[pollEvents] ERRO: Endpoint deve usar :polling, não /polling. Endpoint atual: ${endpoint}`)
+      }
       
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:714',message:'calling polling endpoint',data:{endpoint,fullUrl:`${this.apiClient!.defaults.baseURL}${endpoint}`},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:714',message:'calling polling endpoint',data:{endpoint,fullUrl,baseURL},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
       
       const response = await withRetry(
-        () => this.apiClient!.get(endpoint),
+        () => {
+          // Log the actual request URL that axios will use
+          const requestUrl = `${baseURL}${endpoint}`
+          console.log(`[pollEvents] Fazendo requisição para: ${requestUrl}`)
+          return eventsClient.get(endpoint)
+        },
         {
           maxRetries: 2,
           retryDelay: 500
@@ -765,26 +897,69 @@ export class IfoodService {
       
       if (Array.isArray(response.data)) {
         events = response.data
+        console.log(`[pollEvents] Eventos recebidos como array: ${events.length} eventos`)
       } else if (response.data && typeof response.data === 'object') {
         // Try different possible structures
         events = response.data.events || response.data.data || response.data.items || []
         
+        // Log structure for debugging
+        if (events.length === 0) {
+          console.log(`[pollEvents] Tentando extrair eventos de objeto:`, {
+            hasEvents: !!response.data.events,
+            hasData: !!response.data.data,
+            hasItems: !!response.data.items,
+            keys: Object.keys(response.data),
+            sample: JSON.stringify(response.data).substring(0, 500)
+          })
+        }
+        
         // If still empty, check if response.data itself is an event (single event)
         if (events.length === 0 && response.data.id) {
           events = [response.data]
+          console.log(`[pollEvents] Tratando response.data como evento único`)
         }
+      } else if (response.data === null || response.data === undefined) {
+        console.log(`[pollEvents] response.data é null/undefined`)
+        events = []
+      } else {
+        console.warn(`[pollEvents] Formato inesperado de response.data:`, typeof response.data, response.data)
+        events = []
       }
       
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:753',message:'events extracted',data:{eventsCount:events.length,isArray:Array.isArray(response.data),responseDataType:typeof response.data,hasEvents:!!response.data?.events,hasData:!!response.data?.data,hasItems:!!response.data?.items,responseDataKeys:response.data?Object.keys(response.data):null,firstEventSample:events[0]?JSON.stringify(events[0]).substring(0,500):null,fullResponseDataSample:response.data?JSON.stringify(response.data).substring(0,500):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
       
+      // Log first event structure for debugging
+      if (events.length > 0) {
+        console.log(`[pollEvents] Primeiro evento:`, {
+          keys: Object.keys(events[0]),
+          hasOrderId: !!(events[0].orderId || events[0].payload?.orderId),
+          code: events[0].code || events[0].type,
+          sample: JSON.stringify(events[0]).substring(0, 300)
+        })
+      }
+      
       return { success: true, orders: events }
     } catch (error: any) {
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:757',message:'pollEvents error',data:{errorMessage:error.message,status:error.response?.status,errorData:error.response?.data?JSON.stringify(error.response.data).substring(0,200):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood-service.ts:757',message:'pollEvents error',data:{errorMessage:error.message,status:error.response?.status,errorData:error.response?.data?JSON.stringify(error.response.data).substring(0,200):null,errorCode:error.code,errorName:error.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
-      console.error('Error polling events from iFood:', error.response?.data || error.message)
+      
+      // Log detailed error information
+      console.error('[pollEvents] Erro ao buscar eventos do iFood:', {
+        message: error.message,
+        name: error.name,
+        code: error.code,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          url: error.config?.url,
+          method: error.config?.method,
+          baseURL: error.config?.baseURL
+        }
+      })
       
       // If timeout, notify about connectivity issues (iFood best practice)
       if (isTimeoutError(error)) {
@@ -793,10 +968,32 @@ export class IfoodService {
           error: 'Timeout na conexão com iFood. Verifique sua conectividade.'
         }
       }
+      
+      // Handle specific error cases
+      if (error.response?.status === 404) {
+        return {
+          success: false,
+          error: 'Endpoint de eventos não encontrado. Verifique a configuração da API do iFood.'
+        }
+      }
+      
+      if (error.response?.status === 401) {
+        return {
+          success: false,
+          error: 'Token de autenticação inválido ou expirado. Tente autenticar novamente.'
+        }
+      }
+      
+      if (error.response?.status === 403) {
+        return {
+          success: false,
+          error: 'Acesso negado. Verifique as permissões do merchant.'
+        }
+      }
 
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message || 'Failed to poll events' 
+        error: error.response?.data?.message || error.message || 'Falha ao buscar eventos do iFood' 
       }
     }
   }
@@ -816,11 +1013,17 @@ export class IfoodService {
 
     try {
       const merchantId = this.config!.merchant_id
+      const accessToken = this.config!.access_token!
+      
+      // Create API client specifically for order module
+      // Base URL será: https://merchant-api.ifood.com.br
+      const orderClient = this.createApiClientForModule('ORDER', accessToken)
+      
       const endpoint = `/merchants/${merchantId}/orders?status=${status || 'PLACED'}`
 
       // Use retry for 5XX errors (iFood best practice)
       const response = await withRetry(
-        () => this.apiClient!.get<IfoodOrder[]>(endpoint),
+        () => orderClient.get<IfoodOrder[]>(endpoint),
         {
           maxRetries: 3,
           retryDelay: 1000
@@ -861,13 +1064,19 @@ export class IfoodService {
     }
 
     try {
+      const accessToken = this.config!.access_token!
+      
+      // Create API client specifically for order module
+      // Base URL será: https://merchant-api.ifood.com.br/order/v1.0
+      const orderClient = this.createApiClientForModule('ORDER', accessToken)
+      
       // Use retry for 5XX errors
       // According to iFood API: GET /order/v1.0/orders/{orderId}
-      // Verified working endpoint format (not /merchants/{merchantId}/orders/{orderId})
-      const endpoint = `/order/v1.0/orders/${orderId}`
+      // Base URL já inclui /order/v1.0, então endpoint é apenas /orders/{orderId}
+      const endpoint = `/orders/${orderId}`
 
       const response = await withRetry(
-        () => this.apiClient!.get<IfoodOrder>(endpoint),
+        () => orderClient.get<IfoodOrder>(endpoint),
         {
           maxRetries: 3,
           retryDelay: 1000
@@ -933,13 +1142,19 @@ export class IfoodService {
     }
 
     try {
+      const accessToken = this.config!.access_token!
+      
+      // Create API client specifically for events module
+      // Base URL será: https://merchant-api.ifood.com.br/events/v1.0/
+      const eventsClient = this.createApiClientForModule('EVENTS', accessToken)
+      
       // iFood API: POST /events/acknowledgment
       // Can send array of event IDs or full event payloads (API uses only the 'id' field)
       // Limit: up to 2000 IDs per request
-      const endpoint = `/events/acknowledgment`
+      const endpoint = `events:acknowledgment`
       
       const response = await withRetry(
-        () => this.apiClient!.post(endpoint, eventIds),
+        () => eventsClient.post(endpoint, eventIds),
         {
           maxRetries: 3,
           retryDelay: 1000
@@ -958,10 +1173,19 @@ export class IfoodService {
 
   /**
    * Update order status in iFood
+   * According to iFood API Swagger documentation:
+   * - POST /orders/{id}/confirm (to confirm an order)
+   * - POST /orders/{id}/requestCancellation (to cancel an order)
+   * - POST /orders/{id}/startPreparation (to start preparation)
+   * - POST /orders/{id}/readyToPickup (to mark as ready for pickup)
+   * - POST /orders/{id}/dispatch (to dispatch an order)
+   * 
    * Following iFood best practices:
    * - Consult order details before confirming/canceling (should be done by caller)
    * - Status 202 means async operation - wait for confirmation event in polling
    * - Use retry for 5XX errors
+   * 
+   * Reference: https://developer.ifood.com.br/pt-BR/docs/references/#operations-Actions-confirm
    */
   async updateOrderStatus(
     orderId: string, 
@@ -976,32 +1200,179 @@ export class IfoodService {
     }
 
     try {
-      const merchantId = this.config!.merchant_id
+      // Ensure config is loaded
+      if (!this.config) {
+        console.error('[updateOrderStatus] Config is null, attempting to reload...')
+        await this.getConfig()
+        if (!this.config) {
+          return {
+            success: false,
+            error: 'Configuração do iFood não encontrada'
+          }
+        }
+      }
+      
+      const accessToken = this.config.access_token
+      
+      console.log('[updateOrderStatus] Config check:', {
+        hasConfig: !!this.config,
+        hasAccessToken: !!accessToken,
+        accessTokenLength: accessToken?.length || 0
+      })
+      
+      if (!accessToken) {
+        console.error('[updateOrderStatus] Access token is missing from config')
+        return {
+          success: false,
+          error: 'Access token não configurado. Verifique a autenticação do iFood.'
+        }
+      }
+      
+      // Create API client specifically for order module
+      // Base URL será: https://merchant-api.ifood.com.br/order/v1.0
+      const orderClient = this.createApiClientForModule('ORDER', accessToken)
+      
+      // Map status to correct endpoint according to iFood Swagger documentation
+      let endpoint: string
+      let method: 'post' | 'patch' = 'post'
+      let payload: any = {}
+      
+      switch (status) {
+        case 'CONFIRMED':
+          // POST /orders/{id}/confirm
+          // No payload required - empty body {}
+          // After confirmation, you'll receive a CFM event via polling/webhook with structure:
+          // {
+          //   "id": "...",
+          //   "code": "CFM",
+          //   "fullCode": "CONFIRMED",
+          //   "orderId": "...",
+          //   "merchantId": "...",
+          //   "createdAt": "...",
+          //   "salesChannel": "IFOOD",
+          //   "metadata": { "CLIENT_ID": "..." }
+          // }
+          endpoint = `/orders/${orderId}/confirm`
+          method = 'post'
+          payload = {}
+          break
+        case 'CANCELLED':
+          // POST /orders/{id}/requestCancellation
+          // Note: May need cancellation reason - check documentation
+          endpoint = `/orders/${orderId}/requestCancellation`
+          method = 'post'
+          payload = {}
+          break
+        case 'PREPARATION_STARTED':
+          // POST /orders/{id}/startPreparation
+          endpoint = `/orders/${orderId}/startPreparation`
+          method = 'post'
+          payload = {}
+          break
+        case 'READY_TO_PICKUP':
+          // POST /orders/{id}/readyToPickup
+          endpoint = `/orders/${orderId}/readyToPickup`
+          method = 'post'
+          payload = {}
+          break
+        case 'DISPATCHED':
+          // POST /orders/{id}/dispatch
+          endpoint = `/orders/${orderId}/dispatch`
+          method = 'post'
+          payload = {}
+          break
+        default:
+          return {
+            success: false,
+            error: `Status ${status} não suportado ou não requer atualização via API`
+          }
+      }
+      
+      const fullUrl = `${orderClient.defaults.baseURL}${endpoint}`
+      const authHeader = `Bearer ${accessToken}`
+      
+      console.log(`[updateOrderStatus] Updating order ${orderId} to status ${status}`)
+      console.log(`[updateOrderStatus] Method: ${method.toUpperCase()}`)
+      console.log(`[updateOrderStatus] Endpoint: ${endpoint}`)
+      console.log(`[updateOrderStatus] Base URL: ${orderClient.defaults.baseURL}`)
+      console.log(`[updateOrderStatus] Full URL: ${fullUrl}`)
+      console.log(`[updateOrderStatus] Payload:`, JSON.stringify(payload, null, 2))
+      console.log(`[updateOrderStatus] Authorization header: ${authHeader.substring(0, 50)}...`)
+      
+      // Generate curl command for debugging
+      const curlCommand = `curl -X ${method.toUpperCase()} "${fullUrl}" \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: ${authHeader}" \\
+  ${Object.keys(payload).length > 0 ? `-d '${JSON.stringify(payload)}'` : ''}`
+      
+      console.log(`[updateOrderStatus] CURL command equivalent:`)
+      console.log(curlCommand)
       
       // Use retry for 5XX errors
       const response = await withRetry(
-        () => this.apiClient!.patch(
-          `/merchants/${merchantId}/orders/${orderId}/status`,
-          { status }
-        ),
+        () => {
+          if (method === 'post') {
+            return orderClient.post(endpoint, payload)
+          } else {
+            return orderClient.patch(endpoint, payload)
+          }
+        },
         {
           maxRetries: 3,
           retryDelay: 1000
         }
       )
+      
+      console.log(`[updateOrderStatus] Response status: ${response.status}`)
+      console.log(`[updateOrderStatus] Response headers:`, JSON.stringify(response.headers, null, 2))
+      console.log(`[updateOrderStatus] Response data:`, JSON.stringify(response.data, null, 2))
 
       // Status 202 means async operation (iFood best practice)
       const isAsync = response.status === 202
       if (isAsync) {
-        console.log(`Order ${orderId} status update is async. Wait for confirmation event in polling.`)
+        console.log(`Order ${orderId} status update is async (202). Wait for confirmation event in polling.`)
+      } else {
+        console.log(`Order ${orderId} status update succeeded synchronously (${response.status})`)
       }
 
       return { success: true, isAsync }
     } catch (error: any) {
-      console.error('Error updating order status in iFood:', error.response?.data || error.message)
+      console.error('[updateOrderStatus] Error updating order status in iFood:', error)
+      console.error('[updateOrderStatus] Error type:', typeof error)
+      console.error('[updateOrderStatus] Error instanceof Error:', error instanceof Error)
+      console.error('[updateOrderStatus] Error response:', error.response?.data)
+      console.error('[updateOrderStatus] Error status:', error.response?.status)
+      console.error('[updateOrderStatus] Error statusText:', error.response?.statusText)
+      console.error('[updateOrderStatus] Error message:', error.message)
+      console.error('[updateOrderStatus] Error stack:', error.stack)
+      console.error('[updateOrderStatus] Error config:', {
+        url: error.config?.url,
+        method: error.config?.method,
+        baseURL: error.config?.baseURL
+      })
+      
+      // Try to extract detailed error message
+      let errorMessage = 'Failed to update order status'
+      
+      if (error.response?.data) {
+        if (typeof error.response.data === 'string') {
+          errorMessage = error.response.data
+        } else if (error.response.data.message) {
+          errorMessage = error.response.data.message
+        } else if (error.response.data.error) {
+          errorMessage = error.response.data.error
+        } else {
+          errorMessage = JSON.stringify(error.response.data)
+        }
+      } else if (error.message) {
+        errorMessage = error.message
+      }
+      
+      console.error('[updateOrderStatus] Final error message:', errorMessage)
+      
       return { 
         success: false, 
-        error: error.response?.data?.message || error.message || 'Failed to update order status' 
+        error: errorMessage
       }
     }
   }
@@ -1020,7 +1391,13 @@ export class IfoodService {
 
     try {
       const merchantId = this.config!.merchant_id
-      const response = await this.apiClient!.get<IfoodProduct[]>(
+      const accessToken = this.config!.access_token!
+      
+      // Create API client specifically for catalog module
+      // Base URL será: https://merchant-api.ifood.com.br
+      const catalogClient = this.createApiClientForModule('CATALOG', accessToken)
+      
+      const response = await catalogClient.get<IfoodProduct[]>(
         `/merchants/${merchantId}/catalog/products`
       )
 

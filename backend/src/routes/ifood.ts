@@ -923,8 +923,19 @@ router.post('/webhook', async (req: Request, res: Response) => {
  */
 router.get('/pending-orders', async (req: Request, res: Response) => {
   // #region agent log
-  fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:924',message:'pending-orders endpoint called',data:{timestamp:new Date().toISOString()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+  fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:924',message:'pending-orders endpoint called',data:{timestamp:new Date().toISOString(),method:req.method,url:req.url,path:req.path,originalUrl:req.originalUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
   // #endregion
+  
+  // Log request details for debugging
+  console.log('[pending-orders] Request recebido:', {
+    method: req.method,
+    url: req.url,
+    path: req.path,
+    originalUrl: req.originalUrl,
+    query: req.query,
+    params: req.params
+  })
+  
   try {
     const ifoodService = new IfoodService()
     
@@ -941,10 +952,23 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:933',message:'returning empty orders - pollEvents failed',data:{success:result.success,error:result.error},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
+      
+      // Check if error message contains "no Route matched" (Vercel routing error)
+      const errorMessage = result.error || 'Falha ao buscar eventos do iFood'
+      if (errorMessage.includes('no Route matched') || errorMessage.includes('Route matched')) {
+        console.error('[pending-orders] Erro de roteamento detectado no pollEvents:', errorMessage)
+        return res.status(404).json({
+          success: false,
+          orders: [],
+          message: 'Erro de roteamento na API do iFood. Verifique a configuração.',
+          error: errorMessage
+        })
+      }
+      
       return res.status(200).json({
         success: true,
         orders: [],
-        message: result.error || 'Falha ao buscar eventos do iFood'
+        message: errorMessage
       })
     }
     
@@ -953,9 +977,11 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:940',message:'returning empty orders - no events',data:{success:result.success,hasOrders:!!result.orders,ordersLength:result.orders?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
+      console.log('[pending-orders] Nenhum evento retornado do polling')
       return res.status(200).json({
         success: true,
-        orders: []
+        orders: [],
+        message: 'Nenhum evento novo disponível'
       })
     }
 
@@ -976,19 +1002,38 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
-    // Get existing iFood order IDs
+    // Get existing iFood order IDs with their status
     const { data: existingOrders } = await supabase
       .from('orders')
-      .select('ifood_order_id')
+      .select('ifood_order_id, ifood_status')
       .not('ifood_order_id', 'is', null)
     
     const existingIds = new Set(existingOrders?.map(o => o.ifood_order_id) || [])
+    // Map of orderId -> ifood_status for quick lookup
+    const existingOrdersStatusMap = new Map<string, string>()
+    existingOrders?.forEach((o: any) => {
+      if (o.ifood_order_id) {
+        existingOrdersStatusMap.set(o.ifood_order_id, o.ifood_status || '')
+      }
+    })
     // #region agent log
     fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:958',message:'existing orders check',data:{existingOrdersCount:existingIds.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
     
     // Events from polling need to be processed - extract order IDs and fetch full order details
-    const events = result.orders as any[]
+    // Ensure events is an array
+    let events: any[] = []
+    if (Array.isArray(result.orders)) {
+      events = result.orders
+    } else if (result.orders && typeof result.orders === 'object') {
+      // Try to extract events from object structure
+      events = result.orders.events || result.orders.data || result.orders.items || [result.orders]
+    } else {
+      console.warn('[pending-orders] Formato inesperado de eventos:', typeof result.orders, result.orders)
+      events = []
+    }
+    
+    console.log(`[pending-orders] Processando ${events.length} eventos do polling`)
     const pendingOrders: any[] = []
     // #region agent log
     fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:962',message:'processing events',data:{eventsCount:events.length,firstEventKeys:events[0]?Object.keys(events[0]):null,firstEventSample:events[0]?JSON.stringify(events[0]).substring(0,300):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
@@ -999,6 +1044,72 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     const orderIdsSet = new Set<string>()
     const eventDetails: any[] = []
     
+    // Helper function to extract orderId from event (more robust)
+    const extractOrderId = (event: any): string | null => {
+      // Try direct orderId field first (most common)
+      if (event.orderId && typeof event.orderId === 'string' && event.orderId.trim() !== '') {
+        return event.orderId.trim()
+      }
+      
+      // Try payload.orderId (common structure)
+      if (event.payload?.orderId && typeof event.payload.orderId === 'string' && event.payload.orderId.trim() !== '') {
+        return event.payload.orderId.trim()
+      }
+      
+      // Try payload.order.id or payload.order.orderId
+      if (event.payload?.order) {
+        const orderId = event.payload.order.id || event.payload.order.orderId
+        if (orderId && typeof orderId === 'string' && orderId.trim() !== '') {
+          return orderId.trim()
+        }
+      }
+      
+      // Try data.orderId
+      if (event.data?.orderId && typeof event.data.orderId === 'string' && event.data.orderId.trim() !== '') {
+        return event.data.orderId.trim()
+      }
+      
+      // Try data.order.id or data.order.orderId
+      if (event.data?.order) {
+        const orderId = event.data.order.id || event.data.order.orderId
+        if (orderId && typeof orderId === 'string' && orderId.trim() !== '') {
+          return orderId.trim()
+        }
+      }
+      
+      // Try order.id or order.orderId (direct)
+      if (event.order) {
+        const orderId = event.order.id || event.order.orderId
+        if (orderId && typeof orderId === 'string' && orderId.trim() !== '') {
+          return orderId.trim()
+        }
+      }
+      
+      // Try payload.id (sometimes the order ID is directly in payload)
+      if (event.payload?.id && typeof event.payload.id === 'string' && event.payload.id.trim() !== '') {
+        // Only use if it looks like a UUID (iFood order IDs are UUIDs)
+        const id = event.payload.id.trim()
+        if (id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+          return id
+        }
+      }
+      
+      // Last resort: try event.id if it looks like a UUID (but be careful - this might be event ID, not order ID)
+      if (event.id && typeof event.id === 'string') {
+        const id = event.id.trim()
+        // Only use if it looks like a UUID and we don't have a better match
+        if (id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+          // Check if this might be an event ID by looking for event-specific fields
+          // If it has 'code' or 'type', it's likely an event, not an order
+          if (!event.code && !event.type && !event.eventType) {
+            return id
+          }
+        }
+      }
+      
+      return null
+    }
+    
     // Process status update events for existing orders
     for (const event of events) {
       // Log event structure for debugging
@@ -1007,20 +1118,7 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       
       // Extract event code and order ID
       const eventCode = (event.code || event.fullCode || eventType || '').toUpperCase()
-      const orderId = event.orderId || 
-                     event.id || 
-                     event.payload?.orderId || 
-                     event.payload?.id ||
-                     event.payload?.orderId ||
-                     event.order?.id ||
-                     event.order?.orderId ||
-                     event.data?.orderId ||
-                     event.data?.id ||
-                     event.data?.order?.id ||
-                     event.data?.order?.orderId ||
-                     (event.payload?.order && (event.payload.order.id || event.payload.order.orderId)) ||
-                     (event.order && (event.order.id || event.order.orderId)) ||
-                     (typeof event === 'string' ? event : null) // Sometimes the event itself is the ID
+      const orderId = extractOrderId(event)
       
       eventDetails.push({
         type: eventType,
@@ -1029,8 +1127,22 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
         hasOrderId: !!orderId,
         orderId: orderId || null,
         eventKeys: Object.keys(event),
-        eventStructure: JSON.stringify(event).substring(0, 300)
+        eventStructure: JSON.stringify(event).substring(0, 500),
+        // Add more details for debugging
+        payloadKeys: event.payload ? Object.keys(event.payload) : null,
+        dataKeys: event.data ? Object.keys(event.data) : null,
+        orderKeys: event.order ? Object.keys(event.order) : null
       })
+      
+      // Log warning if event doesn't have orderId (for debugging)
+      if (!orderId) {
+        console.warn(`[pending-orders] Event sem orderId detectado:`, {
+          code: eventCode,
+          type: eventType,
+          keys: Object.keys(event),
+          sample: JSON.stringify(event).substring(0, 500)
+        })
+      }
       
       // Process status update events for existing orders (DISPATCHED, CONCLUDED, etc.)
       // #region agent log
@@ -1136,11 +1248,27 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
         }
       }
       
-      if (orderId && typeof orderId === 'string' && orderId.trim() !== '' && !existingIds.has(orderId)) {
-        // Add all events that have a valid orderId and don't exist in our system
-        // PLC = Place Order (novo pedido) - these are the pending orders we want to show
-        // We'll process all events and let getOrderDetails determine if it's a valid order
-        orderIdsSet.add(orderId)
+      // For PLC (PLACED) events, we want to show them if:
+      // 1. Order doesn't exist in our system, OR
+      // 2. Order exists but still has PLACED status (pending acceptance)
+      const isPlacedEvent = eventCode === 'PLC' || eventCode === 'PLACED' || eventType === 'PLACED'
+      
+      if (orderId && typeof orderId === 'string' && orderId.trim() !== '') {
+        if (isPlacedEvent) {
+          const existingStatus = existingOrdersStatusMap.get(orderId)
+          // Include if order doesn't exist OR if it exists but still has PLACED status
+          if (!existingIds.has(orderId) || existingStatus === 'PLACED' || existingStatus === 'PLC' || !existingStatus) {
+            orderIdsSet.add(orderId)
+            console.log(`[pending-orders] Adding PLACED order ${orderId} to fetch list (exists: ${existingIds.has(orderId)}, status: ${existingStatus})`)
+          } else {
+            console.log(`[pending-orders] Skipping PLACED order ${orderId} - already exists with status: ${existingStatus}`)
+          }
+        } else {
+          // For non-PLC events, only add if order doesn't exist
+          if (!existingIds.has(orderId)) {
+            orderIdsSet.add(orderId)
+          }
+        }
       } else if (!orderId) {
         // Log events without orderId for debugging
         console.warn(`[pending-orders] Event without orderId:`, {
@@ -1161,16 +1289,40 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     console.log(`[pending-orders] Processing ${events.length} events`)
     console.log(`[pending-orders] Event details:`, JSON.stringify(eventDetails.slice(0, 3), null, 2))
     console.log(`[pending-orders] Extracted ${orderIdsToFetch.length} order IDs:`, orderIdsToFetch)
+    console.log(`[pending-orders] Existing orders status map:`, Array.from(existingOrdersStatusMap.entries()).slice(0, 5))
     
     // If no order IDs found in events, return empty
     if (orderIdsToFetch.length === 0) {
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1000',message:'no orderIds found in events',data:{eventsCount:events.length,existingIdsCount:existingIds.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1000',message:'no orderIds found in events',data:{eventsCount:events.length,existingIdsCount:existingIds.size,eventDetails:eventDetails.slice(0,3)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
       // #endregion
+      
+      // Log detailed information for debugging
+      const eventsWithoutOrderId = eventDetails.filter(e => !e.hasOrderId)
+      const eventsWithOrderId = eventDetails.filter(e => e.hasOrderId)
+      
+      console.log(`[pending-orders] Nenhum orderId novo encontrado:`, {
+        totalEvents: events.length,
+        eventsWithOrderId: eventsWithOrderId.length,
+        eventsWithoutOrderId: eventsWithoutOrderId.length,
+        existingOrdersCount: existingIds.size,
+        sampleEventsWithoutOrderId: eventsWithoutOrderId.slice(0, 2)
+      })
+      
       return res.status(200).json({
         success: true,
         orders: [],
-        message: 'Nenhum pedido novo encontrado nos eventos'
+        message: events.length === 0 
+          ? 'Nenhum evento disponível' 
+          : eventsWithoutOrderId.length > 0
+            ? `Nenhum pedido novo encontrado. ${eventsWithoutOrderId.length} eventos sem orderId.`
+            : 'Nenhum pedido novo encontrado nos eventos',
+        debug: {
+          eventsCount: events.length,
+          eventsWithOrderId: eventsWithOrderId.length,
+          eventsWithoutOrderId: eventsWithoutOrderId.length,
+          existingOrdersCount: existingIds.size
+        }
       })
     }
     
@@ -1182,21 +1334,119 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1001',message:'fetching order details',data:{totalOrderIds:orderIdsToFetch.length,limitedOrderIds:limitedOrderIds.length,orderIds:limitedOrderIds},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
     // #endregion
     
+    // Helper function to fetch order details with retry for 404 (pedido ainda não disponível)
+    // According to iFood docs: retry with exponential backoff when receiving 404
+    // For pending-orders endpoint, we do quick retries (1-2 attempts) to avoid long waits
+    // If order is not available, it will be fetched in the next polling cycle
+    const fetchOrderDetailsWithRetry = async (orderId: string, maxRetries: number = 3): Promise<any> => {
+      let attempt = 0
+      let delay = 1000 // Start with 1 second
+      
+      while (attempt < maxRetries) {
+        try {
+          const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+          
+          if (orderDetailsResult.success && orderDetailsResult.order) {
+            const order = orderDetailsResult.order
+            // Ensure all required fields are present and properly formatted
+            const sanitizedOrder = {
+              id: order.id,
+              shortReference: order.shortReference || order.id,
+              displayId: order.displayId || order.shortReference || order.id,
+              orderType: order.orderType,
+              orderTiming: order.orderTiming || 'IMMEDIATE',
+              salesChannel: order.salesChannel || 'IFOOD',
+              category: order.category,
+              createdAt: order.createdAt || new Date().toISOString(),
+              preparationStartDateTime: order.preparationStartDateTime,
+              preparationTimeInSeconds: order.preparationTimeInSeconds,
+              isTest: order.isTest,
+              extraInfo: order.extraInfo,
+              items: order.items || [],
+              customer: order.customer || { id: '', name: 'Cliente iFood' },
+              delivery: order.delivery,
+              takeout: order.takeout,
+              dineIn: order.dineIn,
+              indoor: order.indoor,
+              schedule: order.schedule,
+              total: order.total,
+              totalPrice: order.totalPrice || (order.total ? { amount: order.total.orderAmount || 0, currency: 'BRL' } : { amount: 0, currency: 'BRL' }),
+              payments: order.payments,
+              benefits: order.benefits,
+              additionalFees: order.additionalFees,
+              picking: order.picking,
+              additionalInfo: order.additionalInfo
+            }
+            
+            // Log específico para displayId 9746
+            if (sanitizedOrder.displayId === '9746' || sanitizedOrder.shortReference === '9746') {
+              console.log(`[pending-orders] Found order with displayId 9746:`, {
+                id: sanitizedOrder.id,
+                displayId: sanitizedOrder.displayId,
+                shortReference: sanitizedOrder.shortReference,
+                orderType: sanitizedOrder.orderType,
+                customer: sanitizedOrder.customer,
+                hasItems: !!(sanitizedOrder.items && sanitizedOrder.items.length > 0),
+                total: sanitizedOrder.total,
+                totalPrice: sanitizedOrder.totalPrice
+              })
+            }
+            if (attempt > 0) {
+              console.log(`[pending-orders] Successfully fetched order ${orderId} after ${attempt} retries`)
+            }
+            return sanitizedOrder
+          }
+          
+          // Check if it's a 404 error (pedido ainda não disponível)
+          const is404 = orderDetailsResult.error?.includes('404') || orderDetailsResult.error?.includes('não encontrado')
+          
+          if (is404 && attempt < maxRetries - 1) {
+            // Quick exponential backoff: 1s, 2s (only 2 retries for pending-orders)
+            attempt++
+            console.log(`[pending-orders] Order ${orderId} not available yet (404), retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            delay = delay * 2 // 1s -> 2s
+            continue
+          } else {
+            // Not a 404 or max retries reached
+            if (is404) {
+              console.log(`[pending-orders] Order ${orderId} still not available after ${attempt} retries. Will try again in next polling cycle.`)
+            } else {
+              console.log(`[pending-orders] Order ${orderId} fetch failed: ${orderDetailsResult.error}`)
+            }
+            return null
+          }
+        } catch (error) {
+          if (attempt < maxRetries - 1) {
+            attempt++
+            console.log(`[pending-orders] Error fetching order ${orderId}, retrying in ${delay}ms (attempt ${attempt}/${maxRetries})`)
+            await new Promise(resolve => setTimeout(resolve, delay))
+            delay = delay * 2
+            continue
+          } else {
+            console.error(`[pending-orders] Error processing order ${orderId} after ${attempt} retries:`, error)
+            return null
+          }
+        }
+      }
+      
+      return null
+    }
+    
     // Fetch order details in parallel (but limit concurrency to avoid overwhelming the API)
     const orderPromises = limitedOrderIds.map(async (orderId) => {
       try {
         // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:983',message:'calling getOrderDetails',data:{orderId,before_call:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-        // #endregion
-        const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
-        // #region agent log
-        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:985',message:'getOrderDetails result',data:{orderId,success:orderDetailsResult.success,hasOrder:!!orderDetailsResult.order,error:orderDetailsResult.error||null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:983',message:'calling getOrderDetails with retry',data:{orderId,before_call:true},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
         // #endregion
         
-        if (orderDetailsResult.success && orderDetailsResult.order) {
-          return orderDetailsResult.order
-        }
-        return null
+        const sanitizedOrder = await fetchOrderDetailsWithRetry(orderId)
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:985',message:'getOrderDetails result after retry',data:{orderId,success:!!sanitizedOrder,hasOrder:!!sanitizedOrder},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+        // #endregion
+        
+        return sanitizedOrder
       } catch (error) {
         // #region agent log
         fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:992',message:'error processing event',data:{orderId,error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
@@ -1213,9 +1463,9 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     try {
       const timeoutPromise = new Promise<any[]>((resolve) => {
         setTimeout(() => {
-          console.warn('Timeout ao buscar detalhes dos pedidos (20s). Retornando pedidos já processados.')
+          console.warn('Timeout ao buscar detalhes dos pedidos (30s). Retornando pedidos já processados.')
           resolve([])
-        }, 20000) // 20 second timeout (reduced from 30s to fail faster)
+        }, 30000) // 30 second timeout (increased to accommodate retries: 3 orders * 3 retries * ~3s = ~27s max)
       })
       
       const ordersResults = await Promise.race([
@@ -1228,9 +1478,54 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       // Filter out null results and remove duplicates by order ID
       validOrders = (ordersResults || []).filter((order): order is any => order !== null)
       
+      // Filter only orders with status PLACED for the pending orders container
+      // This endpoint is specifically for pending orders, so we only return PLACED status
+      console.log(`[pending-orders] Filtering ${validOrders.length} valid orders for PLACED status`)
+      console.log(`[pending-orders] Valid orders details:`, validOrders.map((o: any) => ({
+        id: o.id,
+        displayId: o.displayId,
+        shortReference: o.shortReference,
+        status: o.status,
+        orderStatus: o.orderStatus,
+        ifoodStatus: o.ifoodStatus,
+        keys: Object.keys(o)
+      })))
+      
+      const placedOrders = validOrders.filter((order: any) => {
+        // Check status from API response (most reliable)
+        // Note: API do iFood pode não retornar status diretamente no objeto order
+        // Vamos assumir que se chegou aqui via evento PLC, é PLACED
+        const orderId = order.id
+        const displayId = order.displayId || order.shortReference
+        const dbStatus = orderId ? existingOrdersStatusMap.get(orderId) : null
+        
+        // Log detalhado para debug
+        console.log(`[pending-orders] Checking order ${orderId} (displayId: ${displayId}):`, {
+          dbStatus,
+          orderStatus: order.status,
+          orderOrderStatus: order.orderStatus,
+          orderIfoodStatus: order.ifoodStatus,
+          hasDbStatus: !!dbStatus
+        })
+        
+        // Se o pedido existe no banco, verificar o status lá
+        // Se não existe, assumir que é PLACED (veio de evento PLC)
+        if (dbStatus) {
+          const isPlaced = dbStatus === 'PLACED' || dbStatus === 'PLC'
+          console.log(`[pending-orders] Order ${orderId} (displayId: ${displayId}) exists in DB with status ${dbStatus}, isPlaced: ${isPlaced}`)
+          return isPlaced
+        } else {
+          // Pedido não existe no banco, veio de evento PLC, então é PLACED
+          console.log(`[pending-orders] Order ${orderId} (displayId: ${displayId}) not in DB, assuming PLACED (from PLC event)`)
+          return true
+        }
+      })
+      
+      console.log(`[pending-orders] After filtering: ${placedOrders.length} orders with PLACED status`)
+      
       // Remove duplicates by order ID (keep first occurrence)
       const uniqueOrdersMap = new Map<string, any>()
-      for (const order of validOrders) {
+      for (const order of placedOrders) {
         if (order && order.id && !uniqueOrdersMap.has(order.id)) {
           uniqueOrdersMap.set(order.id, order)
         }
@@ -1238,7 +1533,7 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       const uniqueOrders = Array.from(uniqueOrdersMap.values())
       
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1045',message:'removing duplicates',data:{validOrdersCount:validOrders.length,uniqueOrdersCount:uniqueOrders.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1045',message:'removing duplicates and filtering PLACED',data:{validOrdersCount:validOrders.length,placedOrdersCount:placedOrders.length,uniqueOrdersCount:uniqueOrders.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
       // #endregion
       
       pendingOrders.push(...uniqueOrders)
@@ -1286,23 +1581,56 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       firstOrder: responseData.orders[0] ? {
         id: responseData.orders[0].id,
         displayId: responseData.orders[0].displayId,
-        customer: responseData.orders[0].customer?.name
-      } : null
+        shortReference: responseData.orders[0].shortReference,
+        customer: responseData.orders[0].customer?.name,
+        customerType: typeof responseData.orders[0].customer,
+        keys: Object.keys(responseData.orders[0])
+      } : null,
+      allOrderIds: responseData.orders.map((o: any) => o.id)
     })
+    
+    // Log full response data structure (first order only to avoid too much output)
+    if (responseData.orders.length > 0) {
+      console.log(`[pending-orders] First order full structure:`, JSON.stringify(responseData.orders[0], null, 2))
+    } else {
+      console.log(`[pending-orders] No orders to return. Response structure:`, JSON.stringify(responseData, null, 2))
+    }
     
     // Set explicit headers
     res.setHeader('Content-Type', 'application/json')
     res.setHeader('Cache-Control', 'no-cache')
     
+    // Send response
     res.json(responseData)
   } catch (error) {
     // #region agent log
-    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:995',message:'error in pending-orders endpoint',data:{error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:995',message:'error in pending-orders endpoint',data:{error:error instanceof Error?error.message:String(error),errorName:error instanceof Error?error.name:'unknown',errorStack:error instanceof Error?error.stack?.substring(0,500):null},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
     // #endregion
-    console.error('Erro ao buscar pedidos pendentes do iFood:', error)
+    
+    // Log detailed error information
+    console.error('[pending-orders] Erro ao buscar pedidos pendentes do iFood:', {
+      message: error instanceof Error ? error.message : String(error),
+      name: error instanceof Error ? error.name : 'Unknown',
+      stack: error instanceof Error ? error.stack : undefined
+    })
+    
+    // Check if error message contains "no Route matched" (Vercel routing error)
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    if (errorMessage.includes('no Route matched') || errorMessage.includes('Route matched')) {
+      console.error('[pending-orders] Erro de roteamento detectado - possível problema com configuração do Vercel')
+      return res.status(404).json({
+        success: false,
+        message: 'Rota não encontrada. Verifique se a URL está correta.',
+        error: 'Roteamento falhou',
+        path: req.path,
+        method: req.method
+      })
+    }
+    
     res.status(500).json({
       success: false,
-      message: `Erro interno: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+      message: `Erro interno: ${errorMessage}`,
+      error: process.env.NODE_ENV === 'development' ? (error instanceof Error ? error.stack : undefined) : undefined
     })
   }
 })
@@ -1440,10 +1768,209 @@ router.get('/poll-events', async (req: Request, res: Response) => {
 router.post('/accept-order/:orderId', async (req: Request, res: Response) => {
   try {
     const { orderId } = req.params
+    console.log(`[accept-order] Starting to accept order ${orderId}`)
+    
     const ifoodService = new IfoodService()
     const pollingService = getPollingService()
     
     // Get order details from iFood
+    console.log(`[accept-order] Getting iFood config...`)
+    const config = await ifoodService.getConfig()
+    if (!config) {
+      console.error(`[accept-order] Config not found`)
+      return res.status(500).json({
+        success: false,
+        message: 'Configuração do iFood não encontrada'
+      })
+    }
+    
+    console.log(`[accept-order] Fetching order details from iFood API...`)
+    const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+    
+    if (!orderDetailsResult.success || !orderDetailsResult.order) {
+      console.error(`[accept-order] Order details fetch failed:`, orderDetailsResult.error)
+      return res.status(404).json({
+        success: false,
+        message: orderDetailsResult.error || 'Pedido não encontrado no iFood'
+      })
+    }
+    
+    console.log(`[accept-order] Order details fetched successfully. Processing order...`)
+    console.log(`[accept-order] Order structure:`, {
+      id: orderDetailsResult.order.id,
+      displayId: orderDetailsResult.order.displayId,
+      itemsCount: orderDetailsResult.order.items?.length || 0,
+      hasCustomer: !!orderDetailsResult.order.customer,
+      orderType: orderDetailsResult.order.orderType,
+      orderTiming: orderDetailsResult.order.orderTiming
+    })
+    
+    // NEW LOGIC: First confirm order with iFood, then create in system
+    // According to workflow: PLACED → CONFIRMED
+    // This is BIDIRECTIONAL: System → iFood API
+    console.log(`[accept-order] Step 1: Confirming order ${orderId} with iFood API FIRST...`)
+    console.log(`[accept-order] Config before updateOrderStatus:`, {
+      hasConfig: !!config,
+      merchantId: config.merchant_id,
+      hasAccessToken: !!config.access_token
+    })
+    
+    let confirmResult
+    try {
+      console.log(`[accept-order] Calling updateOrderStatus...`)
+      confirmResult = await ifoodService.updateOrderStatus(orderId, 'CONFIRMED')
+      console.log(`[accept-order] updateOrderStatus returned:`, confirmResult)
+    } catch (confirmError: any) {
+      console.error(`[accept-order] Exception during updateOrderStatus:`, confirmError)
+      console.error(`[accept-order] Error type:`, typeof confirmError)
+      console.error(`[accept-order] Error instanceof Error:`, confirmError instanceof Error)
+      console.error(`[accept-order] Error message:`, confirmError?.message)
+      console.error(`[accept-order] Error stack:`, confirmError instanceof Error ? confirmError.stack : 'No stack trace')
+      console.error(`[accept-order] Error response:`, confirmError?.response?.data)
+      return res.status(500).json({
+        success: false,
+        message: `Falha ao confirmar pedido no iFood: ${confirmError instanceof Error ? confirmError.message : 'Erro desconhecido'}`,
+        error: confirmError instanceof Error ? confirmError.message : String(confirmError),
+        details: confirmError?.response?.data || null
+      })
+    }
+    
+    if (!confirmResult || !confirmResult.success) {
+      console.error(`[accept-order] iFood confirmation failed:`, confirmResult)
+      return res.status(500).json({
+        success: false,
+        message: `Falha ao confirmar pedido no iFood: ${confirmResult?.error || 'Erro desconhecido'}`,
+        error: confirmResult?.error || 'updateOrderStatus retornou resultado inválido'
+      })
+    }
+    
+    console.log(`[accept-order] Order confirmed successfully with iFood API`)
+    if (confirmResult.isAsync) {
+      console.log(`[accept-order] Order confirmation is async (202). Will wait for confirmation event in polling.`)
+    }
+    
+    // Only create order in system if iFood confirmation was successful
+    console.log(`[accept-order] Step 2: Processing order for system...`)
+    let processedOrder
+    try {
+      processedOrder = await (pollingService as any).processOrder(orderDetailsResult.order)
+    } catch (processError) {
+      console.error(`[accept-order] Error in processOrder:`, processError)
+      console.error(`[accept-order] Error stack:`, processError instanceof Error ? processError.stack : 'No stack trace')
+      // Order was confirmed in iFood but failed to process - this is a problem
+      // We should log this but the order is already confirmed in iFood
+      return res.status(500).json({
+        success: false,
+        message: `Pedido confirmado no iFood, mas erro ao processar para o sistema: ${processError instanceof Error ? processError.message : 'Erro desconhecido'}`,
+        error: processError instanceof Error ? processError.message : String(processError)
+      })
+    }
+    
+    if (!processedOrder) {
+      console.error(`[accept-order] Order processing failed - processedOrder is null`)
+      // Order was confirmed in iFood but failed to process
+      return res.status(500).json({
+        success: false,
+        message: 'Pedido confirmado no iFood, mas erro ao processar pedido: processOrder retornou null'
+      })
+    }
+    
+    console.log(`[accept-order] Order processed successfully:`, {
+      ifoodOrderId: processedOrder.ifoodOrderId,
+      ifoodDisplayId: processedOrder.ifoodDisplayId,
+      customer: processedOrder.customer,
+      itemsCount: processedOrder.items?.length || 0,
+      total: processedOrder.total
+    })
+    
+    console.log(`[accept-order] Step 3: Creating order in system...`)
+    // Create order in system (only if iFood confirmation was successful)
+    let createOrderResult
+    try {
+      createOrderResult = await (pollingService as any).createOrder(processedOrder)
+    } catch (createError) {
+      console.error(`[accept-order] Error creating order in system:`, createError)
+      console.error(`[accept-order] Error stack:`, createError instanceof Error ? createError.stack : 'No stack trace')
+      // Order was confirmed in iFood but failed to create in system
+      return res.status(500).json({
+        success: false,
+        message: `Pedido confirmado no iFood, mas erro ao criar no sistema: ${createError instanceof Error ? createError.message : 'Erro desconhecido'}`,
+        error: createError instanceof Error ? createError.message : String(createError)
+      })
+    }
+    
+    if (!createOrderResult || !createOrderResult.success) {
+      console.error(`[accept-order] Order creation failed:`, createOrderResult?.error)
+      // Order was confirmed in iFood but failed to create in system
+      return res.status(500).json({
+        success: false,
+        message: `Pedido confirmado no iFood, mas erro ao criar no sistema: ${createOrderResult?.error || 'Erro desconhecido'}`,
+        error: createOrderResult?.error
+      })
+    }
+    
+    console.log(`[accept-order] Order created successfully in system with ID: ${createOrderResult.orderId}`)
+    
+    // Update database to reflect CONFIRMED status (order was already confirmed in iFood before creation)
+    console.log(`[accept-order] Updating order status in database to CONFIRMED...`)
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      const updateResult = await supabase
+        .from('orders')
+        .update({ ifood_status: 'CONFIRMED' })
+        .eq('ifood_order_id', orderId)
+      
+      if (updateResult.error) {
+        console.error(`[accept-order] Error updating order status in database:`, updateResult.error)
+        // Don't fail the request, just log the error
+      } else {
+        console.log(`[accept-order] Order status updated to CONFIRMED in database`)
+      }
+    }
+    
+    // If async operation, inform that we'll wait for confirmation event
+    if (confirmResult.isAsync) {
+      console.log(`[accept-order] Order ${orderId} confirmation is async. Waiting for confirmation event in polling.`)
+    }
+    
+    res.json({
+      success: true,
+      message: 'Pedido aceito e confirmado no iFood com sucesso',
+      isAsync: confirmResult.isAsync || false,
+      orderId: createOrderResult.orderId
+    })
+  } catch (error: any) {
+    console.error('[accept-order] Unexpected error:', error)
+    console.error('[accept-order] Error type:', typeof error)
+    console.error('[accept-order] Error instanceof Error:', error instanceof Error)
+    console.error('[accept-order] Error message:', error?.message)
+    console.error('[accept-order] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('[accept-order] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    
+    const errorMessage = error?.message || error?.error || 'Erro desconhecido'
+    
+    res.status(500).json({
+      success: false,
+      message: `Erro interno: ${errorMessage}`,
+      error: errorMessage
+    })
+  }
+})
+
+/**
+ * POST /api/ifood/cancel-order/:orderId
+ * Cancel an iFood order (reject it)
+ */
+router.post('/cancel-order/:orderId', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params
+    const ifoodService = new IfoodService()
+    
+    // Get order details from iFood to verify it exists
     const config = await ifoodService.getConfig()
     if (!config) {
       return res.status(500).json({
@@ -1452,55 +1979,93 @@ router.post('/accept-order/:orderId', async (req: Request, res: Response) => {
       })
     }
     
-    const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+    // Cancel order with iFood API (BIDIRECTIONAL: System → iFood API)
+    // According to iFood workflow: PLACED → CANCELLED (when rejected)
+    console.log(`[cancel-order] Starting cancellation process for order ${orderId}`)
+    console.log(`[cancel-order] Config found:`, {
+      hasMerchantId: !!config.merchant_id,
+      merchantId: config.merchant_id,
+      hasAccessToken: !!config.access_token
+    })
     
-    if (!orderDetailsResult.success || !orderDetailsResult.order) {
-      return res.status(404).json({
-        success: false,
-        message: orderDetailsResult.error || 'Pedido não encontrado no iFood'
-      })
-    }
-    
-    // Process the order (map products, etc.)
-    const processedOrder = await (pollingService as any).processOrder(orderDetailsResult.order)
-    
-    if (!processedOrder) {
+    let cancelResult
+    try {
+      console.log(`[cancel-order] Calling updateOrderStatus for order ${orderId}...`)
+      cancelResult = await ifoodService.updateOrderStatus(orderId, 'CANCELLED')
+      console.log(`[cancel-order] updateOrderStatus result:`, cancelResult)
+    } catch (cancelError: any) {
+      console.error(`[cancel-order] Exception during updateOrderStatus:`, cancelError)
+      console.error(`[cancel-order] Error type:`, typeof cancelError)
+      console.error(`[cancel-order] Error instanceof Error:`, cancelError instanceof Error)
+      console.error(`[cancel-order] Error message:`, cancelError?.message)
+      console.error(`[cancel-order] Error stack:`, cancelError instanceof Error ? cancelError.stack : 'No stack trace')
       return res.status(500).json({
         success: false,
-        message: 'Erro ao processar pedido'
+        message: `Erro ao cancelar pedido no iFood: ${cancelError?.message || 'Erro desconhecido'}`,
+        error: cancelError?.message || String(cancelError)
       })
     }
     
-    // Create order in system
-    await (pollingService as any).createOrder(processedOrder)
+    if (!cancelResult.success) {
+      console.error(`[cancel-order] Failed to cancel order ${orderId} with iFood:`, cancelResult.error)
+      return res.status(500).json({
+        success: false,
+        message: cancelResult.error || 'Erro ao cancelar pedido no iFood',
+        error: cancelResult.error
+      })
+    }
     
-    // Confirm order with iFood after creating in system (iFood best practice)
-    // According to workflow: PLACED → CONFIRMED
-    const confirmResult = await ifoodService.updateOrderStatus(orderId, 'CONFIRMED')
-    if (confirmResult.success) {
-      // Update ifood_status in database
-      const { createClient } = await import('@supabase/supabase-js')
-      const supabaseUrl = process.env.SUPABASE_URL
-      const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    console.log(`[cancel-order] Order ${orderId} successfully cancelled with iFood API`)
+    if (cancelResult.isAsync) {
+      console.log(`[cancel-order] Order ${orderId} cancellation is async. Waiting for confirmation event in polling.`)
+    }
+    
+    // If order exists in our system, update its status
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
       
-      if (supabaseUrl && supabaseServiceKey) {
-        const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      // Check if order exists in our system
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('ifood_order_id', orderId)
+        .single()
+      
+      if (existingOrder) {
+        // Update order status to Cancelled
         await supabase
           .from('orders')
-          .update({ ifood_status: 'CONFIRMED' })
-          .eq('ifood_order_id', orderId)
+          .update({ 
+            status: 'Cancelled',
+            ifood_status: 'CANCELLED',
+            closed_at: new Date().toISOString()
+          })
+          .eq('id', existingOrder.id)
       }
     }
     
     res.json({
       success: true,
-      message: 'Pedido aceito e criado no sistema com sucesso'
+      message: 'Pedido cancelado com sucesso'
     })
-  } catch (error) {
-    console.error('Erro ao aceitar pedido do iFood:', error)
+  } catch (error: any) {
+    console.error('[cancel-order] Unexpected error:', error)
+    console.error('[cancel-order] Error type:', typeof error)
+    console.error('[cancel-order] Error instanceof Error:', error instanceof Error)
+    console.error('[cancel-order] Error message:', error?.message)
+    console.error('[cancel-order] Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+    console.error('[cancel-order] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2))
+    
+    const errorMessage = error?.message || error?.error || 'Erro desconhecido'
+    
     res.status(500).json({
       success: false,
-      message: `Erro interno: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+      message: `Erro interno: ${errorMessage}`,
+      error: errorMessage
     })
   }
 })
@@ -1555,6 +2120,7 @@ router.get('/active-orders', async (req: Request, res: Response) => {
       paymentMethod: o.payment_method,
       source: o.source || 'manual',
       ifood_order_id: o.ifood_order_id || null,
+      ifood_display_id: o.ifood_display_id || null,
       ifood_status: o.ifood_status || null,
       items: (o.items || []).map((i: any) => ({
         id: i.product_id || i.menu_item_id,
@@ -1630,6 +2196,7 @@ router.get('/dispatched-orders', async (req: Request, res: Response) => {
       paymentMethod: o.payment_method,
       source: o.source || 'manual',
       ifood_order_id: o.ifood_order_id || null,
+      ifood_display_id: o.ifood_display_id || null,
       ifood_status: o.ifood_status || null,
       items: (o.items || []).map((i: any) => ({
         id: i.product_id || i.menu_item_id,
@@ -1713,6 +2280,7 @@ router.get('/concluded-orders', async (req: Request, res: Response) => {
       paymentMethod: o.payment_method,
       source: o.source || 'manual',
       ifood_order_id: o.ifood_order_id || null,
+      ifood_display_id: o.ifood_display_id || null,
       ifood_status: o.ifood_status || null,
       items: (o.items || []).map((i: any) => ({
         id: i.product_id || i.menu_item_id,

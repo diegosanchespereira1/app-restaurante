@@ -1,11 +1,12 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Switch } from "../components/ui/switch"
 import { Badge } from "../components/ui/badge"
-import { Save, RefreshCw, CheckCircle, XCircle, Clock, ShoppingBag, Copy, ExternalLink, Check } from "lucide-react"
+import { Save, RefreshCw, CheckCircle, XCircle, Clock, ShoppingBag, Copy, ExternalLink, Check, X, MapPin, Phone, User, Calendar, Package, CreditCard, Info } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog"
 import { useAuth } from "../context/AuthContext"
 import { getBackendUrl } from "../lib/backend-config"
 import { formatCurrency } from "../lib/utils"
@@ -42,43 +43,202 @@ interface ProductMapping {
   } | null
 }
 
+// Interface completa baseada na documentação do iFood
+// https://developer.ifood.com.br/pt-BR/docs/guides/modules/order/details?category=FOOD
 interface IfoodPendingOrder {
   id: string
-  shortReference: string
   displayId: string
-  orderTiming: string
-  salesChannel: string
+  shortReference?: string
+  orderType?: 'DELIVERY' | 'TAKEOUT' | 'DINE_IN' | 'INDOOR'
+  orderTiming: 'IMMEDIATE' | 'SCHEDULED'
+  salesChannel?: string
+  category?: string
   createdAt: string
-  preparationTimeInSeconds?: number
-  items: Array<{
+  preparationStartDateTime?: string
+  isTest?: boolean
+  extraInfo?: string
+  merchant?: {
     id: string
     name: string
-    quantity: number
-    unitPrice: number
-    totalPrice: number
-    externalCode?: string
-    sku?: string
-  }>
+  }
   customer: {
     id: string
     name: string
-    phoneNumber?: string
-  }
-  delivery?: {
-    address: {
-      street: string
+    documentNumber?: string
+    documentType?: string
+    ordersCountOnMerchant?: number
+    phone?: {
       number: string
-      complement?: string
-      neighborhood: string
-      city: string
-      state: string
-      zipCode: string
+      localizer?: string
+      localizerExpiration?: string
     }
+    phoneNumber?: string // Compatibilidade com formato antigo
+    segmentation?: string
   }
-  totalPrice: {
+  items: Array<{
+    index?: number
+    id: string
+    uniqueId?: string
+    name: string
+    imageUrl?: string
+    externalCode?: string
+    ean?: string
+    unit?: string
+    quantity: number
+    unitPrice: number
+    price: number
+    optionsPrice?: number
+    totalPrice: number
+    observations?: string
+    options?: Array<{
+      index?: number
+      id: string
+      name: string
+      type?: string
+      groupName?: string
+      externalCode?: string
+      ean?: string
+      unit?: string
+      quantity: number
+      unitPrice: number
+      addition?: number
+      price: number
+      customizations?: Array<{
+        id: string
+        externalCode?: string
+        name: string
+        groupName?: string
+        type?: string
+        quantity: number
+        unitPrice: number
+        addition?: number
+        price: number
+      }>
+    }>
+    sku?: string // Compatibilidade
+  }>
+  benefits?: Array<{
+    value: number
+    sponsorshipValues?: Array<{
+      name: string
+      value: number
+    }>
+    target: string
+    targetId?: string
+    campaign?: {
+      id: string
+      name: string
+    }
+  }>
+  additionalFees?: Array<{
+    type: string
+    value: number
+  }>
+  total?: {
+    subTotal: number
+    deliveryFee?: number
+    additionalFees?: number
+    benefits?: number
+    orderAmount: number
+  }
+  totalPrice?: {
     amount: number
     currency: string
   }
+  payments?: {
+    prepaid?: number
+    pending?: number
+    methods?: Array<{
+      value: number
+      currency: string
+      method: string
+      type: string
+      prepaid: boolean
+      card?: {
+        brand: string
+      }
+      transaction?: {
+        authorizationCode: string
+        acquirerDocument: string
+      }
+    }>
+  }
+  picking?: {
+    picker?: string
+    replacementOptions?: string
+  }
+  delivery?: {
+    mode?: string
+    description?: string
+    deliveredBy?: string
+    deliveryDateTime?: string
+    observations?: string
+    address?: {
+      streetName?: string
+      street?: string // Compatibilidade
+      streetNumber?: string
+      number?: string // Compatibilidade
+      formattedAddress?: string
+      neighborhood: string
+      complement?: string
+      reference?: string
+      postalCode?: string
+      zipCode?: string // Compatibilidade
+      city: string
+      state: string
+      country?: string
+      coordinates?: {
+        latitude: number
+        longitude: number
+      }
+    }
+    deliveryAddress?: {
+      streetName?: string
+      street?: string // Compatibilidade
+      streetNumber?: string
+      number?: string // Compatibilidade
+      formattedAddress?: string
+      neighborhood: string
+      complement?: string
+      reference?: string
+      postalCode?: string
+      zipCode?: string // Compatibilidade
+      city: string
+      state: string
+      country?: string
+      coordinates?: {
+        latitude: number
+        longitude: number
+      }
+    }
+    pickupCode?: string
+  }
+  takeout?: {
+    mode?: string
+    description?: string
+    takeoutDateTime?: string
+    observations?: string
+  }
+  dineIn?: {
+    mode?: string
+    table?: string
+    deliveryDateTime?: string
+    observations?: string
+  }
+  indoor?: {
+    mode?: string
+    table?: string
+    deliveryDateTime?: string
+    observations?: string
+  }
+  schedule?: {
+    deliveryDateTimeStart?: string
+    deliveryDateTimeEnd?: string
+  }
+  additionalInfo?: {
+    metadata?: Record<string, string>
+  }
+  preparationTimeInSeconds?: number // Compatibilidade
 }
 
 export function IfoodIntegration() {
@@ -108,6 +268,9 @@ export function IfoodIntegration() {
   const [loadingDispatchedOrders, setLoadingDispatchedOrders] = useState(false)
   const [loadingConcludedOrders, setLoadingConcludedOrders] = useState(false)
   const [acceptingOrder, setAcceptingOrder] = useState<string | null>(null)
+  const [selectedOrder, setSelectedOrder] = useState<IfoodPendingOrder | null>(null)
+  const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false)
+  const [cancellingOrder, setCancellingOrder] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -231,7 +394,19 @@ export function IfoodIntegration() {
         throw new Error(`Erro HTTP ${response.status}: ${errorText || response.statusText}`)
       }
       
-      const result = await response.json()
+      // Get response text first to debug
+      const responseText = await response.text()
+      console.log('[Frontend] Raw response text:', responseText.substring(0, 2000))
+      
+      // Parse JSON
+      let result
+      try {
+        result = JSON.parse(responseText)
+      } catch (parseError) {
+        console.error('[Frontend] JSON parse error:', parseError)
+        console.error('[Frontend] Response text:', responseText)
+        throw new Error(`Erro ao fazer parse do JSON: ${parseError}`)
+      }
       
       // Log full response for debugging
       console.log('[Frontend] Pending orders response:', {
@@ -240,7 +415,14 @@ export function IfoodIntegration() {
         hasOrders: !!result.orders,
         isArray: Array.isArray(result.orders),
         debug: result.debug,
-        fullResult: JSON.stringify(result).substring(0, 1000)
+        firstOrderSample: result.orders?.[0] ? {
+          id: result.orders[0].id,
+          displayId: result.orders[0].displayId,
+          shortReference: result.orders[0].shortReference,
+          customer: result.orders[0].customer,
+          keys: Object.keys(result.orders[0])
+        } : null,
+        fullResult: JSON.stringify(result).substring(0, 2000)
       })
       
       // #region agent log
@@ -263,17 +445,48 @@ export function IfoodIntegration() {
         fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:228',message:'before setPendingOrders',data:{newOrdersCount:newOrders.length,newOrderIds:newOrders.filter((o: any) => o && o.id).map((o: any) => o.id).join(',')},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
         // #endregion
         
-        // Always update state if we have new orders, regardless of comparison
-        // The comparison was preventing updates when orders were the same
-        if (newOrders.length > 0) {
-          console.log('[Frontend] Setting pending orders:', newOrders.length)
-          setPendingOrders(newOrders)
+        // Always update state with the orders received from API
+        // This ensures the UI reflects the current state from backend
+        console.log('[Frontend] Updating pending orders state:', {
+          newOrdersCount: newOrders.length,
+          currentOrdersCount: pendingOrdersRef.current.length,
+          newOrders: newOrders.map((o: any) => ({
+            id: o.id,
+            displayId: o.displayId,
+            customer: typeof o.customer === 'object' ? o.customer?.name : o.customer
+          }))
+        })
+        
+        // Log específico para displayId 9746
+        const order9746 = newOrders.find((o: any) => 
+          o.displayId === '9746' || o.shortReference === '9746' || o.id?.includes('9746')
+        )
+        if (order9746) {
+          console.log('[Frontend] Found order with displayId 9746 in response:', {
+            id: order9746.id,
+            displayId: order9746.displayId,
+            shortReference: order9746.shortReference,
+            customer: order9746.customer,
+            hasItems: !!(order9746.items && order9746.items.length > 0),
+            keys: Object.keys(order9746)
+          })
         } else {
-          // Only update if current state has orders (to clear them)
-          if (pendingOrdersRef.current.length > 0) {
-            console.log('[Frontend] Clearing pending orders (no new orders)')
-            setPendingOrders([])
-          }
+          console.log('[Frontend] Order with displayId 9746 NOT found in response. Orders received:', 
+            newOrders.map((o: any) => ({
+              id: o.id,
+              displayId: o.displayId,
+              shortReference: o.shortReference
+            }))
+          )
+        }
+        
+        // Always set the orders, even if empty (to clear old ones)
+        setPendingOrders(newOrders)
+        
+        if (newOrders.length === 0) {
+          console.log('[Frontend] No pending orders received from API')
+        } else {
+          console.log('[Frontend] Successfully set', newOrders.length, 'pending orders')
         }
       } else {
         console.error('[Frontend] API returned error:', result.message || result.error)
@@ -365,6 +578,35 @@ export function IfoodIntegration() {
     }
   }, [status?.active, backendUrl])
 
+  const handleCancelOrder = useCallback(async (orderId: string) => {
+    setCancellingOrder(orderId)
+    setMessage(null)
+    
+    try {
+      const response = await fetch(`${backendUrl}/api/ifood/cancel-order/${orderId}`, {
+        method: 'POST'
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        setMessage({ type: 'success', text: 'Pedido cancelado com sucesso' })
+        setIsOrderDetailOpen(false)
+        setSelectedOrder(null)
+        // Recarregar pedidos pendentes
+        await loadPendingOrders()
+      } else {
+        setMessage({ type: 'error', text: result.error || 'Erro ao cancelar pedido' })
+      }
+    } catch (error) {
+      console.error('Error canceling order:', error)
+      setMessage({ type: 'error', text: 'Erro ao cancelar pedido' })
+    } finally {
+      setCancellingOrder(null)
+      setTimeout(() => setMessage(null), 5000)
+    }
+  }, [backendUrl, loadPendingOrders])
+
   const handleAcceptOrder = useCallback(async (orderId: string) => {
     setAcceptingOrder(orderId)
     setMessage(null)
@@ -378,6 +620,8 @@ export function IfoodIntegration() {
       
       if (result.success) {
         setMessage({ type: 'success', text: 'Pedido aceito e criado no sistema com sucesso!' })
+        setIsOrderDetailOpen(false)
+        setSelectedOrder(null)
         // Reload all orders
         await loadPendingOrders()
         await loadActiveOrders()
@@ -754,7 +998,7 @@ export function IfoodIntegration() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">Pedido #{order.id}</span>
+                          <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
                           <Badge variant="outline" className={
                             order.ifood_status === 'CONFIRMED' 
                               ? 'bg-blue-50 text-blue-700 border-blue-200'
@@ -869,7 +1113,7 @@ export function IfoodIntegration() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">Pedido #{order.id}</span>
+                          <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
                           <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
                             Despachado
                           </Badge>
@@ -980,7 +1224,7 @@ export function IfoodIntegration() {
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">Pedido #{order.id}</span>
+                          <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
                           <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
                             Finalizado
                           </Badge>
@@ -1091,38 +1335,60 @@ export function IfoodIntegration() {
               </div>
             ) : (
               <div className="space-y-4">
-                {useMemo(() => {
-                  // #region agent log
-                  fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:995',message:'rendering pending orders list',data:{ordersCount:pendingOrders.length,orderIds:pendingOrders.map(o => o.id)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-                  // #endregion
-                  return pendingOrders.map((order) => {
+                {pendingOrders.map((order) => {
                     try {
+                      console.log('[Frontend] Rendering order:', {
+                        id: order.id,
+                        displayId: order.displayId,
+                        shortReference: order.shortReference,
+                        customer: order.customer,
+                        hasItems: !!(order.items && order.items.length > 0)
+                      })
+                      
                       // Handle different customer structures
                       const customerName = typeof order.customer === 'object' && order.customer?.name 
                         ? order.customer.name 
                         : typeof order.customer === 'string' 
                           ? order.customer 
                           : 'Cliente iFood'
-                      const customerPhone = typeof order.customer === 'object' ? order.customer?.phoneNumber : null
-                      const orderTiming = order.orderTiming || 'DELIVERY'
-                      const isDelivery = orderTiming === 'DELIVERY' || orderTiming === 'IMMEDIATE'
-                      const totalAmount = order.totalPrice?.amount || 0
+                      const customerPhone = typeof order.customer === 'object' 
+                        ? (order.customer?.phone?.number || order.customer?.phoneNumber)
+                        : null
+                      const orderType = order.orderType || 'DELIVERY'
+                      const isDelivery = orderType === 'DELIVERY'
+                      const isTakeout = orderType === 'TAKEOUT'
+                      const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
+                      const itemsCount = (order.items || []).reduce((sum: number, item: any) => {
+                        const qty = item.quantity || 0
+                        return sum + (typeof qty === 'number' ? qty : 0)
+                      }, 0)
                       
                       return (
                     <div
                       key={order.id}
-                      className="border rounded-lg p-4 space-y-3"
+                      className="border rounded-lg p-4 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        setSelectedOrder(order)
+                        setIsOrderDetailOpen(true)
+                      }}
                     >
                       <div className="flex items-start justify-between">
                         <div className="flex-1">
                           <div className="flex items-center gap-2 mb-1">
                             <span className="font-semibold text-lg">Pedido #{order.displayId || order.shortReference || order.id}</span>
-                            <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
-                              {isDelivery ? 'Delivery' : 'Retirada'}
+                            <Badge variant="outline" className={
+                              isDelivery 
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : isTakeout
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                  : 'bg-green-50 text-green-700 border-green-200'
+                            }>
+                              {isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Consumir no local'}
                             </Badge>
                           </div>
                           <div className="text-sm text-muted-foreground space-y-1">
                             <div className="flex items-center gap-2">
+                              <User className="h-3 w-3" />
                               <span className="font-medium">Cliente:</span>
                               <span>{customerName}</span>
                               {customerPhone && (
@@ -1133,15 +1399,32 @@ export function IfoodIntegration() {
                               <Clock className="h-3 w-3" />
                               <span>{formatDate(order.createdAt)}</span>
                             </div>
-                            {order.delivery?.address && (
-                              <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                                <span className="font-medium">Endereço:</span>{' '}
-                                {order.delivery.address.street}, {order.delivery.address.number}
-                                {order.delivery.address.complement && ` - ${order.delivery.address.complement}`}
-                                {', '}
-                                {order.delivery.address.neighborhood}, {order.delivery.address.city} - {order.delivery.address.state}
-                                {', '}
-                                {order.delivery.address.zipCode}
+                            <div className="flex items-center gap-2">
+                              <Package className="h-3 w-3" />
+                              <span>{itemsCount} {itemsCount === 1 ? 'item' : 'itens'}</span>
+                            </div>
+                            {order.delivery?.deliveryAddress && (
+                              <div className="flex items-start gap-2 mt-1">
+                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                <span className="text-xs">
+                                  {order.delivery.deliveryAddress.streetName || order.delivery.deliveryAddress.street || ''}, {order.delivery.deliveryAddress.streetNumber || order.delivery.deliveryAddress.number || ''}
+                                  {order.delivery.deliveryAddress.complement && ` - ${order.delivery.deliveryAddress.complement}`}
+                                  {', '}
+                                  {order.delivery.deliveryAddress.neighborhood || ''}, {order.delivery.deliveryAddress.city || ''} - {order.delivery.deliveryAddress.state || ''}
+                                  {(order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode) && `, ${order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode}`}
+                                </span>
+                              </div>
+                            )}
+                            {order.delivery?.address && !order.delivery?.deliveryAddress && (
+                              <div className="flex items-start gap-2 mt-1">
+                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                <span className="text-xs">
+                                  {order.delivery.address.streetName || order.delivery.address.street || ''}, {order.delivery.address.streetNumber || order.delivery.address.number || ''}
+                                  {order.delivery.address.complement && ` - ${order.delivery.address.complement}`}
+                                  {', '}
+                                  {order.delivery.address.neighborhood || ''}, {order.delivery.address.city || ''} - {order.delivery.address.state || ''}
+                                  {(order.delivery.address.postalCode || order.delivery.address.zipCode) && `, ${order.delivery.address.postalCode || order.delivery.address.zipCode}`}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1150,62 +1433,540 @@ export function IfoodIntegration() {
                           <div className="font-bold text-lg text-primary">
                               {formatCurrency(totalAmount)}
                           </div>
-                          <Button
-                            onClick={() => handleAcceptOrder(order.id)}
-                            disabled={acceptingOrder === order.id}
-                            className="mt-2"
-                            size="sm"
-                          >
-                            {acceptingOrder === order.id ? (
-                              <>
-                                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                                Processando...
-                              </>
-                            ) : (
-                              <>
-                                <Check className="h-4 w-4 mr-2" />
-                                Aceitar Pedido
-                              </>
-                            )}
-                          </Button>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Clique para ver detalhes
+                          </div>
                         </div>
                       </div>
                       <div className="border-t pt-3">
-                        <div className="text-sm font-medium mb-2">Itens do Pedido:</div>
-                        <div className="space-y-2">
-                          {(order.items || []).map((item: any, idx: number) => (
+                        <div className="text-sm font-medium mb-2">Resumo dos Itens:</div>
+                        <div className="space-y-1">
+                          {(order.items || []).slice(0, 3).map((item: any, idx: number) => (
                             <div key={item.id || idx} className="flex items-center justify-between text-sm">
                               <div className="flex items-center gap-2">
                                 <span className="font-medium">{item.quantity}x</span>
-                                <span>{item.name}</span>
+                                <span className="truncate">{item.name}</span>
                               </div>
-                              <span className="text-muted-foreground">
-                                {formatCurrency(item.totalPrice || (item.unitPrice * item.quantity) || 0)}
+                              <span className="text-muted-foreground flex-shrink-0 ml-2">
+                                {formatCurrency(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0)}
                               </span>
                             </div>
                           ))}
+                          {(order.items || []).length > 3 && (
+                            <div className="text-xs text-muted-foreground pt-1">
+                              +{(order.items || []).length - 3} mais {((order.items || []).length - 3) === 1 ? 'item' : 'itens'}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
                     )
                   } catch (error) {
                     // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
                     // #endregion
                     console.error('Error rendering order:', error, order)
+                    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+                    // Return a simple card with minimal rendering to avoid cascading errors
                     return (
-                      <div key={order.id} className="border rounded-lg p-4 bg-red-50">
-                        <p className="text-red-800 text-sm">Erro ao renderizar pedido {order.id}</p>
+                      <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
+                        <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
+                        <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
+                        <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
+                        <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
                       </div>
                     )
                   }
-                  })
-                }, [pendingOrders])}
+                })}
               </div>
             )}
           </CardContent>
         </Card>
       )}
+
+      {/* Modal de Detalhes do Pedido Pendente */}
+      <Dialog open={isOrderDetailOpen} onOpenChange={setIsOrderDetailOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {selectedOrder && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <span>Pedido #{selectedOrder.displayId || selectedOrder.shortReference || selectedOrder.id}</span>
+                  <Badge variant="outline" className="bg-orange-50 text-orange-700 border-orange-200">
+                    Aguardando Confirmação
+                  </Badge>
+                </DialogTitle>
+                <DialogDescription>
+                  Revise os detalhes do pedido antes de aceitar ou cancelar
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-6 mt-4">
+                {/* Informações Gerais */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Calendar className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Data/Hora:</span>
+                      <span>{formatDate(selectedOrder.createdAt)}</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm">
+                      <Info className="h-4 w-4 text-muted-foreground" />
+                      <span className="font-medium">Tipo:</span>
+                      <span>
+                        {selectedOrder.orderType === 'DELIVERY' ? 'Delivery' :
+                         selectedOrder.orderType === 'TAKEOUT' ? 'Retirada' :
+                         selectedOrder.orderType === 'DINE_IN' ? 'Consumir no local' :
+                         selectedOrder.orderType === 'INDOOR' ? 'Indoor' : 'Desconhecido'}
+                      </span>
+                    </div>
+                    {selectedOrder.orderTiming && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">Entrega:</span>
+                        <span>{selectedOrder.orderTiming === 'IMMEDIATE' ? 'Imediata' : 'Agendada'}</span>
+                      </div>
+                    )}
+                    {selectedOrder.salesChannel && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Canal:</span>
+                        <span>{selectedOrder.salesChannel}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    {selectedOrder.preparationStartDateTime && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">Início Preparo:</span>
+                        <span>{formatDate(selectedOrder.preparationStartDateTime || '')}</span>
+                      </div>
+                    )}
+                    {selectedOrder.preparationTimeInSeconds && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <span className="font-medium">Tempo Preparo:</span>
+                        <span>{Math.ceil(selectedOrder.preparationTimeInSeconds / 60)} minutos</span>
+                      </div>
+                    )}
+                    {selectedOrder.isTest && (
+                      <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
+                        Pedido de Teste
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                {/* Informações do Cliente */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <User className="h-4 w-4" />
+                    Informações do Cliente
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="font-medium">Nome:</span>
+                      <span className="ml-2">{typeof selectedOrder.customer === 'object' ? selectedOrder.customer.name : selectedOrder.customer}</span>
+                    </div>
+                    {(typeof selectedOrder.customer === 'object' && selectedOrder.customer.phone) && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">Telefone:</span>
+                        <span>{selectedOrder.customer.phone.number}</span>
+                        {selectedOrder.customer.phone.localizer && (
+                          <span className="text-xs text-muted-foreground">
+                            (Localizador: {selectedOrder.customer.phone.localizer})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {(typeof selectedOrder.customer === 'object' && selectedOrder.customer.documentNumber) && (
+                      <div>
+                        <span className="font-medium">Documento:</span>
+                        <span className="ml-2">{selectedOrder.customer.documentNumber}</span>
+                      </div>
+                    )}
+                    {(typeof selectedOrder.customer === 'object' && selectedOrder.customer.ordersCountOnMerchant) && (
+                      <div>
+                        <span className="font-medium">Pedidos anteriores:</span>
+                        <span className="ml-2">{selectedOrder.customer.ordersCountOnMerchant}</span>
+                      </div>
+                    )}
+                    {(typeof selectedOrder.customer === 'object' && selectedOrder.customer.segmentation) && (
+                      <div>
+                        <span className="font-medium">Segmentação:</span>
+                        <span className="ml-2">{selectedOrder.customer.segmentation}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Endereço de Entrega */}
+                {(selectedOrder.delivery?.deliveryAddress || selectedOrder.delivery?.address) && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3 flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Endereço de Entrega
+                    </h3>
+                    <div className="text-sm space-y-1">
+                      {(() => {
+                        const address = selectedOrder.delivery?.deliveryAddress || selectedOrder.delivery?.address
+                        if (!address) return null
+                        return (
+                          <>
+                            <div>
+                              <span className="font-medium">Endereço:</span>
+                              <span className="ml-2">
+                                {address.streetName || address.street || ''}, 
+                                {address.streetNumber || address.number || ''}
+                                {address.complement && ` - ${address.complement}`}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="font-medium">Bairro:</span>
+                              <span className="ml-2">{address.neighborhood || ''}</span>
+                            </div>
+                            <div>
+                              <span className="font-medium">Cidade/Estado:</span>
+                              <span className="ml-2">
+                                {address.city || ''} - {address.state || ''}
+                              </span>
+                            </div>
+                            {(address.postalCode || address.zipCode) && (
+                              <div>
+                                <span className="font-medium">CEP:</span>
+                                <span className="ml-2">{address.postalCode || address.zipCode}</span>
+                              </div>
+                            )}
+                            {address.reference && (
+                              <div>
+                                <span className="font-medium">Referência:</span>
+                                <span className="ml-2">{address.reference}</span>
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                      {selectedOrder.delivery.pickupCode && (
+                        <div className="mt-2 p-2 bg-blue-50 rounded">
+                          <span className="font-medium">Código de Retirada:</span>
+                          <span className="ml-2 font-mono text-lg">{selectedOrder.delivery.pickupCode}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Informações de Retirada */}
+                {selectedOrder.takeout && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Informações de Retirada</h3>
+                    <div className="text-sm space-y-1">
+                      {selectedOrder.takeout.mode && (
+                        <div>
+                          <span className="font-medium">Modo:</span>
+                          <span className="ml-2">{selectedOrder.takeout.mode}</span>
+                        </div>
+                      )}
+                      {selectedOrder.takeout.takeoutDateTime && (
+                        <div>
+                          <span className="font-medium">Data/Hora:</span>
+                          <span className="ml-2">{formatDate(selectedOrder.takeout.takeoutDateTime)}</span>
+                        </div>
+                      )}
+                      {selectedOrder.takeout.observations && (
+                        <div>
+                          <span className="font-medium">Observações:</span>
+                          <span className="ml-2">{selectedOrder.takeout.observations}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Itens do Pedido */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Itens do Pedido ({(selectedOrder.items || []).length})
+                  </h3>
+                  <div className="space-y-4">
+                    {(selectedOrder.items || []).map((item: any, idx: number) => (
+                      <div key={item.id || idx} className="border-b pb-3 last:border-0">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold">{item.quantity}x</span>
+                              <span className="font-medium">{item.name}</span>
+                              {item.externalCode && (
+                                <Badge variant="outline" className="text-xs">
+                                  {item.externalCode}
+                                </Badge>
+                              )}
+                            </div>
+                            {item.observations && (
+                              <div className="text-sm text-muted-foreground mt-1 italic">
+                                Obs: {item.observations}
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold">
+                              {formatCurrency(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0)}
+                            </div>
+                            {item.unitPrice && (
+                              <div className="text-xs text-muted-foreground">
+                                {formatCurrency(item.unitPrice)} cada
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        {/* Opções/Complementos do Item */}
+                        {item.options && Array.isArray(item.options) && item.options.length > 0 && (
+                          <div className="ml-6 mt-2 space-y-1">
+                            <div className="text-xs font-medium text-muted-foreground">Complementos:</div>
+                            {item.options.map((option: any, optIdx: number) => (
+                              <div key={option.id || `opt-${optIdx}`} className="space-y-1">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="ml-2">
+                                    {option.quantity || 1}x {option.name || 'Complemento'}
+                                  </span>
+                                  <span className="text-muted-foreground">
+                                    {formatCurrency(option.price || (option.unitPrice ? (option.unitPrice * (option.quantity || 1)) : 0) || 0)}
+                                  </span>
+                                </div>
+                                {/* Customizações dentro de opções (terceiro nível) */}
+                                {option.customizations && Array.isArray(option.customizations) && option.customizations.length > 0 && (
+                                  <div className="ml-4 mt-1 space-y-0.5">
+                                    {option.customizations.map((customization: any, custIdx: number) => (
+                                      <div key={customization.id || `cust-${custIdx}`} className="flex items-center justify-between text-xs text-muted-foreground">
+                                        <span className="ml-2">
+                                          • {customization.quantity || 1}x {customization.name || 'Customização'}
+                                        </span>
+                                        <span>
+                                          {formatCurrency(customization.price || (customization.unitPrice ? (customization.unitPrice * (customization.quantity || 1)) : 0) || 0)}
+                                        </span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Benefícios e Descontos */}
+                {selectedOrder.benefits && selectedOrder.benefits.length > 0 && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Benefícios e Descontos</h3>
+                    <div className="space-y-2">
+                      {selectedOrder.benefits.map((benefit: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <div>
+                            <span className="font-medium">{benefit.target === 'CART' ? 'Carrinho' : benefit.target === 'ITEM' ? 'Item' : benefit.target}:</span>
+                            {benefit.campaign && (
+                              <span className="ml-2 text-muted-foreground">({benefit.campaign.name})</span>
+                            )}
+                          </div>
+                          <span className="text-green-600 font-semibold">
+                            -{formatCurrency(benefit.value)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Taxas Adicionais */}
+                {selectedOrder.additionalFees && selectedOrder.additionalFees.length > 0 && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Taxas Adicionais</h3>
+                    <div className="space-y-2">
+                      {selectedOrder.additionalFees.map((fee: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <span>{fee.type}</span>
+                          <span>{formatCurrency(fee.value)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resumo Financeiro */}
+                <div className="border rounded-lg p-4 bg-muted/50">
+                  <h3 className="font-semibold mb-3 flex items-center gap-2">
+                    <CreditCard className="h-4 w-4" />
+                    Resumo Financeiro
+                  </h3>
+                  <div className="space-y-2">
+                    {selectedOrder.total && (
+                      <>
+                        <div className="flex items-center justify-between text-sm">
+                          <span>Subtotal:</span>
+                          <span>{formatCurrency(selectedOrder.total.subTotal || 0)}</span>
+                        </div>
+                        {selectedOrder.total.deliveryFee !== undefined && selectedOrder.total.deliveryFee > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Taxa de Entrega:</span>
+                            <span>{formatCurrency(selectedOrder.total.deliveryFee)}</span>
+                          </div>
+                        )}
+                        {selectedOrder.total.additionalFees !== undefined && selectedOrder.total.additionalFees > 0 && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span>Taxas Adicionais:</span>
+                            <span>{formatCurrency(selectedOrder.total.additionalFees)}</span>
+                          </div>
+                        )}
+                        {selectedOrder.total.benefits !== undefined && selectedOrder.total.benefits > 0 && (
+                          <div className="flex items-center justify-between text-sm text-green-600">
+                            <span>Descontos:</span>
+                            <span>-{formatCurrency(selectedOrder.total.benefits)}</span>
+                          </div>
+                        )}
+                        <div className="border-t pt-2 mt-2 flex items-center justify-between font-bold text-lg">
+                          <span>Total:</span>
+                          <span className="text-primary">{formatCurrency(selectedOrder.total.orderAmount || 0)}</span>
+                        </div>
+                      </>
+                    )}
+                    {!selectedOrder.total && (
+                      <div className="flex items-center justify-between font-bold text-lg">
+                        <span>Total:</span>
+                        <span className="text-primary">
+                          {formatCurrency(selectedOrder.totalPrice?.amount || 0)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Formas de Pagamento */}
+                {selectedOrder.payments && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Formas de Pagamento</h3>
+                    <div className="space-y-2">
+                      {selectedOrder.payments.prepaid !== undefined && selectedOrder.payments.prepaid > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-green-600">Pago Online:</span>
+                          <span className="font-semibold">{formatCurrency(selectedOrder.payments.prepaid)}</span>
+                        </div>
+                      )}
+                      {selectedOrder.payments.pending !== undefined && selectedOrder.payments.pending > 0 && (
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-orange-600">Pendente:</span>
+                          <span className="font-semibold">{formatCurrency(selectedOrder.payments.pending)}</span>
+                        </div>
+                      )}
+                      {selectedOrder.payments.methods && selectedOrder.payments.methods.length > 0 && (
+                        <div className="mt-3 space-y-2">
+                          {selectedOrder.payments.methods.map((method: any, idx: number) => (
+                            <div key={idx} className="flex items-center justify-between text-sm border-l-2 pl-2 border-muted">
+                              <div>
+                                <span className="font-medium">
+                                  {method.method === 'CASH' ? 'Dinheiro' :
+                                   method.method === 'CREDIT' ? 'Cartão de Crédito' :
+                                   method.method === 'DEBIT' ? 'Cartão de Débito' :
+                                   method.method === 'PIX' ? 'PIX' :
+                                   method.method === 'VOUCHER' ? 'Vale' :
+                                   method.method}
+                                </span>
+                                {method.type && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    ({method.type === 'ONLINE' ? 'Online' : 'Offline'})
+                                  </span>
+                                )}
+                                {method.prepaid && (
+                                  <Badge variant="outline" className="ml-2 text-xs bg-green-50 text-green-700">
+                                    Pago
+                                  </Badge>
+                                )}
+                              </div>
+                              <span className="font-semibold">{formatCurrency(method.value)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Informações Adicionais */}
+                {selectedOrder.extraInfo && (
+                  <div className="border rounded-lg p-4 bg-yellow-50">
+                    <h3 className="font-semibold mb-2">Informações Adicionais</h3>
+                    <p className="text-sm">{selectedOrder.extraInfo}</p>
+                  </div>
+                )}
+
+                {/* Informações de Agendamento */}
+                {selectedOrder.schedule && (
+                  <div className="border rounded-lg p-4">
+                    <h3 className="font-semibold mb-3">Agendamento</h3>
+                    <div className="text-sm space-y-1">
+                      <div>
+                        <span className="font-medium">Início:</span>
+                        <span className="ml-2">{formatDate(selectedOrder.schedule.deliveryDateTimeStart || '')}</span>
+                      </div>
+                      <div>
+                        <span className="font-medium">Fim:</span>
+                        <span className="ml-2">{formatDate(selectedOrder.schedule.deliveryDateTimeEnd || '')}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="mt-6">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setIsOrderDetailOpen(false)
+                    setSelectedOrder(null)
+                  }}
+                >
+                  Fechar
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={() => selectedOrder && handleCancelOrder(selectedOrder.id)}
+                  disabled={cancellingOrder === selectedOrder.id}
+                >
+                  {cancellingOrder === selectedOrder.id ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Cancelando...
+                    </>
+                  ) : (
+                    <>
+                      <X className="h-4 w-4 mr-2" />
+                      Cancelar Pedido
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => selectedOrder && handleAcceptOrder(selectedOrder.id)}
+                  disabled={acceptingOrder === selectedOrder.id}
+                >
+                  {acceptingOrder === selectedOrder.id ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="h-4 w-4 mr-2" />
+                      Aceitar Pedido
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Buscar Detalhes do Pedido */}
       {status?.configured && (
@@ -1252,7 +2013,9 @@ export function IfoodIntegration() {
                   <div className="flex items-center justify-between">
                     <span className="font-semibold">Pedido #{orderDetails.displayId || orderDetails.shortReference}</span>
                     <Badge variant="outline">
-                      {orderDetails.orderTiming === 'DELIVERY' ? 'Delivery' : 'Retirada'}
+                      {orderDetails.orderType === 'DELIVERY' ? 'Delivery' : 
+                       orderDetails.orderType === 'TAKEOUT' ? 'Retirada' :
+                       orderDetails.orderType === 'DINE_IN' ? 'Consumir no local' : 'Pedido'}
                     </Badge>
                   </div>
                   <div className="text-sm space-y-1">

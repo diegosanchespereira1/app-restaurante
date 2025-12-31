@@ -4,6 +4,7 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js'
 
 interface ProcessedOrder {
   ifoodOrderId: string
+  ifoodDisplayId?: string
   customer: string
   orderType: 'delivery' | 'takeout'
   items: Array<{
@@ -298,17 +299,22 @@ export class IfoodPollingService {
           
           if (processedOrder) {
             // iFood best practice: Persistir antes de acknowledgment
-            await this.createOrder(processedOrder)
+            const createResult = await this.createOrder(processedOrder)
             
-            // iFood best practice: Consultar detalhes antes de confirmar
-            // Confirm order with iFood
-            const confirmResult = await this.ifoodService.updateOrderStatus(orderId, 'CONFIRMED')
-            
-            if (confirmResult.isAsync) {
-              console.log(`Confirmação do pedido ${orderId} é assíncrona. Aguardando evento de confirmação.`)
+            if (!createResult.success) {
+              console.error(`Failed to create order ${orderId}:`, createResult.error)
+              // Continue processing other orders even if one fails
+            } else {
+              // iFood best practice: Consultar detalhes antes de confirmar
+              // Confirm order with iFood
+              const confirmResult = await this.ifoodService.updateOrderStatus(orderId, 'CONFIRMED')
+              
+              if (confirmResult.isAsync) {
+                console.log(`Confirmação do pedido ${orderId} é assíncrona. Aguardando evento de confirmação.`)
+              }
+              
+              console.log(`Order ${orderId} created successfully`)
             }
-            
-            console.log(`Order ${orderId} created successfully`)
           }
           
           // Add event ID to acknowledgment list (even if processing failed, we acknowledge)
@@ -405,16 +411,6 @@ export class IfoodPollingService {
                 )
               }
             }
-
-            if (product && product.id) {
-              productId = product.id
-              // Create mapping for future use
-              await this.ifoodService.createProductMapping(
-                ifoodItem.id,
-                sku,
-                product.id
-              )
-            }
           }
         }
 
@@ -429,35 +425,55 @@ export class IfoodPollingService {
       }
 
       // Determine order type
-      const orderType: 'delivery' | 'takeout' = 
-        ifoodOrder.orderTiming === 'DELIVERY' ? 'delivery' : 'takeout'
+      // Use orderType if available, otherwise infer from orderTiming
+      let orderType: 'delivery' | 'takeout' = 'delivery'
+      if (ifoodOrder.orderType === 'TAKEOUT' || ifoodOrder.orderType === 'DINE_IN' || ifoodOrder.orderType === 'INDOOR') {
+        orderType = 'takeout'
+      } else if (ifoodOrder.orderType === 'DELIVERY') {
+        orderType = 'delivery'
+      } else if (ifoodOrder.orderTiming === 'DELIVERY') {
+        orderType = 'delivery'
+      } else {
+        orderType = 'takeout'
+      }
 
       // Build delivery address string if available
       let deliveryAddress: string | undefined
-      if (ifoodOrder.delivery?.address) {
-        const addr = ifoodOrder.delivery.address
-        deliveryAddress = `${addr.street}, ${addr.number}${addr.complement ? ` - ${addr.complement}` : ''}, ${addr.neighborhood}, ${addr.city} - ${addr.state}, ${addr.zipCode}`
+      const deliveryAddr = ifoodOrder.delivery?.deliveryAddress || ifoodOrder.delivery?.address
+      if (deliveryAddr) {
+        const street = deliveryAddr.streetName || deliveryAddr.street || ''
+        const number = deliveryAddr.streetNumber || deliveryAddr.number || ''
+        const complement = deliveryAddr.complement || ''
+        const neighborhood = deliveryAddr.neighborhood || ''
+        const city = deliveryAddr.city || ''
+        const state = deliveryAddr.state || ''
+        const zipCode = deliveryAddr.postalCode || deliveryAddr.zipCode || ''
+        
+        deliveryAddress = `${street}, ${number}${complement ? ` - ${complement}` : ''}, ${neighborhood}, ${city} - ${state}${zipCode ? `, ${zipCode}` : ''}`.trim()
       }
 
-      // Calculate total - use totalPrice.amount if available, otherwise calculate from items
+      // Calculate total - use total.orderAmount if available, otherwise totalPrice.amount, otherwise calculate from items
       let total = 0
-      if (ifoodOrder.totalPrice?.amount) {
+      if ((ifoodOrder as any).total?.orderAmount) {
+        total = (ifoodOrder as any).total.orderAmount
+      } else if (ifoodOrder.totalPrice?.amount) {
         total = ifoodOrder.totalPrice.amount
       } else {
         // Fallback: calculate total from items
         total = items.reduce((sum, item) => sum + (item.price * item.quantity), 0)
-        console.warn(`Order ${ifoodOrder.id} missing totalPrice.amount, calculated from items: ${total}`)
+        console.warn(`Order ${ifoodOrder.id} missing total.orderAmount and totalPrice.amount, calculated from items: ${total}`)
       }
 
       return {
         ifoodOrderId: ifoodOrder.id,
+        ifoodDisplayId: ifoodOrder.displayId || ifoodOrder.shortReference || ifoodOrder.id,
         customer: ifoodOrder.customer?.name || 'Cliente iFood',
         orderType,
         items,
         total,
         ifoodStatus: 'PLACED',
         deliveryAddress,
-        customerPhone: ifoodOrder.customer?.phoneNumber
+        customerPhone: ifoodOrder.customer?.phone?.number || ifoodOrder.customer?.phoneNumber
       }
     } catch (error) {
       console.error('Error processing iFood order:', error)
@@ -468,7 +484,7 @@ export class IfoodPollingService {
   /**
    * Create order in system database
    */
-  async createOrder(processedOrder: ProcessedOrder): Promise<void> {
+  async createOrder(processedOrder: ProcessedOrder): Promise<{ success: boolean; orderId?: string; error?: string }> {
     try {
       // Generate order ID
       const now = new Date()
@@ -508,6 +524,7 @@ export class IfoodPollingService {
           status: 'Pending',
           source: 'ifood',
           ifood_order_id: processedOrder.ifoodOrderId,
+          ifood_display_id: processedOrder.ifoodDisplayId || null,
           ifood_status: processedOrder.ifoodStatus,
           notes: processedOrder.deliveryAddress 
             ? `Endereço: ${processedOrder.deliveryAddress}${processedOrder.customerPhone ? ` | Telefone: ${processedOrder.customerPhone}` : ''}`
@@ -517,7 +534,11 @@ export class IfoodPollingService {
         })
 
       if (orderError) {
-        throw new Error(`Failed to create order: ${orderError.message}`)
+        console.error('Error creating order:', orderError)
+        return { 
+          success: false, 
+          error: `Failed to create order: ${orderError.message}` 
+        }
       }
 
       // Create order items
@@ -538,11 +559,17 @@ export class IfoodPollingService {
 
         if (itemError) {
           console.error(`Failed to create order item: ${itemError.message}`)
+          // Continue creating other items even if one fails
         }
       }
+
+      return { success: true, orderId }
     } catch (error) {
       console.error('Error creating order:', error)
-      throw error
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Unknown error creating order' 
+      }
     }
   }
 

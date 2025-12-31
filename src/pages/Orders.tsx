@@ -215,7 +215,7 @@ export function Orders() {
                             <article
                                 key={order.id}
                                 className="bg-card rounded-xl p-6 shadow-[0_4px_6px_-1px_rgb(0_0_0_/_0.1),_0_2px_4px_-2px_rgb(0_0_0_/_0.1)] cursor-pointer hover:shadow-lg transition-shadow"
-                                onClick={() => navigate(`/orders/${order.id}`)}
+                                onClick={() => navigate(`/orders/${order.id}`, { replace: false })}
                             >
                                 {/* Order ID - Highlighted */}
                                 <div className="bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 rounded-lg p-3">

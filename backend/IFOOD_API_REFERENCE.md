@@ -100,11 +100,38 @@ curl --location 'https://merchant-api.ifood.com.br/authentication/v1.0/oauth/tok
 
 #### Atualizar Status do Pedido
 
-**Endpoint**: `PATCH /merchants/{merchantId}/orders/{orderId}/status`
+**Endpoint Principal**: `PATCH /merchants/{merchantId}/orders/{orderId}/status`
 
-**Documentação**: https://developer.ifood.com.br/pt-BR/docs/references/#operations-Order-updateOrderStatus
+**Endpoint Alternativo** (fallback): `PATCH /order/v1.0/orders/{orderId}/status`
+
+**Payload**:
+```json
+{
+  "status": "CONFIRMED" | "CANCELLED" | "PREPARATION_STARTED" | "READY_TO_PICKUP" | "DISPATCHED" | "CONCLUDED"
+}
+```
+
+**Status Possíveis**:
+- `CONFIRMED` (CFM): Pedido foi confirmado e será preparado
+- `CANCELLED` (CAN): Pedido foi cancelado  
+- `PREPARATION_STARTED` (PRS): Pedido começou a ser preparado
+- `READY_TO_PICKUP` (RTP): Pedido está pronto para retirada
+- `DISPATCHED` (DSP): Pedido saiu para entrega
+- `CONCLUDED` (CON): Pedido foi concluído
+
+**Respostas**:
+- **200**: Status atualizado com sucesso (síncrono)
+- **202**: Operação assíncrona - aguardar evento de confirmação no polling
+- **404**: Pedido não encontrado ou rota inválida
+- **500**: Erro interno do servidor
+
+**Documentação**: 
+- https://developer.ifood.com.br/pt-BR/docs/references/#operations-Order-updateOrderStatus
+- https://developer.ifood.com.br/pt-BR/docs/guides/modules/order/events/?category=FOOD
 
 **Implementação no projeto**: `backend/src/services/ifood-service.ts` - método `updateOrderStatus()`
+
+**Nota**: A implementação tenta primeiro o formato `/merchants/{merchantId}/orders/{orderId}/status` e, se falhar com 404 ou erro de rota, tenta automaticamente o formato alternativo `/order/v1.0/orders/{orderId}/status`.
 
 ### Produtos
 

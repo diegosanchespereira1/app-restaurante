@@ -44,8 +44,10 @@ O sistema mapeia os status internos para os status do iFood da seguinte forma:
 ### 1. Recepção de Pedidos
 
 ✅ **Polling de Eventos**
-- Endpoint: `/events/polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
-- Formato correto implementado
+- Base URL: `https://merchant-api.ifood.com.br/events/v1.0/`
+- Endpoint: `events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+- URL Completa: `https://merchant-api.ifood.com.br/events/v1.0/events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+- Formato correto implementado (usa dois pontos `:` após `events`)
 - Bearer token authentication implementado
 - Polling automático a cada 30 segundos (configurável)
 

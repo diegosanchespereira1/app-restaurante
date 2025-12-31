@@ -49,12 +49,24 @@ app.get('/', (req, res) => {
   })
 })
 
+// Rota catch-all para rotas não encontradas (404)
+app.use((req: express.Request, res: express.Response) => {
+  console.warn(`[404] Rota não encontrada: ${req.method} ${req.path}`)
+  res.status(404).json({
+    success: false,
+    message: `Rota não encontrada: ${req.method} ${req.path}`,
+    path: req.path,
+    method: req.method
+  })
+})
+
 // Tratamento de erros
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Erro não tratado:', err)
   res.status(500).json({
     success: false,
-    message: 'Erro interno do servidor'
+    message: 'Erro interno do servidor',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   })
 })
 

@@ -4,7 +4,12 @@ Este documento detalha a implementação do polling de eventos conforme a [docum
 
 ## Visão Geral
 
-Polling é um método para receber atualizações da API do iFood. O sistema envia requisições regulares ao endpoint `GET /events:polling` e verifica se há novos eventos. A API retorna apenas eventos sem acknowledgment (ACK).
+Polling é um método para receber atualizações da API do iFood. O sistema envia requisições regulares ao endpoint de polling e verifica se há novos eventos. A API retorna apenas eventos sem acknowledgment (ACK).
+
+**URL Completa do Endpoint**:
+- Base URL: `https://merchant-api.ifood.com.br/events/v1.0/`
+- Endpoint: `events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+- URL Final: `https://merchant-api.ifood.com.br/events/v1.0/events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
 
 ### Respostas da API
 
@@ -43,9 +48,11 @@ Use o parâmetro `categories` para filtrar pedidos por categoria. Por padrão, a
 
 **Exemplos**:
 ```
-GET /events:polling?categories=FOOD,GROCERY,ANOTAI,FOOD_SELF_SERVICE
-GET /events:polling?categories=ALL
+GET https://merchant-api.ifood.com.br/events/v1.0/events:polling?categories=FOOD,GROCERY,ANOTAI,FOOD_SELF_SERVICE
+GET https://merchant-api.ifood.com.br/events/v1.0/events:polling?categories=ALL
 ```
+
+**Nota**: O endpoint usa dois pontos (`:`) após `events`, não barra (`/`). O formato correto é `events:polling`.
 
 `categories=ALL` retorna todas as categorias, incluindo novas categorias criadas futuramente.
 
@@ -61,9 +68,9 @@ Use `types` e `groups` para filtrar eventos específicos.
 
 **Exemplos**:
 ```
-GET /events:polling?groups=STATUS,DELIVERY,TAKEOUT
-GET /events:polling?types=PLC,CFM,CAN,AAO
-GET /events:polling?groups=ORDER_STATUS&types=AAO,AAD
+GET https://merchant-api.ifood.com.br/events/v1.0/events:polling?groups=STATUS,DELIVERY,TAKEOUT
+GET https://merchant-api.ifood.com.br/events/v1.0/events:polling?types=PLC,CFM,CAN,AAO
+GET https://merchant-api.ifood.com.br/events/v1.0/events:polling?groups=ORDER_STATUS&types=AAO,AAD
 ```
 
 **Como funciona o filtro**:
@@ -84,7 +91,7 @@ O endpoint retorna eventos de até **500 merchants** por requisição. Use o hea
 
 **Exemplo**:
 ```
-GET /events:polling
+GET https://merchant-api.ifood.com.br/events/v1.0/events:polling
 --header 'x-polling-merchants: 0a0000aa-0aa0-00aa-aa00-0000aa000001,0a0000aa-0aa0-00aa-aa00-0000aa000002'
 ```
 
@@ -169,8 +176,15 @@ Múltiplos aplicativos podem consumir eventos da mesma loja simultaneamente. A A
 **Arquivo**: `backend/src/services/ifood-service.ts`
 
 **Métodos implementados**:
-- `pollEvents()`: Busca eventos do endpoint `/events:polling`
+- `pollEvents()`: Busca eventos do endpoint `events:polling` usando base URL `https://merchant-api.ifood.com.br/events/v1.0/`
 - `acknowledgeEvents(eventIds: string[])`: Envia acknowledgment para eventos processados
+
+**Estrutura de URLs**:
+- Base URL para eventos: `https://merchant-api.ifood.com.br/events/v1.0/`
+- Endpoint de polling: `events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+- URL completa: `https://merchant-api.ifood.com.br/events/v1.0/events:polling?types=PLC,REC,CFM&groups=ORDER_STATUS,DELIVERY&categories=FOOD`
+
+**Nota sobre Versionamento**: Para atualizar a versão da API de eventos no futuro, modifique a constante `IFOOD_API_VERSIONS.EVENTS` no arquivo `backend/src/services/ifood-service.ts`. A URL base será atualizada automaticamente.
 
 ### Configuração
 
@@ -181,7 +195,7 @@ Múltiplos aplicativos podem consumir eventos da mesma loja simultaneamente. A A
 
 ## Fluxo de Processamento
 
-1. **Polling**: Buscar eventos via `GET /events:polling`
+1. **Polling**: Buscar eventos via `GET https://merchant-api.ifood.com.br/events/v1.0/events:polling`
 2. **Ordenação**: Ordenar eventos por `createdAt`
 3. **Deduplicação**: Verificar IDs duplicados
 4. **Processamento**: Para cada evento único:
@@ -197,16 +211,53 @@ Múltiplos aplicativos podem consumir eventos da mesma loja simultaneamente. A A
 
 Para passar na homologação do iFood, é obrigatório:
 
-- ✅ Execute `GET /events:polling` a cada **30 segundos**
+- ✅ Execute `GET https://merchant-api.ifood.com.br/events/v1.0/events:polling` a cada **30 segundos**
 - ✅ Use header `x-polling-merchants` para filtrar eventos por merchant (quando aplicável)
 - ✅ Filtre eventos por tipo e grupo conforme necessário
 - ✅ Envie `POST /events/acknowledgment` imediatamente após receber eventos (código 200)
 
 **Integradoras Logísticas**: Envie o parâmetro `excludeHeartbeat=true` no endpoint de polling para evitar abrir a loja indevidamente.
 
+## Atualização de Status de Pedidos
+
+### Endpoint para Confirmar/Cancelar Pedidos
+
+**Endpoint**: `PATCH /merchants/{merchantId}/orders/{orderId}/status`
+
+**Formato Alternativo**: `PATCH /order/v1.0/orders/{orderId}/status` (fallback se o primeiro falhar)
+
+**Payload**:
+```json
+{
+  "status": "CONFIRMED" | "CANCELLED" | "PREPARATION_STARTED" | "READY_TO_PICKUP" | "DISPATCHED" | "CONCLUDED"
+}
+```
+
+**Status Possíveis**:
+- `CONFIRMED` (CFM): Pedido foi confirmado e será preparado
+- `CANCELLED` (CAN): Pedido foi cancelado
+- `PREPARATION_STARTED` (PRS): Pedido começou a ser preparado
+- `READY_TO_PICKUP` (RTP): Pedido está pronto para retirada
+- `DISPATCHED` (DSP): Pedido saiu para entrega
+- `CONCLUDED` (CON): Pedido foi concluído
+
+**Respostas**:
+- **200**: Status atualizado com sucesso (síncrono)
+- **202**: Operação assíncrona - aguardar evento de confirmação no polling
+- **404**: Pedido não encontrado ou rota inválida
+- **500**: Erro interno do servidor
+
+**Boas Práticas**:
+- Sempre consulte os detalhes do pedido (`GET /order/v1.0/orders/{orderId}`) antes de confirmar ou cancelar
+- Se receber 202, aguarde o evento de confirmação no polling antes de considerar o status atualizado
+- Implemente retry para erros 5XX
+
+**Documentação**: https://developer.ifood.com.br/pt-BR/docs/guides/modules/order/events/?category=FOOD
+
 ## Referências
 
 - **Documentação Oficial**: https://developer.ifood.com.br/pt-BR/docs/guides/modules/events/polling-overview
+- **Eventos de Pedidos**: https://developer.ifood.com.br/pt-BR/docs/guides/modules/order/events/?category=FOOD
 - **Boas Práticas**: Veja `IFOOD_BEST_PRACTICES.md`
 - **API Reference**: Veja `IFOOD_API_REFERENCE.md`
 
