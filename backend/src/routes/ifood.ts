@@ -2312,15 +2312,14 @@ router.get('/concluded-orders', async (req: Request, res: Response) => {
     
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
-    // Get orders from iFood that are CONCLUDED
+    // Get orders from iFood that are CONCLUDED or CANCELLED
     const { data: orders, error } = await supabase
       .from('orders')
       .select('*, items:order_items(*)')
       .eq('source', 'ifood')
-      .eq('ifood_status', 'CONCLUDED')
-      .in('status', ['Closed'])
-      .order('closed_at', { ascending: false })
-      .limit(50) // Limit to last 50 concluded orders
+      .in('ifood_status', ['CONCLUDED', 'CANCELLED'])
+      .in('status', ['Closed', 'Cancelled'])
+      .limit(100) // Get more to sort properly, then limit to 50
     
     if (error) {
       return res.status(500).json({
@@ -2330,7 +2329,7 @@ router.get('/concluded-orders', async (req: Request, res: Response) => {
     }
     
     // Format orders to match frontend structure
-    const formattedOrders = (orders || []).map((o: any) => ({
+    let formattedOrders = (orders || []).map((o: any) => ({
       id: o.id,
       customer: o.customer,
       table: o.table_number,
@@ -2353,6 +2352,17 @@ router.get('/concluded-orders', async (req: Request, res: Response) => {
         quantity: i.quantity
       }))
     }))
+    
+    // Sort by last state change: closed_at (when status changed to Closed/Cancelled) 
+    // with fallback to created_at, descending (most recent first)
+    formattedOrders.sort((a: any, b: any) => {
+      const dateA = a.closedAt ? new Date(a.closedAt).getTime() : new Date(a.created_at).getTime()
+      const dateB = b.closedAt ? new Date(b.closedAt).getTime() : new Date(b.created_at).getTime()
+      return dateB - dateA // Descending order (most recent first)
+    })
+    
+    // Limit to last 50 orders after sorting
+    formattedOrders = formattedOrders.slice(0, 50)
     
     res.json({
       success: true,

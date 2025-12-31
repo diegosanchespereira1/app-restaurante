@@ -6,7 +6,7 @@ import { Input } from "../components/ui/input"
 import { Label } from "../components/ui/label"
 import { Switch } from "../components/ui/switch"
 import { Badge } from "../components/ui/badge"
-import { Save, RefreshCw, CheckCircle, XCircle, Clock, ShoppingBag, Copy, ExternalLink, Check, X, MapPin, Phone, User, Calendar, Package, CreditCard, Info } from "lucide-react"
+import { Save, RefreshCw, CheckCircle, XCircle, Clock, ShoppingBag, Copy, ExternalLink, Check, X, MapPin, Phone, User, Calendar, Package, CreditCard, Info, ChevronDown, ChevronUp } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "../components/ui/dialog"
 import { useAuth } from "../context/AuthContext"
 import { getBackendUrl } from "../lib/backend-config"
@@ -279,6 +279,9 @@ export function IfoodIntegration() {
   const [orderDetails, setOrderDetails] = useState<IfoodPendingOrder | null>(null)
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false)
   const [orderDetailsError, setOrderDetailsError] = useState<string | null>(null)
+  const [isWebhookCollapsed, setIsWebhookCollapsed] = useState(true)
+  const [isConfigCollapsed, setIsConfigCollapsed] = useState(true)
+  const [isMappingsCollapsed, setIsMappingsCollapsed] = useState(true)
 
   const backendUrl = getBackendUrl()
 
@@ -971,6 +974,193 @@ export function IfoodIntegration() {
         </CardContent>
       </Card>
 
+      {/* Pending Orders Card */}
+      {status?.active && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Pedidos Pendentes</CardTitle>
+                <CardDescription>
+                  Pedidos recebidos do iFood aguardando aceitação
+                </CardDescription>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={loadPendingOrders}
+                disabled={loadingOrders}
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {loadingOrders ? (
+              <div className="text-center py-8">
+                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+              </div>
+            ) : pendingOrders.length === 0 ? (
+              <div className="text-center py-8">
+                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                <p className="text-muted-foreground">Nenhum pedido pendente</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Os pedidos recebidos do iFood aparecerão aqui
+                </p>
+              </div>
+            ) : (
+              <div className={`space-y-4 ${pendingOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
+                {pendingOrders.map((order) => {
+                    try {
+                      console.log('[Frontend] Rendering order:', {
+                        id: order.id,
+                        displayId: order.displayId,
+                        shortReference: order.shortReference,
+                        customer: order.customer,
+                        hasItems: !!(order.items && order.items.length > 0)
+                      })
+                      
+                      // Handle different customer structures
+                      const customerName = typeof order.customer === 'object' && order.customer?.name 
+                        ? order.customer.name 
+                        : typeof order.customer === 'string' 
+                          ? order.customer 
+                          : 'Cliente iFood'
+                      const customerPhone = typeof order.customer === 'object' 
+                        ? (order.customer?.phone?.number || order.customer?.phoneNumber)
+                        : null
+                      const orderType = order.orderType || 'DELIVERY'
+                      const isDelivery = orderType === 'DELIVERY'
+                      const isTakeout = orderType === 'TAKEOUT'
+                      const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
+                      const itemsCount = (order.items || []).reduce((sum: number, item: any) => {
+                        const qty = item.quantity || 0
+                        return sum + (typeof qty === 'number' ? qty : 0)
+                      }, 0)
+                      
+                      return (
+                    <div
+                      key={order.id}
+                      className="border rounded-lg p-4 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => {
+                        setSelectedOrder(order)
+                        setIsOrderDetailOpen(true)
+                      }}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-semibold text-lg">Pedido #{order.displayId || order.shortReference || order.id}</span>
+                            <Badge variant="outline" className={
+                              isDelivery 
+                                ? 'bg-blue-50 text-blue-700 border-blue-200'
+                                : isTakeout
+                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
+                                  : 'bg-green-50 text-green-700 border-green-200'
+                            }>
+                              {isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Consumir no local'}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-muted-foreground space-y-1">
+                            <div className="flex items-center gap-2">
+                              <User className="h-3 w-3" />
+                              <span className="font-medium">Cliente:</span>
+                              <span>{customerName}</span>
+                              {customerPhone && (
+                                <span className="ml-2">• {customerPhone}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3 w-3" />
+                              <span>{formatDate(order.createdAt)}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Package className="h-3 w-3" />
+                              <span>{itemsCount} {itemsCount === 1 ? 'item' : 'itens'}</span>
+                            </div>
+                            {order.delivery?.deliveryAddress && (
+                              <div className="flex items-start gap-2 mt-1">
+                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                <span className="text-xs">
+                                  {order.delivery.deliveryAddress.streetName || order.delivery.deliveryAddress.street || ''}, {order.delivery.deliveryAddress.streetNumber || order.delivery.deliveryAddress.number || ''}
+                                  {order.delivery.deliveryAddress.complement && ` - ${order.delivery.deliveryAddress.complement}`}
+                                  {', '}
+                                  {order.delivery.deliveryAddress.neighborhood || ''}, {order.delivery.deliveryAddress.city || ''} - {order.delivery.deliveryAddress.state || ''}
+                                  {(order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode) && `, ${order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode}`}
+                                </span>
+                              </div>
+                            )}
+                            {order.delivery?.address && !order.delivery?.deliveryAddress && (
+                              <div className="flex items-start gap-2 mt-1">
+                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                                <span className="text-xs">
+                                  {order.delivery.address.streetName || order.delivery.address.street || ''}, {order.delivery.address.streetNumber || order.delivery.address.number || ''}
+                                  {order.delivery.address.complement && ` - ${order.delivery.address.complement}`}
+                                  {', '}
+                                  {order.delivery.address.neighborhood || ''}, {order.delivery.address.city || ''} - {order.delivery.address.state || ''}
+                                  {(order.delivery.address.postalCode || order.delivery.address.zipCode) && `, ${order.delivery.address.postalCode || order.delivery.address.zipCode}`}
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right ml-4">
+                          <div className="font-bold text-lg text-primary">
+                              {formatCurrency(totalAmount)}
+                          </div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Clique para ver detalhes
+                          </div>
+                        </div>
+                      </div>
+                      <div className="border-t pt-3">
+                        <div className="text-sm font-medium mb-2">Resumo dos Itens:</div>
+                        <div className="space-y-1">
+                          {(order.items || []).slice(0, 3).map((item: any, idx: number) => (
+                            <div key={item.id || idx} className="flex items-center justify-between text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium">{item.quantity}x</span>
+                                <span className="truncate">{item.name}</span>
+                              </div>
+                              <span className="text-muted-foreground flex-shrink-0 ml-2">
+                                {formatCurrency(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0)}
+                              </span>
+                            </div>
+                          ))}
+                          {(order.items || []).length > 3 && (
+                            <div className="text-xs text-muted-foreground pt-1">
+                              +{(order.items || []).length - 3} mais {((order.items || []).length - 3) === 1 ? 'item' : 'itens'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    )
+                  } catch (error) {
+                    // #region agent log
+                    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                    // #endregion
+                    console.error('Error rendering order:', error, order)
+                    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+                    // Return a simple card with minimal rendering to avoid cascading errors
+                    return (
+                      <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
+                        <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
+                        <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
+                        <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
+                        <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
+                      </div>
+                    )
+                  }
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Active Orders Card (Accepted and In Preparation) */}
       {status?.active && (
         <Card>
@@ -1209,7 +1399,7 @@ export function IfoodIntegration() {
               <div>
                 <CardTitle>Pedidos Finalizados</CardTitle>
                 <CardDescription>
-                  Pedidos entregues e finalizados do iFood
+                  Pedidos entregues, finalizados e cancelados do iFood
                 </CardDescription>
               </div>
               <Button
@@ -1232,9 +1422,9 @@ export function IfoodIntegration() {
             ) : concludedOrders.length === 0 ? (
               <div className="text-center py-8">
                 <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Nenhum pedido finalizado</p>
+                <p className="text-muted-foreground">Nenhum pedido finalizado ou cancelado</p>
                 <p className="text-sm text-muted-foreground mt-1">
-                  Pedidos entregues aparecerão aqui
+                  Pedidos entregues ou cancelados aparecerão aqui
                 </p>
               </div>
             ) : (
@@ -1248,9 +1438,15 @@ export function IfoodIntegration() {
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
-                          <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                            Finalizado
-                          </Badge>
+                          {order.status === 'Cancelled' || order.ifood_status === 'CANCELLED' ? (
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                              Cancelado
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                              Finalizado
+                            </Badge>
+                          )}
                         </div>
                         <div className="text-sm text-muted-foreground space-y-1">
                           <div className="flex items-center gap-2">
@@ -1259,7 +1455,12 @@ export function IfoodIntegration() {
                           </div>
                           <div className="flex items-center gap-2">
                             <Clock className="h-3 w-3" />
-                            <span>Finalizado em: {order.closedAt ? new Date(order.closedAt).toLocaleString('pt-BR') : order.time}</span>
+                            <span>
+                              {order.status === 'Cancelled' || order.ifood_status === 'CANCELLED' 
+                                ? 'Cancelado em: ' 
+                                : 'Finalizado em: '}
+                              {order.closedAt ? new Date(order.closedAt).toLocaleString('pt-BR') : order.time}
+                            </span>
                           </div>
                           {order.paymentMethod && (
                             <div className="text-xs">
@@ -1316,193 +1517,6 @@ export function IfoodIntegration() {
                     </div>
                   </div>
                 ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Pending Orders Card */}
-      {status?.active && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Pedidos Pendentes</CardTitle>
-                <CardDescription>
-                  Pedidos recebidos do iFood aguardando aceitação
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadPendingOrders}
-                disabled={loadingOrders}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingOrders ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
-              </div>
-            ) : pendingOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Nenhum pedido pendente</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Os pedidos recebidos do iFood aparecerão aqui
-                </p>
-              </div>
-            ) : (
-              <div className={`space-y-4 ${pendingOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
-                {pendingOrders.map((order) => {
-                    try {
-                      console.log('[Frontend] Rendering order:', {
-                        id: order.id,
-                        displayId: order.displayId,
-                        shortReference: order.shortReference,
-                        customer: order.customer,
-                        hasItems: !!(order.items && order.items.length > 0)
-                      })
-                      
-                      // Handle different customer structures
-                      const customerName = typeof order.customer === 'object' && order.customer?.name 
-                        ? order.customer.name 
-                        : typeof order.customer === 'string' 
-                          ? order.customer 
-                          : 'Cliente iFood'
-                      const customerPhone = typeof order.customer === 'object' 
-                        ? (order.customer?.phone?.number || order.customer?.phoneNumber)
-                        : null
-                      const orderType = order.orderType || 'DELIVERY'
-                      const isDelivery = orderType === 'DELIVERY'
-                      const isTakeout = orderType === 'TAKEOUT'
-                      const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
-                      const itemsCount = (order.items || []).reduce((sum: number, item: any) => {
-                        const qty = item.quantity || 0
-                        return sum + (typeof qty === 'number' ? qty : 0)
-                      }, 0)
-                      
-                      return (
-                    <div
-                      key={order.id}
-                      className="border rounded-lg p-4 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => {
-                        setSelectedOrder(order)
-                        setIsOrderDetailOpen(true)
-                      }}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-lg">Pedido #{order.displayId || order.shortReference || order.id}</span>
-                            <Badge variant="outline" className={
-                              isDelivery 
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : isTakeout
-                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                  : 'bg-green-50 text-green-700 border-green-200'
-                            }>
-                              {isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Consumir no local'}
-                            </Badge>
-                          </div>
-                          <div className="text-sm text-muted-foreground space-y-1">
-                            <div className="flex items-center gap-2">
-                              <User className="h-3 w-3" />
-                              <span className="font-medium">Cliente:</span>
-                              <span>{customerName}</span>
-                              {customerPhone && (
-                                <span className="ml-2">• {customerPhone}</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-3 w-3" />
-                              <span>{formatDate(order.createdAt)}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Package className="h-3 w-3" />
-                              <span>{itemsCount} {itemsCount === 1 ? 'item' : 'itens'}</span>
-                            </div>
-                            {order.delivery?.deliveryAddress && (
-                              <div className="flex items-start gap-2 mt-1">
-                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                <span className="text-xs">
-                                  {order.delivery.deliveryAddress.streetName || order.delivery.deliveryAddress.street || ''}, {order.delivery.deliveryAddress.streetNumber || order.delivery.deliveryAddress.number || ''}
-                                  {order.delivery.deliveryAddress.complement && ` - ${order.delivery.deliveryAddress.complement}`}
-                                  {', '}
-                                  {order.delivery.deliveryAddress.neighborhood || ''}, {order.delivery.deliveryAddress.city || ''} - {order.delivery.deliveryAddress.state || ''}
-                                  {(order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode) && `, ${order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode}`}
-                                </span>
-                              </div>
-                            )}
-                            {order.delivery?.address && !order.delivery?.deliveryAddress && (
-                              <div className="flex items-start gap-2 mt-1">
-                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                <span className="text-xs">
-                                  {order.delivery.address.streetName || order.delivery.address.street || ''}, {order.delivery.address.streetNumber || order.delivery.address.number || ''}
-                                  {order.delivery.address.complement && ` - ${order.delivery.address.complement}`}
-                                  {', '}
-                                  {order.delivery.address.neighborhood || ''}, {order.delivery.address.city || ''} - {order.delivery.address.state || ''}
-                                  {(order.delivery.address.postalCode || order.delivery.address.zipCode) && `, ${order.delivery.address.postalCode || order.delivery.address.zipCode}`}
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div className="text-right ml-4">
-                          <div className="font-bold text-lg text-primary">
-                              {formatCurrency(totalAmount)}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Clique para ver detalhes
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-t pt-3">
-                        <div className="text-sm font-medium mb-2">Resumo dos Itens:</div>
-                        <div className="space-y-1">
-                          {(order.items || []).slice(0, 3).map((item: any, idx: number) => (
-                            <div key={item.id || idx} className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{item.quantity}x</span>
-                                <span className="truncate">{item.name}</span>
-                              </div>
-                              <span className="text-muted-foreground flex-shrink-0 ml-2">
-                                {formatCurrency(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0)}
-                              </span>
-                            </div>
-                          ))}
-                          {(order.items || []).length > 3 && (
-                            <div className="text-xs text-muted-foreground pt-1">
-                              +{(order.items || []).length - 3} mais {((order.items || []).length - 3) === 1 ? 'item' : 'itens'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    )
-                  } catch (error) {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-                    // #endregion
-                    console.error('Error rendering order:', error, order)
-                    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
-                    // Return a simple card with minimal rendering to avoid cascading errors
-                    return (
-                      <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
-                        <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
-                        <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
-                        <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
-                        <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
-                      </div>
-                    )
-                  }
-                })}
               </div>
             )}
           </CardContent>
@@ -2080,12 +2094,25 @@ export function IfoodIntegration() {
       {/* Webhook URL Card */}
       {status?.configured && status?.webhook_url && (
         <Card>
-          <CardHeader>
-            <CardTitle>URL do Webhook</CardTitle>
-            <CardDescription>
-              Configure esta URL no painel do iFood para receber pedidos via webhook
-            </CardDescription>
+          <CardHeader 
+            className="cursor-pointer hover:bg-muted/50 transition-colors"
+            onClick={() => setIsWebhookCollapsed(!isWebhookCollapsed)}
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <CardTitle>URL do Webhook</CardTitle>
+                <CardDescription>
+                  Configure esta URL no painel do iFood para receber pedidos via webhook
+                </CardDescription>
+              </div>
+              {isWebhookCollapsed ? (
+                <ChevronDown className="h-5 w-5 text-muted-foreground" />
+              ) : (
+                <ChevronUp className="h-5 w-5 text-muted-foreground" />
+              )}
+            </div>
           </CardHeader>
+          {!isWebhookCollapsed && (
           <CardContent className="space-y-4">
             <div className="space-y-2">
               <Label>URL do Webhook</Label>
@@ -2121,17 +2148,31 @@ export function IfoodIntegration() {
               </p>
             </div>
           </CardContent>
+          )}
         </Card>
       )}
 
       {/* Configuration Card */}
       <Card>
-        <CardHeader>
-          <CardTitle>Configuração</CardTitle>
-          <CardDescription>
-            Configure suas credenciais do iFood. O client_secret será criptografado antes de ser armazenado.
-          </CardDescription>
+        <CardHeader 
+          className="cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => setIsConfigCollapsed(!isConfigCollapsed)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <CardTitle>Configuração</CardTitle>
+              <CardDescription>
+                Configure suas credenciais do iFood. O client_secret será criptografado antes de ser armazenado.
+              </CardDescription>
+            </div>
+            {isConfigCollapsed ? (
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <ChevronUp className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
         </CardHeader>
+        {!isConfigCollapsed && (
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="merchant_id">Merchant ID *</Label>
@@ -2221,16 +2262,30 @@ export function IfoodIntegration() {
             {saving ? 'Salvando...' : 'Salvar Configuração'}
           </Button>
         </CardContent>
+        )}
       </Card>
 
       {/* Product Mappings Card */}
       <Card>
-        <CardHeader>
-          <CardTitle>Mapeamento de Produtos</CardTitle>
-          <CardDescription>
-            Produtos do iFood mapeados para produtos do sistema
-          </CardDescription>
+        <CardHeader 
+          className="cursor-pointer hover:bg-muted/50 transition-colors"
+          onClick={() => setIsMappingsCollapsed(!isMappingsCollapsed)}
+        >
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <CardTitle>Mapeamento de Produtos</CardTitle>
+              <CardDescription>
+                Produtos do iFood mapeados para produtos do sistema
+              </CardDescription>
+            </div>
+            {isMappingsCollapsed ? (
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <ChevronUp className="h-5 w-5 text-muted-foreground" />
+            )}
+          </div>
         </CardHeader>
+        {!isMappingsCollapsed && (
         <CardContent>
           {mappings.length === 0 ? (
             <p className="text-center text-muted-foreground py-8">
@@ -2272,6 +2327,7 @@ export function IfoodIntegration() {
             </div>
           )}
         </CardContent>
+        )}
       </Card>
     </div>
   )
