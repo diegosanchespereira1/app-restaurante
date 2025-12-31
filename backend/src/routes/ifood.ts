@@ -1361,8 +1361,8 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       })
     }
     
-    // Limit to 5 orders at a time to prevent timeout and reduce load
-    const maxOrders = 5
+    // Limit to 20 orders at a time to prevent timeout and reduce load
+    const maxOrders = 20
     const limitedOrderIds = orderIdsToFetch.slice(0, maxOrders)
     
     // #region agent log

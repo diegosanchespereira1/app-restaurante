@@ -1,5 +1,4 @@
 import { useState, useEffect, useCallback, useRef } from "react"
-import { Link } from "react-router-dom"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "../components/ui/card"
 import { Button } from "../components/ui/button"
 import { Input } from "../components/ui/input"
@@ -272,6 +271,7 @@ export function IfoodIntegration() {
   const [selectedOrder, setSelectedOrder] = useState<IfoodPendingOrder | null>(null)
   const [isOrderDetailOpen, setIsOrderDetailOpen] = useState(false)
   const [cancellingOrder, setCancellingOrder] = useState<string | null>(null)
+  const [selectedDashboardOrder, setSelectedDashboardOrder] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
@@ -657,25 +657,62 @@ export function IfoodIntegration() {
     }
   }, [backendUrl, loadPendingOrders, loadActiveOrders, loadDispatchedOrders, loadConcludedOrders])
   
-  const getIfoodStatusLabel = (status: string | null | undefined) => {
-    switch (status) {
-      case 'CONFIRMED':
-        return 'Confirmado'
-      case 'PREPARATION_STARTED':
-        return 'Em Preparação'
-      case 'DISPATCHED':
-        return 'Despachado'
-      case 'READY_TO_PICKUP':
-        return 'Pronto para Retirada'
-      case 'CONCLUDED':
-        return 'Concluído'
-      case 'CANCELLED':
-        return 'Cancelado'
-      default:
-        return status || 'Desconhecido'
+  // Função para calcular tempo decorrido
+  const getElapsedTime = (dateString: string | null | undefined): string => {
+    if (!dateString) return '0min'
+    try {
+      const now = new Date()
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return '0min'
+      
+      const diffMs = now.getTime() - date.getTime()
+      if (diffMs < 0) return '0min'
+      
+      const diffMins = Math.floor(diffMs / 60000)
+      
+      if (diffMins < 1) return 'há menos de 1min'
+      if (diffMins < 60) return `${diffMins}min`
+      
+      const hours = Math.floor(diffMins / 60)
+      const mins = diffMins % 60
+      return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`
+    } catch (error) {
+      return '0min'
     }
   }
 
+  // Função para calcular tempo decorrido formatado para "há Xmin"
+  const getElapsedTimeFormatted = (dateString: string | null | undefined): string => {
+    if (!dateString) return 'há 0min'
+    try {
+      const now = new Date()
+      const date = new Date(dateString)
+      if (isNaN(date.getTime())) return 'há 0min'
+      
+      const diffMs = now.getTime() - date.getTime()
+      if (diffMs < 0) return 'há 0min'
+      
+      const diffMins = Math.floor(diffMs / 60000)
+      
+      if (diffMins < 1) return 'há menos de 1min'
+      return `há ${diffMins}min`
+    } catch (error) {
+      return 'há 0min'
+    }
+  }
+
+  // Organizar pedidos por status
+  const preparingOrders = activeOrders.filter((order: any) => 
+    order.ifood_status === 'CONFIRMED' || order.ifood_status === 'PREPARATION_STARTED'
+  )
+
+  const readyOrders = activeOrders.filter((order: any) => 
+    order.ifood_status === 'READY_TO_PICKUP'
+  )
+
+  const routeOrders = dispatchedOrders
+
+  const finishedOrders = concludedOrders
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('pt-BR')
@@ -963,27 +1000,511 @@ export function IfoodIntegration() {
         </CardContent>
       </Card>
 
-      {/* Pending Orders Card */}
+      {/* Dashboard de Pedidos */}
       {status?.active && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Pedidos Pendentes</CardTitle>
-                <CardDescription>
-                  Pedidos recebidos do iFood aguardando aceitação
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadPendingOrders}
-                disabled={loadingOrders}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
+        <div className="space-y-6">
+          {/* Header com botão de atualizar */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-2xl font-bold">Dashboard de Pedidos</h2>
+              <p className="text-sm text-muted-foreground">Gerencie todos os pedidos do iFood</p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                loadPendingOrders()
+                loadActiveOrders()
+                loadDispatchedOrders()
+                loadConcludedOrders()
+              }}
+              disabled={loadingOrders || loadingActiveOrders || loadingDispatchedOrders || loadingConcludedOrders}
+            >
+              <RefreshCw className={`h-4 w-4 mr-2 ${(loadingOrders || loadingActiveOrders || loadingDispatchedOrders || loadingConcludedOrders) ? 'animate-spin' : ''}`} />
+              Atualizar Tudo
+            </Button>
+          </div>
+
+          {/* Layout com duas colunas quando pedido está selecionado */}
+          <div className={`grid gap-6 ${selectedDashboardOrder ? 'lg:grid-cols-[2fr_1fr]' : 'lg:grid-cols-2'}`}>
+            {/* Coluna Esquerda - Seções de Pedidos */}
+            <div className={`space-y-6 ${selectedDashboardOrder ? '' : 'lg:col-span-2'}`}>
+              {/* Seção: Em Preparo */}
+              <Card className="bg-gray-50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">Em preparo</CardTitle>
+                    <Badge className="bg-gray-700 text-white">{preparingOrders.length}</Badge>
+                  </div>
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingActiveOrders ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Carregando...</p>
+                  </div>
+                ) : preparingOrders.length === 0 ? (
+                  <div className="text-center py-8">
+                    <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                    <p className="text-sm text-muted-foreground">Nenhum pedido em preparo</p>
+                  </div>
+                ) : (
+                  <div className={`flex flex-wrap gap-3 ${preparingOrders.length > 5 ? 'max-h-[500px] overflow-y-auto pr-2' : ''}`}>
+                    {preparingOrders.map((order: any) => {
+                      const orderDisplayId = order.ifood_display_id || order.id
+                      const createdAt = order.created_at || order.createdAt || order.time
+                      const elapsedTime = createdAt ? getElapsedTime(createdAt) : '0min'
+                      const isSelected = selectedDashboardOrder?.id === order.id
+                      
+                      return (
+                        <div
+                          key={order.id}
+                          className={`bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow ${
+                            isSelected ? 'border-red-500 border-2' : ''
+                          }`}
+                          onClick={() => setSelectedDashboardOrder(order)}
+                        >
+                          <div className="flex items-start gap-2 mb-2">
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground flex-1">
+                              <ShoppingBag className="h-3 w-3" />
+                              <span>Própria</span>
+                            </div>
+                          </div>
+                          <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
+                          <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
+                          <div className="bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded text-center">
+                            {elapsedTime}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+              {/* Seção: Pronto */}
+              <Card className="bg-gray-50">
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-lg">Pronto</CardTitle>
+                    <Badge className="bg-gray-700 text-white">{readyOrders.length}</Badge>
+                  </div>
+                  <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                </div>
+              </CardHeader>
+              <CardContent>
+                {loadingActiveOrders ? (
+                  <div className="text-center py-8">
+                    <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground">Carregando...</p>
+                  </div>
+                ) : readyOrders.length === 0 ? (
+                  <div className="text-center py-12">
+                    <ShoppingBag className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-30" />
+                    <p className="text-sm text-muted-foreground">Aqui ficarão seus pedidos prontos para coleta</p>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-3">
+                    {readyOrders.map((order: any) => {
+                      const orderDisplayId = order.ifood_display_id || order.id
+                      const isSelected = selectedDashboardOrder?.id === order.id
+                      
+                      return (
+                        <div
+                          key={order.id}
+                          className={`bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow ${
+                            isSelected ? 'border-red-500 border-2' : ''
+                          }`}
+                          onClick={() => setSelectedDashboardOrder(order)}
+                        >
+                          <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                            <ShoppingBag className="h-3 w-3" />
+                            <span>Própria</span>
+                          </div>
+                          <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
+                          <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
+                          <div className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded text-center">
+                            Pronto
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+              {/* Seção: Em Rota */}
+              <Card className="bg-gray-50">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg">Em rota</CardTitle>
+                  <Badge className="bg-gray-700 text-white">{routeOrders.length}</Badge>
+                </div>
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingDispatchedOrders ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Carregando...</p>
+                </div>
+              ) : routeOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-sm text-muted-foreground">Nenhum pedido em rota</p>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  {routeOrders.map((order: any) => {
+                    const orderDisplayId = order.ifood_display_id || order.id
+                    const createdAt = order.created_at || order.createdAt || order.closedAt
+                    const elapsedTime = createdAt ? getElapsedTimeFormatted(createdAt) : 'há 0min'
+                    const isSelected = selectedDashboardOrder?.id === order.id
+                    
+                    return (
+                      <div
+                        key={order.id}
+                        className={`bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow ${
+                          isSelected ? 'border-red-500 border-2' : ''
+                        }`}
+                        onClick={() => setSelectedDashboardOrder(order)}
+                      >
+                        <div className="flex items-center gap-1 text-xs text-muted-foreground mb-2">
+                          <ShoppingBag className="h-3 w-3" />
+                          <span>Própria</span>
+                        </div>
+                        <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
+                        <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
+                        <div className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded text-center">
+                          {elapsedTime}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+              {/* Seção: Finalizados */}
+              <Card className="bg-gray-50">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CardTitle className="text-lg">Finalizados</CardTitle>
+                  <Badge className="bg-gray-700 text-white">{finishedOrders.length}</Badge>
+                </div>
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loadingConcludedOrders ? (
+                <div className="text-center py-8">
+                  <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Carregando...</p>
+                </div>
+              ) : finishedOrders.length === 0 ? (
+                <div className="text-center py-8">
+                  <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+                  <p className="text-sm text-muted-foreground">Nenhum pedido finalizado</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                  {finishedOrders.map((order: any) => {
+                    const orderDisplayId = order.ifood_display_id || order.id
+                    const isCancelled = order.status === 'Cancelled' || order.ifood_status === 'CANCELLED'
+                    const isSelected = selectedDashboardOrder?.id === order.id
+                    
+                    return (
+                      <div
+                        key={order.id}
+                        className={`bg-white border rounded-lg p-3 cursor-pointer hover:shadow-md transition-shadow ${
+                          isSelected ? 'border-red-500 border-2' : ''
+                        }`}
+                        onClick={() => setSelectedDashboardOrder(order)}
+                      >
+                        <div className="text-xl font-bold mb-2">{orderDisplayId}</div>
+                        {isCancelled && (
+                          <div className="flex items-center gap-1 text-xs text-red-600">
+                            <X className="h-3 w-3" />
+                            <span>Cancelado</span>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+            </div>
+
+            {/* Painel de Detalhes do Pedido Selecionado */}
+            {selectedDashboardOrder && (
+              <Card className="bg-white sticky top-4 h-fit max-h-[calc(100vh-2rem)] overflow-y-auto">
+                <CardHeader className="pb-3 border-b">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Badge className="bg-white border-2 border-gray-300 text-gray-700 text-lg px-3 py-1">
+                        {selectedDashboardOrder.ifood_display_id || selectedDashboardOrder.id}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Phone className="h-4 w-4 text-red-500" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        onClick={() => setSelectedDashboardOrder(null)}
+                      >
+                        <X className="h-4 w-4 text-gray-500" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="mt-2">
+                    <h3 className="font-semibold text-lg">
+                      {typeof selectedDashboardOrder.customer === 'object' 
+                        ? selectedDashboardOrder.customer.name 
+                        : selectedDashboardOrder.customer || 'Cliente'}
+                    </h3>
+                  </div>
+                </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                {/* Informações do Pedido */}
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span>Feito às {selectedDashboardOrder.created_at 
+                      ? new Date(selectedDashboardOrder.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                      : selectedDashboardOrder.time || 'N/A'}</span>
+                  </div>
+                  {selectedDashboardOrder.ifood_order_id && (
+                    <div>
+                      <span className="text-red-600 font-medium">Localizador</span>{' '}
+                      {selectedDashboardOrder.ifood_order_id.split('').join(' ')}
+                    </div>
+                  )}
+                  <div>
+                    <Badge variant="outline" className="text-xs">via iFood</Badge>
+                  </div>
+                </div>
+
+                {/* Entrega */}
+                {selectedDashboardOrder.orderType === 'delivery' && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-sm">
+                      <Clock className="h-4 w-4 text-muted-foreground" />
+                      <span>Entrega prevista: {selectedDashboardOrder.created_at 
+                        ? (() => {
+                            const created = new Date(selectedDashboardOrder.created_at)
+                            const estimated = new Date(created.getTime() + 45 * 60000) // +45 minutos
+                            return estimated.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+                          })()
+                        : 'N/A'}</span>
+                    </div>
+                    {selectedDashboardOrder.customer && typeof selectedDashboardOrder.customer === 'object' && selectedDashboardOrder.customer.ordersCountOnMerchant === 1 && (
+                      <Badge variant="outline" className="text-xs bg-gray-100">1º pedido</Badge>
+                    )}
+                  </div>
+                )}
+
+                {/* Contato */}
+                {selectedDashboardOrder.customer && (
+                  <div className="flex items-center gap-2 text-sm">
+                    <Phone className="h-4 w-4 text-muted-foreground" />
+                    <span>
+                      {typeof selectedDashboardOrder.customer === 'object' 
+                        ? (selectedDashboardOrder.customer.phone?.number || selectedDashboardOrder.customer.phoneNumber || 'N/A')
+                        : 'N/A'}
+                      {selectedDashboardOrder.ifood_order_id && ` ID: ${selectedDashboardOrder.ifood_order_id}`}
+                    </span>
+                  </div>
+                )}
+
+                {/* Status do Pedido */}
+                <div className="border-t pt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-medium text-sm">Pedido em preparo</span>
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {(() => {
+                      const createdAt = selectedDashboardOrder.created_at || selectedDashboardOrder.createdAt
+                      if (!createdAt) return 'Há alguns minutos.'
+                      const elapsed = getElapsedTime(createdAt)
+                      return `Há ${elapsed}.`
+                    })()}
+                  </div>
+                </div>
+
+                {/* Endereço */}
+                {selectedDashboardOrder.orderType === 'delivery' && (
+                  <div className="border-t pt-3 space-y-1 text-sm">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="h-4 w-4 text-muted-foreground mt-0.5" />
+                      <div className="flex-1">
+                        <div>Rua {selectedDashboardOrder.delivery?.deliveryAddress?.streetName || selectedDashboardOrder.delivery?.address?.streetName || 'N/A'}, {selectedDashboardOrder.delivery?.deliveryAddress?.streetNumber || selectedDashboardOrder.delivery?.address?.streetNumber || ''}</div>
+                        <div>{selectedDashboardOrder.delivery?.deliveryAddress?.neighborhood || selectedDashboardOrder.delivery?.address?.neighborhood || ''} - {selectedDashboardOrder.delivery?.deliveryAddress?.city || selectedDashboardOrder.delivery?.address?.city || ''} • {selectedDashboardOrder.delivery?.deliveryAddress?.postalCode || selectedDashboardOrder.delivery?.address?.postalCode || ''}</div>
+                        {selectedDashboardOrder.delivery?.deliveryAddress?.complement && (
+                          <div>Complemento {selectedDashboardOrder.delivery.deliveryAddress.complement}</div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Observações */}
+                {selectedDashboardOrder.notes && (
+                  <div className="border-t pt-3">
+                    <div className="bg-gray-50 rounded-lg p-3 text-sm">
+                      <p>{selectedDashboardOrder.notes}</p>
+                      <div className="mt-2">
+                        <Badge variant="outline" className="text-xs">Entrega própria</Badge>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Itens do Pedido */}
+                {selectedDashboardOrder.items && selectedDashboardOrder.items.length > 0 && (
+                  <div className="border-t pt-3">
+                    <h4 className="font-medium text-sm mb-2">Itens do Pedido</h4>
+                    <div className="space-y-2">
+                      {selectedDashboardOrder.items.map((item: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{item.quantity}x</span>
+                            <span>{item.name}</span>
+                          </div>
+                          <span className="text-muted-foreground">
+                            {formatCurrency((item.price || 0) * (item.quantity || 0))}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 pt-3 border-t flex items-center justify-between">
+                      <span className="font-bold">Total</span>
+                      <span className="font-bold text-lg">{formatCurrency(selectedDashboardOrder.total || 0)}</span>
+                    </div>
+                  </div>
+                )}
+
+                {/* Ações */}
+                <div className="border-t pt-4 space-y-3">
+                  <div>
+                    <h4 className="font-medium text-sm mb-2">Problemas com este pedido?</h4>
+                    <Button variant="ghost" size="sm" className="text-red-600 p-0 h-auto">
+                      <Phone className="h-4 w-4 mr-2" />
+                      Fale com o iFood
+                    </Button>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1">
+                      <Package className="h-4 w-4 mr-2" />
+                      Imprimir
+                    </Button>
+                    {selectedDashboardOrder.ifood_status === 'PREPARATION_STARTED' || selectedDashboardOrder.ifood_status === 'CONFIRMED' ? (
+                      <Button 
+                        className="flex-1 bg-green-600 hover:bg-green-700"
+                        size="sm"
+                        onClick={async () => {
+                          // Implementar despacho do pedido
+                          try {
+                            const response = await fetch(`${backendUrl}/api/ifood/dispatch-order/${selectedDashboardOrder.id}`, {
+                              method: 'POST'
+                            })
+                            const result = await response.json()
+                            if (result.success) {
+                              await loadActiveOrders()
+                              await loadDispatchedOrders()
+                              setSelectedDashboardOrder(null)
+                            }
+                          } catch (error) {
+                            console.error('Erro ao despachar pedido:', error)
+                          }
+                        }}
+                      >
+                        Despachar
+                      </Button>
+                    ) : null}
+                  </div>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="w-full border-red-500 text-red-600 hover:bg-red-50"
+                    onClick={async () => {
+                      if (confirm('Tem certeza que deseja cancelar este pedido?')) {
+                        try {
+                          const response = await fetch(`${backendUrl}/api/ifood/cancel-order/${selectedDashboardOrder.id}`, {
+                            method: 'POST'
+                          })
+                          const result = await response.json()
+                          if (result.success) {
+                            await loadActiveOrders()
+                            await loadDispatchedOrders()
+                            await loadConcludedOrders()
+                            setSelectedDashboardOrder(null)
+                          }
+                        } catch (error) {
+                          console.error('Erro ao cancelar pedido:', error)
+                        }
+                      }
+                    }}
+                  >
+                    Cancelar pedido
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Pedidos Pendentes */}
+      {status?.active && pendingOrders.length > 0 && (
+        <Card className="bg-gray-50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CardTitle className="text-lg">Pedidos Pendentes</CardTitle>
+                <Badge className="bg-gray-700 text-white">{pendingOrders.length}</Badge>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={loadPendingOrders}
+                  disabled={loadingOrders}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                  Atualizar
+                </Button>
+                <ChevronUp className="h-4 w-4 text-muted-foreground" />
+              </div>
+            </div>
+            <CardDescription className="mt-1">
+              Pedidos recebidos do iFood aguardando aceitação
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {loadingOrders ? (
@@ -991,16 +1512,8 @@ export function IfoodIntegration() {
                 <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
                 <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
               </div>
-            ) : pendingOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Nenhum pedido pendente</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Os pedidos recebidos do iFood aparecerão aqui
-                </p>
-              </div>
             ) : (
-              <div className={`space-y-4 ${pendingOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
+              <div className="flex flex-wrap gap-3">
                 {pendingOrders.map((order) => {
                     try {
                       console.log('[Frontend] Rendering order:', {
@@ -1029,104 +1542,40 @@ export function IfoodIntegration() {
                         return sum + (typeof qty === 'number' ? qty : 0)
                       }, 0)
                       
+                      const orderDisplayId = order.displayId || order.shortReference || order.id
+                      const createdAt = order.createdAt
+                      const elapsedTime = createdAt ? getElapsedTime(createdAt) : '0min'
+                      
                       return (
-                    <div
-                      key={order.id}
-                      className="border rounded-lg p-4 space-y-3 cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => {
-                        setSelectedOrder(order)
-                        setIsOrderDetailOpen(true)
-                      }}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className="font-semibold text-lg">Pedido #{order.displayId || order.shortReference || order.id}</span>
-                            <Badge variant="outline" className={
-                              isDelivery 
-                                ? 'bg-blue-50 text-blue-700 border-blue-200'
-                                : isTakeout
-                                  ? 'bg-purple-50 text-purple-700 border-purple-200'
-                                  : 'bg-green-50 text-green-700 border-green-200'
-                            }>
-                              {isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Consumir no local'}
-                            </Badge>
+                        <div
+                          key={order.id}
+                          className="bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow"
+                          onClick={() => {
+                            setSelectedOrder(order)
+                            setIsOrderDetailOpen(true)
+                          }}
+                        >
+                          <div className="flex items-start gap-2 mb-2">
+                            <input
+                              type="checkbox"
+                              className="mt-1"
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            <div className="flex items-center gap-1 text-xs text-muted-foreground flex-1">
+                              <ShoppingBag className="h-3 w-3" />
+                              <span>{isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Própria'}</span>
+                            </div>
                           </div>
-                          <div className="text-sm text-muted-foreground space-y-1">
-                            <div className="flex items-center gap-2">
-                              <User className="h-3 w-3" />
-                              <span className="font-medium">Cliente:</span>
-                              <span>{customerName}</span>
-                              {customerPhone && (
-                                <span className="ml-2">• {customerPhone}</span>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-3 w-3" />
-                              <span>{formatDate(order.createdAt)}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Package className="h-3 w-3" />
-                              <span>{itemsCount} {itemsCount === 1 ? 'item' : 'itens'}</span>
-                            </div>
-                            {order.delivery?.deliveryAddress && (
-                              <div className="flex items-start gap-2 mt-1">
-                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                <span className="text-xs">
-                                  {order.delivery.deliveryAddress.streetName || order.delivery.deliveryAddress.street || ''}, {order.delivery.deliveryAddress.streetNumber || order.delivery.deliveryAddress.number || ''}
-                                  {order.delivery.deliveryAddress.complement && ` - ${order.delivery.deliveryAddress.complement}`}
-                                  {', '}
-                                  {order.delivery.deliveryAddress.neighborhood || ''}, {order.delivery.deliveryAddress.city || ''} - {order.delivery.deliveryAddress.state || ''}
-                                  {(order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode) && `, ${order.delivery.deliveryAddress.postalCode || order.delivery.deliveryAddress.zipCode}`}
-                                </span>
-                              </div>
-                            )}
-                            {order.delivery?.address && !order.delivery?.deliveryAddress && (
-                              <div className="flex items-start gap-2 mt-1">
-                                <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
-                                <span className="text-xs">
-                                  {order.delivery.address.streetName || order.delivery.address.street || ''}, {order.delivery.address.streetNumber || order.delivery.address.number || ''}
-                                  {order.delivery.address.complement && ` - ${order.delivery.address.complement}`}
-                                  {', '}
-                                  {order.delivery.address.neighborhood || ''}, {order.delivery.address.city || ''} - {order.delivery.address.state || ''}
-                                  {(order.delivery.address.postalCode || order.delivery.address.zipCode) && `, ${order.delivery.address.postalCode || order.delivery.address.zipCode}`}
-                                </span>
-                              </div>
-                            )}
+                          <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
+                          <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
+                          <div className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded text-center mb-2">
+                            {elapsedTime}
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatCurrency(totalAmount)}
                           </div>
                         </div>
-                        <div className="text-right ml-4">
-                          <div className="font-bold text-lg text-primary">
-                              {formatCurrency(totalAmount)}
-                          </div>
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Clique para ver detalhes
-                          </div>
-                        </div>
-                      </div>
-                      <div className="border-t pt-3">
-                        <div className="text-sm font-medium mb-2">Resumo dos Itens:</div>
-                        <div className="space-y-1">
-                          {(order.items || []).slice(0, 3).map((item: any, idx: number) => (
-                            <div key={item.id || idx} className="flex items-center justify-between text-sm">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{item.quantity}x</span>
-                                <span className="truncate">{item.name}</span>
-                              </div>
-                              <span className="text-muted-foreground flex-shrink-0 ml-2">
-                                {formatCurrency(item.totalPrice || item.price || (item.unitPrice * item.quantity) || 0)}
-                              </span>
-                            </div>
-                          ))}
-                          {(order.items || []).length > 3 && (
-                            <div className="text-xs text-muted-foreground pt-1">
-                              +{(order.items || []).length - 3} mais {((order.items || []).length - 3) === 1 ? 'item' : 'itens'}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    )
+                      )
                   } catch (error) {
                     // #region agent log
                     fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
@@ -1150,367 +1599,6 @@ export function IfoodIntegration() {
         </Card>
       )}
 
-      {/* Active Orders Card (Accepted and In Preparation) */}
-      {status?.active && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Pedidos em Andamento</CardTitle>
-                <CardDescription>
-                  Pedidos aceitos e em preparação do iFood
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadActiveOrders}
-                disabled={loadingActiveOrders}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loadingActiveOrders ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingActiveOrders ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
-              </div>
-            ) : activeOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Nenhum pedido em andamento</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Pedidos aceitos e em preparação aparecerão aqui
-                </p>
-              </div>
-            ) : (
-              <div className={`space-y-4 ${activeOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
-                {activeOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="border rounded-lg p-4 space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
-                          <Badge variant="outline" className={
-                            order.ifood_status === 'CONFIRMED' 
-                              ? 'bg-blue-50 text-blue-700 border-blue-200'
-                              : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                          }>
-                            {getIfoodStatusLabel(order.ifood_status)}
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Cliente:</span>
-                            <span>{order.customer}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-3 w-3" />
-                            <span>{order.time}</span>
-                          </div>
-                          {order.notes && (
-                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                              <span className="font-medium">Observações:</span>{' '}
-                              {order.notes}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="font-bold text-lg text-primary">
-                          {formatCurrency(order.total)}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          asChild
-                        >
-                          <Link to={`/orders/${order.id}`}>
-                            Ver Detalhes
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="border-t pt-3">
-                      <div className="text-sm font-medium mb-2">Itens do Pedido ({order.items.length}):</div>
-                      <div className="space-y-2">
-                        {order.items.slice(0, 3).map((item: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{item.quantity}x</span>
-                              <span>{item.name}</span>
-                            </div>
-                            <span className="text-muted-foreground">
-                              {formatCurrency(item.price * item.quantity)}
-                            </span>
-                          </div>
-                        ))}
-                        {order.items.length > 3 && (
-                          <div className="text-xs text-muted-foreground pt-1">
-                            +{order.items.length - 3} mais item(ns)
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Dispatched Orders Card */}
-      {status?.active && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Pedidos Despachados</CardTitle>
-                <CardDescription>
-                  Pedidos em entrega do iFood
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadDispatchedOrders}
-                disabled={loadingDispatchedOrders}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loadingDispatchedOrders ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingDispatchedOrders ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
-              </div>
-            ) : dispatchedOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Nenhum pedido despachado</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Pedidos em entrega aparecerão aqui
-                </p>
-              </div>
-            ) : (
-              <div className={`space-y-4 ${dispatchedOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
-                {dispatchedOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="border rounded-lg p-4 space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
-                          <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200">
-                            Despachado
-                          </Badge>
-                        </div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Cliente:</span>
-                            <span>{order.customer}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-3 w-3" />
-                            <span>{order.time}</span>
-                          </div>
-                          {order.notes && (
-                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                              <span className="font-medium">Observações:</span>{' '}
-                              {order.notes}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="font-bold text-lg text-primary">
-                          {formatCurrency(order.total)}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          asChild
-                        >
-                          <Link to={`/orders/${order.id}`}>
-                            Ver Detalhes
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="border-t pt-3">
-                      <div className="text-sm font-medium mb-2">Itens do Pedido ({order.items.length}):</div>
-                      <div className="space-y-2">
-                        {order.items.slice(0, 3).map((item: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{item.quantity}x</span>
-                              <span>{item.name}</span>
-                            </div>
-                            <span className="text-muted-foreground">
-                              {formatCurrency(item.price * item.quantity)}
-                            </span>
-                          </div>
-                        ))}
-                        {order.items.length > 3 && (
-                          <div className="text-xs text-muted-foreground pt-1">
-                            +{order.items.length - 3} mais item(ns)
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Concluded Orders Card */}
-      {status?.active && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Pedidos Finalizados</CardTitle>
-                <CardDescription>
-                  Pedidos entregues, finalizados e cancelados do iFood
-                </CardDescription>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadConcludedOrders}
-                disabled={loadingConcludedOrders}
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${loadingConcludedOrders ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingConcludedOrders ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
-              </div>
-            ) : concludedOrders.length === 0 ? (
-              <div className="text-center py-8">
-                <ShoppingBag className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
-                <p className="text-muted-foreground">Nenhum pedido finalizado ou cancelado</p>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Pedidos entregues ou cancelados aparecerão aqui
-                </p>
-              </div>
-            ) : (
-              <div className={`space-y-4 ${concludedOrders.length > 3 ? 'max-h-[600px] overflow-y-auto pr-2' : ''}`}>
-                {concludedOrders.map((order) => (
-                  <div
-                    key={order.id}
-                    className="border rounded-lg p-4 space-y-3"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-semibold text-lg">Pedido #{order.ifood_display_id || order.id}</span>
-                          {order.status === 'Cancelled' || order.ifood_status === 'CANCELLED' ? (
-                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                              Cancelado
-                            </Badge>
-                          ) : (
-                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                              Finalizado
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="text-sm text-muted-foreground space-y-1">
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">Cliente:</span>
-                            <span>{order.customer}</span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-3 w-3" />
-                            <span>
-                              {order.status === 'Cancelled' || order.ifood_status === 'CANCELLED' 
-                                ? 'Cancelado em: ' 
-                                : 'Finalizado em: '}
-                              {order.closedAt ? new Date(order.closedAt).toLocaleString('pt-BR') : order.time}
-                            </span>
-                          </div>
-                          {order.paymentMethod && (
-                            <div className="text-xs">
-                              <span className="font-medium">Pagamento:</span>{' '}
-                              {order.paymentMethod === 'Cash' ? 'Dinheiro' : 
-                               order.paymentMethod === 'Card' ? 'Cartão' :
-                               order.paymentMethod === 'PIX' ? 'PIX' : order.paymentMethod}
-                            </div>
-                          )}
-                          {order.notes && (
-                            <div className="mt-2 p-2 bg-gray-50 rounded text-xs">
-                              <span className="font-medium">Observações:</span>{' '}
-                              {order.notes}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="text-right ml-4">
-                        <div className="font-bold text-lg text-primary">
-                          {formatCurrency(order.total)}
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="mt-2"
-                          asChild
-                        >
-                          <Link to={`/orders/${order.id}`}>
-                            Ver Detalhes
-                          </Link>
-                        </Button>
-                      </div>
-                    </div>
-                    <div className="border-t pt-3">
-                      <div className="text-sm font-medium mb-2">Itens do Pedido ({order.items.length}):</div>
-                      <div className="space-y-2">
-                        {order.items.slice(0, 3).map((item: any, idx: number) => (
-                          <div key={idx} className="flex items-center justify-between text-sm">
-                            <div className="flex items-center gap-2">
-                              <span className="font-medium">{item.quantity}x</span>
-                              <span>{item.name}</span>
-                            </div>
-                            <span className="text-muted-foreground">
-                              {formatCurrency(item.price * item.quantity)}
-                            </span>
-                          </div>
-                        ))}
-                        {order.items.length > 3 && (
-                          <div className="text-xs text-muted-foreground pt-1">
-                            +{order.items.length - 3} mais item(ns)
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
       {/* Modal de Detalhes do Pedido Pendente */}
       <Dialog open={isOrderDetailOpen} onOpenChange={setIsOrderDetailOpen}>
