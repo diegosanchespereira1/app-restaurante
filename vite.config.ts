@@ -14,10 +14,7 @@ export default defineConfig({
     }
   },
   preview: {
-    // Configuração para o preview também
-    fs: {
-      strict: false
-    }
+    // Configuração para o preview
   },
   build: {
     // Garantir que o build funcione corretamente com a base URL

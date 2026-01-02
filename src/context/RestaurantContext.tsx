@@ -260,8 +260,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 
                 // Sort by created_at descending to keep most recent duplicates
                 formattedOrders.sort((a, b) => {
-                    const dateA = new Date(a.created_at).getTime()
-                    const dateB = new Date(b.created_at).getTime()
+                    const dateA = new Date(a.created_at || 0).getTime()
+                    const dateB = new Date(b.created_at || 0).getTime()
                     return dateB - dateA
                 })
                 
@@ -308,8 +308,8 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 
                 // Sort again by created_at descending for display
                 uniqueOrders.sort((a, b) => {
-                    const dateA = new Date(a.created_at).getTime()
-                    const dateB = new Date(b.created_at).getTime()
+                    const dateA = new Date(a.created_at || 0).getTime()
+                    const dateB = new Date(b.created_at || 0).getTime()
                     return dateB - dateA
                 })
                 

@@ -1531,23 +1531,24 @@ export function IfoodIntegration() {
                         hasItems: !!(order.items && order.items.length > 0)
                       })
                       
-                      // Handle different customer structures
-                      const customerName = typeof order.customer === 'object' && order.customer?.name 
-                        ? order.customer.name 
-                        : typeof order.customer === 'string' 
-                          ? order.customer 
-                          : 'Cliente iFood'
-                      const customerPhone = typeof order.customer === 'object' 
-                        ? (order.customer?.phone?.number || order.customer?.phoneNumber)
-                        : null
+                      // Variáveis para uso futuro - descomentar quando necessário
+                      // const customerName = typeof order.customer === 'object' && order.customer?.name 
+                      //   ? order.customer.name 
+                      //   : typeof order.customer === 'string' 
+                      //     ? order.customer 
+                      //     : 'Cliente iFood'
+                      // const customerPhone = typeof order.customer === 'object' 
+                      //   ? (order.customer?.phone?.number || order.customer?.phoneNumber)
+                      //   : null
+                      // const itemsCount = (order.items || []).reduce((sum: number, item: any) => {
+                      //   const qty = item.quantity || 0
+                      //   return sum + (typeof qty === 'number' ? qty : 0)
+                      // }, 0)
+                      
                       const orderType = order.orderType || 'DELIVERY'
                       const isDelivery = orderType === 'DELIVERY'
                       const isTakeout = orderType === 'TAKEOUT'
                       const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
-                      const itemsCount = (order.items || []).reduce((sum: number, item: any) => {
-                        const qty = item.quantity || 0
-                        return sum + (typeof qty === 'number' ? qty : 0)
-                      }, 0)
                       
                       const orderDisplayId = order.displayId || order.shortReference || order.id
                       const createdAt = order.createdAt
