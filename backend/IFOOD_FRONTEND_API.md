@@ -434,3 +434,4 @@ async function handleRequest() {
 - **Referência de API**: `backend/IFOOD_API_REFERENCE.md`
 - **Documentação Oficial**: https://developer.ifood.com.br/pt-BR/docs/categories/?category=FOOD
 
+

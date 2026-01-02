@@ -49,3 +49,4 @@ WHERE ifood_order_id IS NOT NULL
 GROUP BY ifood_order_id
 HAVING COUNT(*) > 1;
 
+

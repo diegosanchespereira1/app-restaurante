@@ -137,3 +137,4 @@ export interface IfoodAuthInfo {
   token_expires_in_seconds?: number | null
 }
 
+

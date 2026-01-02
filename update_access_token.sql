@@ -18,3 +18,4 @@ WHERE id IS NOT NULL; -- Update all records (or add WHERE clause to target speci
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+

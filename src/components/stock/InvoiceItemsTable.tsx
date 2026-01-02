@@ -186,3 +186,4 @@ export function InvoiceItemsTable({ items, onItemsChange }: InvoiceItemsTablePro
 
 
 
+

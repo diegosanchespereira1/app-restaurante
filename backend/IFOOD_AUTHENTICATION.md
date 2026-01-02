@@ -263,3 +263,4 @@ Para mais informações sobre aplicativos centralizados ou distribuídos, consul
 - **Fluxo Distribuído**: https://developer.ifood.com.br/pt-BR/docs/guides/modules/authentication/distributed
 - **API Reference**: https://developer.ifood.com.br/pt-BR/docs/references/#operations-OAuth-oauthTokenV1
 
+

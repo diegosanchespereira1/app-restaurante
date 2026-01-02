@@ -13,3 +13,4 @@ WHERE refresh_token IS NULL OR refresh_token = '';
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+

@@ -8,3 +8,4 @@ COMMENT ON COLUMN public.ifood_integration.authorization_code_verifier IS 'Verif
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+

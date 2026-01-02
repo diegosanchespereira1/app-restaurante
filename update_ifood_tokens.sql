@@ -18,3 +18,4 @@ WHERE refresh_token IS NULL OR refresh_token = '' OR authorization_code_verifier
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+

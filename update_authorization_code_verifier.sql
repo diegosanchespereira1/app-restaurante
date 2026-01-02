@@ -14,3 +14,4 @@ WHERE authorization_code_verifier IS NULL OR authorization_code_verifier = '';
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+
