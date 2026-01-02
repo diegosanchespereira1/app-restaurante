@@ -1,0 +1,16 @@
+-- Update refresh_token with the provided value
+-- Execute this script to update the refresh_token in the ifood_integration table
+
+UPDATE public.ifood_integration 
+SET refresh_token = 'eyJraWQiOiJlZGI4NWY2Mi00ZWY5LTExZTktODY0Ny1kNjYzYmQ4NzNkOTMiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIwZmNjZTI2NC1lODE0LTQzMDQtODVlNC01YTM5MWNhYmRkYzciLCJpc3MiOiJpRm9vZCIsImV4cCI6MTc2NzcxODE3MiwiaWF0IjoxNzY3MTEzMzcyLCJjbGllbnRfaWQiOiIwMjExZWU1NS05OTlhLTQ3YjUtYTQ1My1kNDdiNmM4MWE1ZDUifQ.Sd6uhzXYfOQojfxCldjXtg-IMcryyPmdRvg4PaS8quayF7r1RcpIGr_sqs1EUY3NhVdnElhIPDGEJpQJQBOK3i8C_3mGirZR7VWaO6WFJel7KYjXgMbtACiL30T_l3vMortPD_97guCdeLMn5HxpERoBAmUb3kOFatwBy_PykKc'
+WHERE refresh_token IS NULL OR refresh_token = '';
+
+-- Or update a specific record by merchant_id (uncomment and adjust as needed):
+-- UPDATE public.ifood_integration 
+-- SET refresh_token = 'eyJraWQiOiJlZGI4NWY2Mi00ZWY5LTExZTktODY0Ny1kNjYzYmQ4NzNkOTMiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIwZmNjZTI2NC1lODE0LTQzMDQtODVlNC01YTM5MWNhYmRkYzciLCJpc3MiOiJpRm9vZCIsImV4cCI6MTc2NzcxODE3MiwiaWF0IjoxNzY3MTEzMzcyLCJjbGllbnRfaWQiOiIwMjExZWU1NS05OTlhLTQ3YjUtYTQ1My1kNDdiNmM4MWE1ZDUifQ.Sd6uhzXYfOQojfxCldjXtg-IMcryyPmdRvg4PaS8quayF7r1RcpIGr_sqs1EUY3NhVdnElhIPDGEJpQJQBOK3i8C_3mGirZR7VWaO6WFJel7KYjXgMbtACiL30T_l3vMortPD_97guCdeLMn5HxpERoBAmUb3kOFatwBy_PykKc'
+-- WHERE merchant_id = 'YOUR_MERCHANT_ID';
+
+-- Force schema cache reload
+NOTIFY pgrst, 'reload config';
+
+

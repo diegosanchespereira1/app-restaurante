@@ -1,0 +1,21 @@
+-- Update both refresh_token and authorization_code_verifier with the provided values
+-- Execute this script after running add_authorization_code_verifier_to_ifood.sql
+-- This updates both tokens in a single transaction
+
+UPDATE public.ifood_integration 
+SET 
+  refresh_token = 'eyJraWQiOiJlZGI4NWY2Mi00ZWY5LTExZTktODY0Ny1kNjYzYmQ4NzNkOTMiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIwZmNjZTI2NC1lODE0LTQzMDQtODVlNC01YTM5MWNhYmRkYzciLCJpc3MiOiJpRm9vZCIsImV4cCI6MTc2NzcxODE3MiwiaWF0IjoxNzY3MTEzMzcyLCJjbGllbnRfaWQiOiIwMjExZWU1NS05OTlhLTQ3YjUtYTQ1My1kNDdiNmM4MWE1ZDUifQ.Sd6uhzXYfOQojfxCldjXtg-IMcryyPmdRvg4PaS8quayF7r1RcpIGr_sqs1EUY3NhVdnElhIPDGEJpQJQBOK3i8C_3mGirZR7VWaO6WFJel7KYjXgMbtACiL30T_l3vMortPD_97guCdeLMn5HxpERoBAmUb3kOFatwBy_PykKc',
+  authorization_code_verifier = '1c6qdlj9artsbsyjyff9h29m1s43d0sdjkzedj89u0raam9y3m8crfd9jsl06e297l67lcft3ni451tkzqyy000h1pum9uo13it'
+WHERE refresh_token IS NULL OR refresh_token = '' OR authorization_code_verifier IS NULL OR authorization_code_verifier = '';
+
+-- Or update a specific record by merchant_id (uncomment and adjust as needed):
+-- UPDATE public.ifood_integration 
+-- SET 
+--   refresh_token = 'eyJraWQiOiJlZGI4NWY2Mi00ZWY5LTExZTktODY0Ny1kNjYzYmQ4NzNkOTMiLCJ0eXAiOiJKV1QiLCJhbGciOiJSUzUxMiJ9.eyJzdWIiOiIwZmNjZTI2NC1lODE0LTQzMDQtODVlNC01YTM5MWNhYmRkYzciLCJpc3MiOiJpRm9vZCIsImV4cCI6MTc2NzcxODE3MiwiaWF0IjoxNzY3MTEzMzcyLCJjbGllbnRfaWQiOiIwMjExZWU1NS05OTlhLTQ3YjUtYTQ1My1kNDdiNmM4MWE1ZDUifQ.Sd6uhzXYfOQojfxCldjXtg-IMcryyPmdRvg4PaS8quayF7r1RcpIGr_sqs1EUY3NhVdnElhIPDGEJpQJQBOK3i8C_3mGirZR7VWaO6WFJel7KYjXgMbtACiL30T_l3vMortPD_97guCdeLMn5HxpERoBAmUb3kOFatwBy_PykKc',
+--   authorization_code_verifier = '1c6qdlj9artsbsyjyff9h29m1s43d0sdjkzedj89u0raam9y3m8crfd9jsl06e297l67lcft3ni451tkzqyy000h1pum9uo13it'
+-- WHERE merchant_id = 'YOUR_MERCHANT_ID';
+
+-- Force schema cache reload
+NOTIFY pgrst, 'reload config';
+
+

@@ -12,8 +12,25 @@ const app = express()
 const PORT = parseInt(process.env.BACKEND_PORT || '3000', 10)
 
 // Middlewares
+// CORS: Permitir GitHub Pages e localhost
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  'https://diegosanchespereira1.github.io',
+  'http://localhost:5173',
+  'http://localhost:3000'
+].filter(Boolean) as string[]
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Permitir requisições sem origin (mobile apps, Postman, etc)
+    if (!origin) return callback(null, true)
+    
+    if (allowedOrigins.includes(origin) || origin.includes('github.io')) {
+      callback(null, true)
+    } else {
+      callback(new Error('Not allowed by CORS'))
+    }
+  },
   credentials: true
 }))
 
@@ -48,31 +65,50 @@ app.get('/', (req, res) => {
   })
 })
 
+// Rota catch-all para rotas não encontradas (404)
+app.use((req: express.Request, res: express.Response) => {
+  console.warn(`[404] Rota não encontrada: ${req.method} ${req.path}`)
+  res.status(404).json({
+    success: false,
+    message: `Rota não encontrada: ${req.method} ${req.path}`,
+    path: req.path,
+    method: req.method
+  })
+})
+
 // Tratamento de erros
 app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
   console.error('Erro não tratado:', err)
   res.status(500).json({
     success: false,
-    message: 'Erro interno do servidor'
+    message: 'Erro interno do servidor',
+    error: process.env.NODE_ENV === 'development' ? err.message : undefined
   })
 })
 
-// Iniciar servidor
-app.listen(PORT, async () => {
-  console.log(`🚀 Servidor backend rodando na porta ${PORT}`)
-  console.log(`📡 Frontend esperado em: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`)
-  console.log(`⏱️  Timeout de impressora: ${process.env.PRINTER_TIMEOUT || '5000'}ms`)
-  
-  // Inicializar serviço de polling do iFood
-  try {
-    const pollingService = new IfoodPollingService()
-    await pollingService.start()
-    console.log('✅ Serviço de polling do iFood inicializado')
-  } catch (error) {
-    console.error('⚠️  Erro ao inicializar serviço de polling do iFood:', error)
-    console.log('   (Isso é normal se a integração não estiver configurada)')
-  }
-})
+// Exportar app para Vercel (serverless)
+// No Vercel, este será o handler da função serverless
+export default app
+
+// Iniciar servidor apenas se não estiver no Vercel
+// O Vercel não executa este código, apenas usa o export default
+if (typeof process !== 'undefined' && !process.env.VERCEL) {
+  app.listen(PORT, async () => {
+    console.log(`🚀 Servidor backend rodando na porta ${PORT}`)
+    console.log(`📡 Frontend esperado em: ${process.env.FRONTEND_URL || 'http://localhost:5173'}`)
+    console.log(`⏱️  Timeout de impressora: ${process.env.PRINTER_TIMEOUT || '5000'}ms`)
+    
+    // Inicializar serviço de polling do iFood
+    try {
+      const pollingService = new IfoodPollingService()
+      await pollingService.start()
+      console.log('✅ Serviço de polling do iFood inicializado')
+    } catch (error) {
+      console.error('⚠️  Erro ao inicializar serviço de polling do iFood:', error)
+      console.log('   (Isso é normal se a integração não estiver configurada)')
+    }
+  })
+}
 
 
 
