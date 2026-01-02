@@ -1531,20 +1531,6 @@ export function IfoodIntegration() {
                         hasItems: !!(order.items && order.items.length > 0)
                       })
                       
-                      // Variáveis para uso futuro - descomentar quando necessário
-                      // const customerName = typeof order.customer === 'object' && order.customer?.name 
-                      //   ? order.customer.name 
-                      //   : typeof order.customer === 'string' 
-                      //     ? order.customer 
-                      //     : 'Cliente iFood'
-                      // const customerPhone = typeof order.customer === 'object' 
-                      //   ? (order.customer?.phone?.number || order.customer?.phoneNumber)
-                      //   : null
-                      // const itemsCount = (order.items || []).reduce((sum: number, item: any) => {
-                      //   const qty = item.quantity || 0
-                      //   return sum + (typeof qty === 'number' ? qty : 0)
-                      // }, 0)
-                      
                       const orderType = order.orderType || 'DELIVERY'
                       const isDelivery = orderType === 'DELIVERY'
                       const isTakeout = orderType === 'TAKEOUT'
@@ -1686,23 +1672,47 @@ export function IfoodIntegration() {
                     <User className="h-4 w-4" />
                     Informações do Cliente
                   </h3>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="font-medium">Nome:</span>
-                      <span className="ml-2">{typeof selectedOrder.customer === 'object' ? selectedOrder.customer.name : selectedOrder.customer}</span>
-                    </div>
-                    {(typeof selectedOrder.customer === 'object' && selectedOrder.customer.phone) && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">Telefone:</span>
-                        <span>{selectedOrder.customer.phone.number}</span>
-                        {selectedOrder.customer.phone.localizer && (
-                          <span className="text-xs text-muted-foreground">
-                            (Localizador: {selectedOrder.customer.phone.localizer})
-                          </span>
+                  {(() => {
+                    // Calcular variáveis para exibição
+                    const customerName = typeof selectedOrder.customer === 'object' && selectedOrder.customer?.name 
+                      ? selectedOrder.customer.name 
+                      : typeof selectedOrder.customer === 'string' 
+                        ? selectedOrder.customer 
+                        : 'Cliente iFood'
+                    const customerPhone = typeof selectedOrder.customer === 'object' 
+                      ? (selectedOrder.customer?.phone?.number || selectedOrder.customer?.phoneNumber)
+                      : null
+                    const itemsCount = (selectedOrder.items || []).reduce((sum: number, item: any) => {
+                      const qty = item.quantity || 0
+                      return sum + (typeof qty === 'number' ? qty : 0)
+                    }, 0)
+                    
+                    return (
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium">Nome do Cliente:</span>
+                          <span className="ml-2">{customerName}</span>
+                        </div>
+                        {customerPhone && (
+                          <div className="flex items-center gap-2">
+                            <Phone className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">Tel do Cliente:</span>
+                            <span>{customerPhone}</span>
+                            {typeof selectedOrder.customer === 'object' && selectedOrder.customer.phone?.localizer && (
+                              <span className="text-xs text-muted-foreground">
+                                (Localizador: {selectedOrder.customer.phone.localizer})
+                              </span>
+                            )}
+                          </div>
                         )}
+                        <div>
+                          <span className="font-medium">Quantidade dos itens:</span>
+                          <span className="ml-2">{itemsCount}</span>
+                        </div>
                       </div>
-                    )}
+                    )
+                  })()}
+                  <div className="grid grid-cols-2 gap-4 text-sm mt-4">
                     {(typeof selectedOrder.customer === 'object' && selectedOrder.customer.documentNumber) && (
                       <div>
                         <span className="font-medium">Documento:</span>
