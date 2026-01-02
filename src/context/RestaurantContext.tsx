@@ -46,6 +46,7 @@ export interface Order {
     // Campos do iFood
     source?: "manual" | "ifood"
     ifood_order_id?: string | null
+    ifood_display_id?: string | null
     ifood_status?: string | null
 }
 
@@ -232,6 +233,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                     orderType: o.order_type || 'dine_in',
                     source: o.source || 'manual',
                     ifood_order_id: o.ifood_order_id || null,
+                    ifood_display_id: o.ifood_display_id || null,
                     ifood_status: o.ifood_status || null,
                     order_discount_type: o.order_discount_type || null,
                     order_discount_value: o.order_discount_value || null,
@@ -541,15 +543,57 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         const orderBeforeUpdate = orders.find(o => o.id === orderId)
         const isIfoodOrder = orderBeforeUpdate?.source === 'ifood' && orderBeforeUpdate.ifood_order_id
         
-        const { error } = await supabase.from('orders').update({ status }).eq('id', orderId)
+        // Map system status to iFood status for database update
+        let ifoodStatus: string | null = null
+        if (isIfoodOrder) {
+          switch (status.toUpperCase()) {
+            case 'PENDING':
+              ifoodStatus = 'PLACED'
+              break
+            case 'PREPARING':
+              ifoodStatus = 'PREPARATION_STARTED'
+              break
+            case 'READY':
+              ifoodStatus = 'READY_TO_PICKUP'
+              break
+            case 'DELIVERED':
+              ifoodStatus = 'DISPATCHED'
+              break
+            case 'CLOSED':
+              ifoodStatus = 'CONCLUDED'
+              break
+            case 'CANCELLED':
+              ifoodStatus = 'CANCELLED'
+              break
+          }
+        }
+        
+        // Update both status and ifood_status in database
+        const updateData: any = { status }
+        if (ifoodStatus) {
+          updateData.ifood_status = ifoodStatus
+        }
+        
+        const { error } = await supabase.from('orders').update(updateData).eq('id', orderId)
         if (error) {
             console.error("Error updating order status:", error)
             setOrders(previousOrders)
             return { success: false, error: error.message }
         }
-        console.log('Order status updated successfully in database')
+        console.log('Order status updated successfully in database', { status, ifoodStatus })
         
-        // Sync status to iFood if this is an iFood order
+        // Also update local state with ifood_status
+        if (ifoodStatus) {
+          setOrders((prev) =>
+            prev.map((order) => 
+              order.id === orderId 
+                ? { ...order, status, ifood_status: ifoodStatus } 
+                : order
+            )
+          )
+        }
+        
+        // Sync status to iFood API if this is an iFood order
         if (isIfoodOrder) {
             try {
                 const { getBackendUrl } = await import('../lib/backend-config')
@@ -563,12 +607,12 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 })
                 // Don't fail the operation if sync fails, just log it
                 if (syncResponse.ok) {
-                    console.log('Order status synced to iFood successfully')
+                    console.log('Order status synced to iFood API successfully')
                 } else {
-                    console.warn('Failed to sync order status to iFood, but order was updated in system')
+                    console.warn('Failed to sync order status to iFood API, but order was updated in system')
                 }
             } catch (syncError) {
-                console.warn('Error syncing order status to iFood:', syncError)
+                console.warn('Error syncing order status to iFood API:', syncError)
                 // Don't fail the operation if sync fails
             }
         }

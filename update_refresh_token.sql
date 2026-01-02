@@ -14,3 +14,4 @@ WHERE refresh_token IS NULL OR refresh_token = '';
 NOTIFY pgrst, 'reload config';
 
 
+

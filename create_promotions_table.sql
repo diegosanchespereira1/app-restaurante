@@ -117,3 +117,4 @@ CREATE TRIGGER update_promotions_updated_at_trigger
 NOTIFY pgrst, 'reload config';
 
 
+

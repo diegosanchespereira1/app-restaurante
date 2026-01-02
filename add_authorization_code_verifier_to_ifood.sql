@@ -9,3 +9,4 @@ COMMENT ON COLUMN public.ifood_integration.authorization_code_verifier IS 'Verif
 NOTIFY pgrst, 'reload config';
 
 
+

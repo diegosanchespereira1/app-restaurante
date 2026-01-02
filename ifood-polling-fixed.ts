@@ -822,177 +822,178 @@ export class IfoodPollingService {
             continue
           }
         
-          const ifoodOrder = orderDetailsResult.order
-          
-          // Extract current status from iFood order
-          // The status can be in different places depending on API response structure
-          let currentIfoodStatus: string | null = null
-          
-          // Try multiple ways to get the status
-          // 1. Check if order has a direct status field
-          if ((ifoodOrder as any).status) {
-            currentIfoodStatus = String((ifoodOrder as any).status).toUpperCase()
-          }
-          // 2. Check if order has events array and get latest status event
-          else if ((ifoodOrder as any).events && Array.isArray((ifoodOrder as any).events)) {
-            const events = (ifoodOrder as any).events
-            const statusEvents = events
-              .filter((e: any) => {
-                const code = (e.code || e.fullCode || '').toUpperCase()
-                return ['PLC', 'PLACED', 'CFM', 'CONFIRMED', 'SPS', 'SEPARATION_STARTED', 
-                        'SPE', 'SEPARATION_ENDED', 'RTP', 'READY_TO_PICKUP', 
-                        'DSP', 'DISPATCHED', 'CON', 'CONCLUDED', 'CAN', 'CANCELLED'].includes(code)
-              })
-              .sort((a: any, b: any) => {
-                const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
-                const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
-                return dateB - dateA // Most recent first
-              })
-         
-            if (statusEvents.length > 0) {
-              const latestEvent = statusEvents[0]
-              currentIfoodStatus = (latestEvent.fullCode || latestEvent.code || '').toUpperCase()
-            }
-          }
-          // 3. Check if order has a lastEvent field
-          else if ((ifoodOrder as any).lastEvent) {
-            const lastEvent = (ifoodOrder as any).lastEvent
-            currentIfoodStatus = (lastEvent.fullCode || lastEvent.code || '').toUpperCase()
-          }
-          
-          // If we still couldn't determine status, try to infer from order state
-          // Some APIs return status in different formats
-          if (!currentIfoodStatus) {
-            // Check for common status field names
-            const possibleStatusFields = ['orderStatus', 'currentStatus', 'state', 'orderState']
-            for (const field of possibleStatusFields) {
-              if ((ifoodOrder as any)[field]) {
-                currentIfoodStatus = String((ifoodOrder as any)[field]).toUpperCase()
-                break
-              }
-            }
-          }
-          
-          // If we still couldn't determine status, log and skip this order
-          if (!currentIfoodStatus) {
-            console.warn(`[syncAllOrdersStatus] Could not determine status for order ${order.ifood_order_id}. Order structure:`, JSON.stringify(ifoodOrder).substring(0, 500))
-            continue
-          }
-          
-          // Normalize status codes (handle both short and full codes)
-          const statusMap: Record<string, string> = {
-            'PLC': 'PLACED',
-            'PLACED': 'PLACED',
-            'CFM': 'CONFIRMED',
-            'CONFIRMED': 'CONFIRMED',
-            'SPS': 'PREPARATION_STARTED',
-            'SEPARATION_STARTED': 'PREPARATION_STARTED',
-            'PREPARATION_STARTED': 'PREPARATION_STARTED',
-            'SPE': 'SEPARATION_ENDED',
-            'SEPARATION_ENDED': 'SEPARATION_ENDED',
-            'RTP': 'READY_TO_PICKUP',
-            'READY_TO_PICKUP': 'READY_TO_PICKUP',
-            'DSP': 'DISPATCHED',
-            'DISPATCHED': 'DISPATCHED',
-            'CON': 'CONCLUDED',
-            'CONCLUDED': 'CONCLUDED',
-            'CAN': 'CANCELLED',
-            'CANCELLED': 'CANCELLED'
-          }
-          
-          currentIfoodStatus = statusMap[currentIfoodStatus] || currentIfoodStatus
-          
-          // Map iFood status to system status
-          let systemStatus = order.status
-          let ifoodStatus = currentIfoodStatus
-          
-          switch (currentIfoodStatus.toUpperCase()) {
-            case 'PLACED':
-            case 'PLC':
-              systemStatus = 'Pending'
-              ifoodStatus = 'PLACED'
-              break
-            case 'CONFIRMED':
-            case 'CFM':
-              systemStatus = 'Preparing'
-              ifoodStatus = 'CONFIRMED'
-              break
-            case 'PREPARATION_STARTED':
-            case 'SEPARATION_STARTED':
-            case 'SPS':
-              systemStatus = 'Preparing'
-              ifoodStatus = 'PREPARATION_STARTED'
-              break
-            case 'SEPARATION_ENDED':
-            case 'SPE':
-              systemStatus = 'Preparing'
-              ifoodStatus = 'SEPARATION_ENDED'
-              break
-            case 'READY_TO_PICKUP':
-            case 'RTP':
-              systemStatus = 'Ready'
-              ifoodStatus = 'READY_TO_PICKUP'
-              break
-            case 'DISPATCHED':
-            case 'DSP':
-              systemStatus = 'Delivered'
-              ifoodStatus = 'DISPATCHED'
-              break
-            case 'CONCLUDED':
-            case 'CON':
-              systemStatus = 'Closed'
-              ifoodStatus = 'CONCLUDED'
-              break
-            case 'CANCELLED':
-            case 'CAN':
-              systemStatus = 'Cancelled'
-              ifoodStatus = 'CANCELLED'
-              break
-            default:
-              // Keep current status if unknown
-              systemStatus = order.status
-              ifoodStatus = currentIfoodStatus
-          }
-          
-          // Check if status needs to be updated
-          if (order.ifood_status !== ifoodStatus || order.status !== systemStatus) {
-            console.log(`[syncAllOrdersStatus] Updating order ${order.id} (iFood ${order.ifood_order_id}): ${order.ifood_status} → ${ifoodStatus}, ${order.status} → ${systemStatus}`)
-            
-            const updateData: { status: string; ifood_status: string; closed_at?: string } = {
-              status: systemStatus,
-              ifood_status: ifoodStatus
-            }
-            
-            // Set closed_at timestamp for CONCLUDED status
-            if (ifoodStatus === 'CONCLUDED') {
-              updateData.closed_at = new Date().toISOString()
-            }
-            
-            const { error: updateError } = await this.supabase
-              .from('orders')
-              .update(updateData)
-              .eq('id', order.id)
-            
-            if (updateError) {
-              console.error(`[syncAllOrdersStatus] Error updating order ${order.id}:`, updateError)
-              errors++
-            } else {
-              updated++
-              console.log(`[syncAllOrdersStatus] Successfully updated order ${order.id} to ${ifoodStatus}`)
-            }
-          }
-        } catch (error) {
-          console.error(`[syncAllOrdersStatus] Error processing order ${order.ifood_order_id}:`, error)
-          errors++
+        const ifoodOrder = orderDetailsResult.order
+        
+        // Extract current status from iFood order
+        // The status can be in different places depending on API response structure
+        let currentIfoodStatus: string | null = null
+        
+        // Try multiple ways to get the status
+        // 1. Check if order has a direct status field
+        if ((ifoodOrder as any).status) {
+          currentIfoodStatus = String((ifoodOrder as any).status).toUpperCase()
         }
+        // 2. Check if order has events array and get latest status event
+        else if ((ifoodOrder as any).events && Array.isArray((ifoodOrder as any).events)) {
+          const events = (ifoodOrder as any).events
+          const statusEvents = events
+            .filter((e: any) => {
+              const code = (e.code || e.fullCode || '').toUpperCase()
+              return ['PLC', 'PLACED', 'CFM', 'CONFIRMED', 'SPS', 'SEPARATION_STARTED', 
+                      'SPE', 'SEPARATION_ENDED', 'RTP', 'READY_TO_PICKUP', 
+                      'DSP', 'DISPATCHED', 'CON', 'CONCLUDED', 'CAN', 'CANCELLED'].includes(code)
+            })
+            .sort((a: any, b: any) => {
+              const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+              const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+              return dateB - dateA // Most recent first
+            })
+         
+          if (statusEvents.length > 0) {
+            const latestEvent = statusEvents[0]
+            currentIfoodStatus = (latestEvent.fullCode || latestEvent.code || '').toUpperCase()
+          }
+        }
+        // 3. Check if order has a lastEvent field
+        else if ((ifoodOrder as any).lastEvent) {
+          const lastEvent = (ifoodOrder as any).lastEvent
+          currentIfoodStatus = (lastEvent.fullCode || lastEvent.code || '').toUpperCase()
+        }
+        
+        // If we still couldn't determine status, try to infer from order state
+        // Some APIs return status in different formats
+        if (!currentIfoodStatus) {
+          // Check for common status field names
+          const possibleStatusFields = ['orderStatus', 'currentStatus', 'state', 'orderState']
+          for (const field of possibleStatusFields) {
+            if ((ifoodOrder as any)[field]) {
+              currentIfoodStatus = String((ifoodOrder as any)[field]).toUpperCase()
+              break
+            }
+          }
+        }
+        
+        // If we still couldn't determine status, log and skip this order
+        if (!currentIfoodStatus) {
+          console.warn(`[syncAllOrdersStatus] Could not determine status for order ${order.ifood_order_id}. Order structure:`, JSON.stringify(ifoodOrder).substring(0, 500))
+          continue
+        }
+        
+        // Normalize status codes (handle both short and full codes)
+        const statusMap: Record<string, string> = {
+          'PLC': 'PLACED',
+          'PLACED': 'PLACED',
+          'CFM': 'CONFIRMED',
+          'CONFIRMED': 'CONFIRMED',
+          'SPS': 'PREPARATION_STARTED',
+          'SEPARATION_STARTED': 'PREPARATION_STARTED',
+          'PREPARATION_STARTED': 'PREPARATION_STARTED',
+          'SPE': 'SEPARATION_ENDED',
+          'SEPARATION_ENDED': 'SEPARATION_ENDED',
+          'RTP': 'READY_TO_PICKUP',
+          'READY_TO_PICKUP': 'READY_TO_PICKUP',
+          'DSP': 'DISPATCHED',
+          'DISPATCHED': 'DISPATCHED',
+          'CON': 'CONCLUDED',
+          'CONCLUDED': 'CONCLUDED',
+          'CAN': 'CANCELLED',
+          'CANCELLED': 'CANCELLED'
+        }
+        
+        currentIfoodStatus = statusMap[currentIfoodStatus] || currentIfoodStatus
+        
+        // Map iFood status to system status
+        let systemStatus = order.status
+        let ifoodStatus = currentIfoodStatus
+        
+        switch (currentIfoodStatus.toUpperCase()) {
+          case 'PLACED':
+          case 'PLC':
+            systemStatus = 'Pending'
+            ifoodStatus = 'PLACED'
+            break
+          case 'CONFIRMED':
+          case 'CFM':
+            systemStatus = 'Preparing'
+            ifoodStatus = 'CONFIRMED'
+            break
+          case 'PREPARATION_STARTED':
+          case 'SEPARATION_STARTED':
+          case 'SPS':
+            systemStatus = 'Preparing'
+            ifoodStatus = 'PREPARATION_STARTED'
+            break
+          case 'SEPARATION_ENDED':
+          case 'SPE':
+            systemStatus = 'Preparing'
+            ifoodStatus = 'SEPARATION_ENDED'
+            break
+          case 'READY_TO_PICKUP':
+          case 'RTP':
+            systemStatus = 'Ready'
+            ifoodStatus = 'READY_TO_PICKUP'
+            break
+          case 'DISPATCHED':
+          case 'DSP':
+            systemStatus = 'Delivered'
+            ifoodStatus = 'DISPATCHED'
+            break
+          case 'CONCLUDED':
+          case 'CON':
+            systemStatus = 'Closed'
+            ifoodStatus = 'CONCLUDED'
+            break
+          case 'CANCELLED':
+          case 'CAN':
+            systemStatus = 'Cancelled'
+            ifoodStatus = 'CANCELLED'
+            break
+          default:
+            // Keep current status if unknown
+            systemStatus = order.status
+            ifoodStatus = currentIfoodStatus
+        }
+        
+        // Check if status needs to be updated
+        if (order.ifood_status !== ifoodStatus || order.status !== systemStatus) {
+          console.log(`[syncAllOrdersStatus] Updating order ${order.id} (iFood ${order.ifood_order_id}): ${order.ifood_status} → ${ifoodStatus}, ${order.status} → ${systemStatus}`)
+          
+          const updateData: { status: string; ifood_status: string; closed_at?: string } = {
+            status: systemStatus,
+            ifood_status: ifoodStatus
+          }
+          
+          // Set closed_at timestamp for CONCLUDED status
+          if (ifoodStatus === 'CONCLUDED') {
+            updateData.closed_at = new Date().toISOString()
+          }
+          
+          const { error: updateError } = await this.supabase
+            .from('orders')
+            .update(updateData)
+            .eq('id', order.id)
+          
+          if (updateError) {
+            console.error(`[syncAllOrdersStatus] Error updating order ${order.id}:`, updateError)
+            errors++
+          } else {
+            updated++
+            console.log(`[syncAllOrdersStatus] Successfully updated order ${order.id} to ${ifoodStatus}`)
+          }
+        }
+      } catch (error) {
+        console.error(`[syncAllOrdersStatus] Error processing order ${order.ifood_order_id}:`, error)
+        errors++
       }
-      
-      console.log(`[syncAllOrdersStatus] Synchronization complete: ${orders.length} checked, ${updated} updated, ${errors} errors`)
-      return { synced: orders.length, updated, errors }
-    } catch (error) {
-      console.error('[syncAllOrdersStatus] Error syncing orders status:', error)
-      return { synced: 0, updated: 0, errors: 0 }
     }
+  }
+  
+  console.log(`[syncAllOrdersStatus] Synchronization complete: ${orders.length} checked, ${updated} updated, ${errors} errors`)
+  return { synced: orders.length, updated, errors }
+} catch (error) {
+  console.error('[syncAllOrdersStatus] Error syncing orders status:', error)
+  return { synced: 0, updated: 0, errors: 0 }
+}
   }
 
   /**

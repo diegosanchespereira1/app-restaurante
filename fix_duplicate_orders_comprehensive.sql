@@ -1,4 +1,4 @@
--- Script para encontrar e corrigir pedidos duplicados do iFood
+-- Script para corrigir pedidos duplicados e problemas de sequência
 -- Execute este script no Supabase SQL Editor
 
 -- 1. Encontrar pedidos duplicados por ifood_order_id
@@ -14,10 +14,7 @@ GROUP BY ifood_order_id
 HAVING COUNT(*) > 1
 ORDER BY duplicate_count DESC;
 
--- 2. Ver detalhes dos pedidos duplicados (substitua 'SEU_IFOOD_ORDER_ID' pelo ID real)
--- SELECT * FROM orders WHERE ifood_order_id = 'SEU_IFOOD_ORDER_ID' ORDER BY created_at DESC;
-
--- 3. Remover pedidos duplicados, mantendo apenas o mais recente
+-- 2. Remover pedidos duplicados, mantendo apenas o mais recente
 -- ATENÇÃO: Faça backup antes de executar!
 -- Este script mantém o pedido mais recente e remove os mais antigos
 
@@ -40,6 +37,12 @@ WHERE id IN (
     WHERE rn > 1
 );
 
+-- 3. Remover itens de pedidos órfãos (itens que pertencem a pedidos que não existem mais)
+DELETE FROM order_items
+WHERE order_id NOT IN (
+    SELECT id FROM orders
+);
+
 -- 4. Verificar se ainda há duplicados após a limpeza
 SELECT 
     ifood_order_id,
@@ -49,5 +52,22 @@ WHERE ifood_order_id IS NOT NULL
 GROUP BY ifood_order_id
 HAVING COUNT(*) > 1;
 
+-- 5. Resetar a sequência de IDs para evitar conflitos
+-- Primeiro, encontrar o maior ID atual
+SELECT MAX(id) as max_id FROM orders;
 
+-- Depois, resetar a sequência (você precisará executar este comando separadamente)
+-- ALTER SEQUENCE orders_id_seq RESTART WITH [max_id + 1];
 
+-- 6. Verificar a integridade dos dados
+SELECT COUNT(*) as total_orders FROM orders;
+SELECT COUNT(*) as total_order_items FROM order_items;
+
+-- 7. Verificar se há pedidos com IDs duplicados na tabela principal
+SELECT 
+    id,
+    COUNT(*) as count
+FROM orders
+GROUP BY id
+HAVING COUNT(*) > 1
+ORDER BY count DESC;

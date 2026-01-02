@@ -2409,5 +2409,206 @@ router.post('/sync-order-status/:orderId', async (req: Request, res: Response) =
   }
 })
 
+/**
+ * POST /api/ifood/sync-all-orders-status
+ * Sync all iFood orders status by checking API and comparing with database
+ * This ensures status consistency between iFood API and local database
+ */
+router.post('/sync-all-orders-status', async (req: Request, res: Response) => {
+  try {
+    const pollingService = getPollingService()
+    const result = await pollingService.syncAllOrdersStatus()
+    
+    res.json({
+      success: true,
+      message: `Sincronização concluída: ${result.synced} pedidos verificados, ${result.updated} atualizados, ${result.errors} erros`,
+      ...result
+    })
+  } catch (error) {
+    console.error('Erro ao sincronizar status de todos os pedidos:', error)
+    res.status(500).json({
+      success: false,
+      message: `Erro interno: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
+    })
+  }
+})
+
+/**
+ * POST /api/ifood/start-preparation/:orderId
+ * Start preparation of an iFood order (PREPARATION_STARTED)
+ */
+router.post('/start-preparation/:orderId', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params
+    const ifoodService = new IfoodService()
+    
+    console.log(`[start-preparation] Starting preparation for order ${orderId}`)
+    
+    const result = await ifoodService.updateOrderStatus(orderId, 'PREPARATION_STARTED')
+    
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Erro ao iniciar preparação do pedido no iFood'
+      })
+    }
+    
+    // Update database
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('ifood_order_id', orderId)
+        .single()
+      
+      if (existingOrder) {
+        await supabase
+          .from('orders')
+          .update({ 
+            status: 'Preparing',
+            ifood_status: 'PREPARATION_STARTED'
+          })
+          .eq('id', existingOrder.id)
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Preparação iniciada com sucesso',
+      isAsync: result.isAsync
+    })
+  } catch (error: any) {
+    console.error('[start-preparation] Error:', error)
+    res.status(500).json({
+      success: false,
+      message: `Erro interno: ${error?.message || 'Erro desconhecido'}`
+    })
+  }
+})
+
+/**
+ * POST /api/ifood/ready-to-pickup/:orderId
+ * Mark an iFood order as ready to pickup (READY_TO_PICKUP)
+ */
+router.post('/ready-to-pickup/:orderId', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params
+    const ifoodService = new IfoodService()
+    
+    console.log(`[ready-to-pickup] Marking order ${orderId} as ready to pickup`)
+    
+    const result = await ifoodService.updateOrderStatus(orderId, 'READY_TO_PICKUP')
+    
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Erro ao marcar pedido como pronto para retirada no iFood'
+      })
+    }
+    
+    // Update database
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('ifood_order_id', orderId)
+        .single()
+      
+      if (existingOrder) {
+        await supabase
+          .from('orders')
+          .update({ 
+            status: 'Ready',
+            ifood_status: 'READY_TO_PICKUP'
+          })
+          .eq('id', existingOrder.id)
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Pedido marcado como pronto para retirada',
+      isAsync: result.isAsync
+    })
+  } catch (error: any) {
+    console.error('[ready-to-pickup] Error:', error)
+    res.status(500).json({
+      success: false,
+      message: `Erro interno: ${error?.message || 'Erro desconhecido'}`
+    })
+  }
+})
+
+/**
+ * POST /api/ifood/dispatch-order/:orderId
+ * Dispatch an iFood order (DISPATCHED)
+ */
+router.post('/dispatch-order/:orderId', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params
+    const ifoodService = new IfoodService()
+    
+    console.log(`[dispatch-order] Dispatching order ${orderId}`)
+    
+    const result = await ifoodService.updateOrderStatus(orderId, 'DISPATCHED')
+    
+    if (!result.success) {
+      return res.status(500).json({
+        success: false,
+        message: result.error || 'Erro ao despachar pedido no iFood'
+      })
+    }
+    
+    // Update database
+    const { createClient } = await import('@supabase/supabase-js')
+    const supabaseUrl = process.env.SUPABASE_URL
+    const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    
+    if (supabaseUrl && supabaseServiceKey) {
+      const supabase = createClient(supabaseUrl, supabaseServiceKey)
+      
+      const { data: existingOrder } = await supabase
+        .from('orders')
+        .select('id')
+        .eq('ifood_order_id', orderId)
+        .single()
+      
+      if (existingOrder) {
+        await supabase
+          .from('orders')
+          .update({ 
+            status: 'Delivered',
+            ifood_status: 'DISPATCHED'
+          })
+          .eq('id', existingOrder.id)
+      }
+    }
+    
+    res.json({
+      success: true,
+      message: 'Pedido despachado com sucesso',
+      isAsync: result.isAsync
+    })
+  } catch (error: any) {
+    console.error('[dispatch-order] Error:', error)
+    res.status(500).json({
+      success: false,
+      message: `Erro interno: ${error?.message || 'Erro desconhecido'}`
+    })
+  }
+})
+
 export default router
 

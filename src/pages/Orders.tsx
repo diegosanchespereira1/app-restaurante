@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react"
 import { Button } from "../components/ui/button"
-import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair } from "lucide-react"
+import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair, Store } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useSettings } from "../context/SettingsContext"
 import { Input } from "../components/ui/input"
 import { IfoodOrderBadge } from "../components/ifood/IfoodOrderBadge"
+import { getBackendUrl } from "../lib/backend-config"
 
 import { formatCurrency } from "../lib/utils"
 
@@ -15,6 +16,26 @@ export function Orders() {
     const { isTablesEnabled } = useSettings()
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
+    const [isIfoodEnabled, setIsIfoodEnabled] = useState(false)
+
+    // Verificar se o iFood está habilitado
+    useEffect(() => {
+        const checkIfoodStatus = async () => {
+            try {
+                const backendUrl = getBackendUrl()
+                const response = await fetch(`${backendUrl}/api/ifood/status`)
+                if (response.ok) {
+                    const result = await response.json()
+                    // O endpoint retorna { success: true, status: { active: boolean, ... } }
+                    setIsIfoodEnabled(result.status?.active || result.active || false)
+                }
+            } catch (error) {
+                console.error('Erro ao verificar status do iFood:', error)
+                setIsIfoodEnabled(false)
+            }
+        }
+        checkIfoodStatus()
+    }, [])
 
     // Resetar filtro "mesa" se a feature for desabilitada
     useEffect(() => {
@@ -23,15 +44,27 @@ export function Orders() {
         }
     }, [isTablesEnabled, statusFilter])
 
+    // Resetar filtro "ifood" se a feature for desabilitada
+    useEffect(() => {
+        if (!isIfoodEnabled && statusFilter === "ifood") {
+            setStatusFilter("all")
+        }
+    }, [isIfoodEnabled, statusFilter])
+
     const filteredOrders = orders.filter(order => {
-        const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        const orderDisplayId = order.source === 'ifood' && order.ifood_display_id 
+            ? order.ifood_display_id 
+            : order.id
+        const matchesSearch = orderDisplayId.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
             (order.table && order.table.toLowerCase().includes(searchQuery.toLowerCase())) ||
             order.customer.toLowerCase().includes(searchQuery.toLowerCase())
         
         const matchesStatus = statusFilter === "all" ||
             (statusFilter === "delivery" && order.orderType === "delivery") ||
             (statusFilter === "pickup" && order.orderType === "takeout") ||
-            (statusFilter === "mesa" && order.orderType === "dine_in")
+            (statusFilter === "mesa" && order.orderType === "dine_in") ||
+            (statusFilter === "ifood" && order.source === "ifood")
         
         return matchesSearch && matchesStatus
     })
@@ -183,6 +216,20 @@ export function Orders() {
                             Mesa
                         </Button>
                     )}
+                    {isIfoodEnabled && (
+                        <Button
+                            variant={statusFilter === "ifood" ? "default" : "ghost"}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
+                                statusFilter === "ifood"
+                                    ? "text-primary bg-primary/10 border border-primary/20"
+                                    : "text-muted-foreground hover:bg-accent"
+                            }`}
+                            onClick={() => setStatusFilter(statusFilter === "ifood" ? "all" : "ifood")}
+                        >
+                            <Store className="w-4 h-4" />
+                            iFood
+                        </Button>
+                    )}
                 </div>
             </section>
 
@@ -213,7 +260,11 @@ export function Orders() {
                                                 <IfoodOrderBadge ifoodStatus={order.ifood_status} />
                                             )}
                                             <div className="bg-primary text-primary-foreground px-3 py-1 rounded-full">
-                                                <span className="font-mono font-bold text-sm tracking-wider">{order.id}</span>
+                                                <span className="font-mono font-bold text-sm tracking-wider">
+                                                    {order.source === 'ifood' && order.ifood_display_id 
+                                                        ? order.ifood_display_id 
+                                                        : order.id}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>

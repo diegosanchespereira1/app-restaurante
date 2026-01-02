@@ -435,3 +435,4 @@ async function handleRequest() {
 - **Documentação Oficial**: https://developer.ifood.com.br/pt-BR/docs/categories/?category=FOOD
 
 
+

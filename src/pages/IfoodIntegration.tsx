@@ -274,7 +274,7 @@ export function IfoodIntegration() {
   const [selectedDashboardOrder, setSelectedDashboardOrder] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [message, setMessage] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null)
   const [orderUuid, setOrderUuid] = useState("")
   const [orderDetails, setOrderDetails] = useState<IfoodPendingOrder | null>(null)
   const [loadingOrderDetails, setLoadingOrderDetails] = useState(false)
@@ -327,6 +327,41 @@ export function IfoodIntegration() {
     const interval = setInterval(refreshOrders, 30000) // 30 seconds
 
     return () => clearInterval(interval)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPermission, status?.active])
+
+  // Recarregar pedidos quando a página recebe foco (usuário volta para a página)
+  useEffect(() => {
+    if (!hasPermission('admin') || !status?.active) return
+
+    const handleFocus = () => {
+      console.log('[IfoodIntegration] Page focused, reloading orders...')
+      loadPendingOrders()
+      loadActiveOrders()
+      loadDispatchedOrders()
+      loadConcludedOrders()
+    }
+
+    // Recarregar quando a página recebe foco
+    window.addEventListener('focus', handleFocus)
+    
+    // Também recarregar quando a página fica visível (tab volta ao foco)
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        console.log('[IfoodIntegration] Page visible, reloading orders...')
+        loadPendingOrders()
+        loadActiveOrders()
+        loadDispatchedOrders()
+        loadConcludedOrders()
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPermission, status?.active])
 
@@ -714,7 +749,7 @@ export function IfoodIntegration() {
   )
 
   const readyOrders = activeOrders.filter((order: any) => 
-    order.ifood_status === 'READY_TO_PICKUP'
+    order.ifood_status === 'READY_TO_PICKUP' || order.status === 'Ready'
   )
 
   const routeOrders = dispatchedOrders
@@ -913,13 +948,32 @@ export function IfoodIntegration() {
         </p>
       </div>
 
+      {/* Banner de Mensagem no topo direito */}
       {message && (
-        <div className={`p-4 rounded-lg ${
-          message.type === 'success' 
-            ? 'bg-green-50 text-green-800 border border-green-200' 
-            : 'bg-red-50 text-red-800 border border-red-200'
-        }`}>
-          {typeof message.text === 'string' ? message.text : extractErrorMessage(message.text)}
+        <div 
+          className={`fixed top-4 right-4 z-50 max-w-md p-4 rounded-lg shadow-lg border animate-slideInRight ${
+            message.type === 'success' 
+              ? 'bg-green-50 text-green-800 border-green-200' 
+              : message.type === 'info'
+              ? 'bg-blue-50 text-blue-800 border-blue-200'
+              : 'bg-red-50 text-red-800 border-red-200'
+          }`}
+          role="alert"
+        >
+          <div className="flex items-start gap-3">
+            <div className="flex-1">
+              <p className="font-medium text-sm">
+                {typeof message.text === 'string' ? message.text : extractErrorMessage(message.text)}
+              </p>
+            </div>
+            <button
+              onClick={() => setMessage(null)}
+              className="flex-shrink-0 rounded-md p-1 hover:bg-black/5 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent focus:ring-gray-400"
+              aria-label="Fechar mensagem"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -1036,6 +1090,112 @@ export function IfoodIntegration() {
           <div className={`grid gap-6 ${selectedDashboardOrder ? 'lg:grid-cols-[2fr_1fr]' : 'lg:grid-cols-2'}`}>
             {/* Coluna Esquerda - Seções de Pedidos */}
             <div className={`space-y-6 ${selectedDashboardOrder ? '' : 'lg:col-span-2'}`}>
+              {/* Seção: Pedidos Pendentes */}
+              {pendingOrders.length > 0 && (
+                <Card className="bg-gray-50">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CardTitle className="text-lg">Pedidos Pendentes</CardTitle>
+                        <Badge className="bg-gray-700 text-white">{pendingOrders.length}</Badge>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={loadPendingOrders}
+                          disabled={loadingOrders}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                          Atualizar
+                        </Button>
+                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <CardDescription className="mt-1">
+                      Pedidos recebidos do iFood aguardando aceitação
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loadingOrders ? (
+                      <div className="text-center py-8">
+                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                        <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap gap-3">
+                        {pendingOrders.map((order) => {
+                            try {
+                              console.log('[Frontend] Rendering order:', {
+                                id: order.id,
+                                displayId: order.displayId,
+                                shortReference: order.shortReference,
+                                customer: order.customer,
+                                hasItems: !!(order.items && order.items.length > 0)
+                              })
+                              
+                              const orderType = order.orderType || 'DELIVERY'
+                              const isDelivery = orderType === 'DELIVERY'
+                              const isTakeout = orderType === 'TAKEOUT'
+                              const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
+                              
+                              const orderDisplayId = order.displayId || order.shortReference || order.id
+                              const createdAt = order.createdAt
+                              const elapsedTime = createdAt ? getElapsedTime(createdAt) : '0min'
+                              
+                              return (
+                                <div
+                                  key={order.id}
+                                  className="bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow"
+                                  onClick={() => {
+                                    setSelectedOrder(order)
+                                    setIsOrderDetailOpen(true)
+                                  }}
+                                >
+                                  <div className="flex items-start gap-2 mb-2">
+                                    <input
+                                      type="checkbox"
+                                      className="mt-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                    <div className="flex items-center gap-1 text-xs text-muted-foreground flex-1">
+                                      <ShoppingBag className="h-3 w-3" />
+                                      <span>{isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Própria'}</span>
+                                    </div>
+                                  </div>
+                                  <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
+                                  <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
+                                  <div className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded text-center mb-2">
+                                    {elapsedTime}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {formatCurrency(totalAmount)}
+                                  </div>
+                                </div>
+                              )
+                            } catch (error) {
+                              // #region agent log
+                              fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                              // #endregion
+                              console.error('Error rendering order:', error, order)
+                              console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+                              // Return a simple card with minimal rendering to avoid cascading errors
+                              return (
+                                <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
+                                  <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
+                                  <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
+                                  <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
+                                  <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
+                                </div>
+                              )
+                            }
+                          })}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Seção: Em Preparo */}
               <Card className="bg-gray-50">
               <CardHeader className="pb-3">
@@ -1487,111 +1647,6 @@ export function IfoodIntegration() {
         </div>
       )}
 
-      {/* Pedidos Pendentes */}
-      {status?.active && pendingOrders.length > 0 && (
-        <Card className="bg-gray-50">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CardTitle className="text-lg">Pedidos Pendentes</CardTitle>
-                <Badge className="bg-gray-700 text-white">{pendingOrders.length}</Badge>
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={loadPendingOrders}
-                  disabled={loadingOrders}
-                >
-                  <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
-                  Atualizar
-                </Button>
-                <ChevronUp className="h-4 w-4 text-muted-foreground" />
-              </div>
-            </div>
-            <CardDescription className="mt-1">
-              Pedidos recebidos do iFood aguardando aceitação
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {loadingOrders ? (
-              <div className="text-center py-8">
-                <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
-              </div>
-            ) : (
-              <div className="flex flex-wrap gap-3">
-                {pendingOrders.map((order) => {
-                    try {
-                      console.log('[Frontend] Rendering order:', {
-                        id: order.id,
-                        displayId: order.displayId,
-                        shortReference: order.shortReference,
-                        customer: order.customer,
-                        hasItems: !!(order.items && order.items.length > 0)
-                      })
-                      
-                      const orderType = order.orderType || 'DELIVERY'
-                      const isDelivery = orderType === 'DELIVERY'
-                      const isTakeout = orderType === 'TAKEOUT'
-                      const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
-                      
-                      const orderDisplayId = order.displayId || order.shortReference || order.id
-                      const createdAt = order.createdAt
-                      const elapsedTime = createdAt ? getElapsedTime(createdAt) : '0min'
-                      
-                      return (
-                        <div
-                          key={order.id}
-                          className="bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow"
-                          onClick={() => {
-                            setSelectedOrder(order)
-                            setIsOrderDetailOpen(true)
-                          }}
-                        >
-                          <div className="flex items-start gap-2 mb-2">
-                            <input
-                              type="checkbox"
-                              className="mt-1"
-                              onClick={(e) => e.stopPropagation()}
-                            />
-                            <div className="flex items-center gap-1 text-xs text-muted-foreground flex-1">
-                              <ShoppingBag className="h-3 w-3" />
-                              <span>{isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Própria'}</span>
-                            </div>
-                          </div>
-                          <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
-                          <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
-                          <div className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded text-center mb-2">
-                            {elapsedTime}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {formatCurrency(totalAmount)}
-                          </div>
-                        </div>
-                      )
-                  } catch (error) {
-                    // #region agent log
-                    fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-                    // #endregion
-                    console.error('Error rendering order:', error, order)
-                    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
-                    // Return a simple card with minimal rendering to avoid cascading errors
-                    return (
-                      <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
-                        <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
-                        <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
-                        <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
-                        <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
-                      </div>
-                    )
-                  }
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
 
 
       {/* Modal de Detalhes do Pedido Pendente */}

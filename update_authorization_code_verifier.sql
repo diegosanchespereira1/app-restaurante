@@ -15,3 +15,4 @@ WHERE authorization_code_verifier IS NULL OR authorization_code_verifier = '';
 NOTIFY pgrst, 'reload config';
 
 
+

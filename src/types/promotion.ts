@@ -62,3 +62,4 @@ export interface UpdatePromotionInput extends Partial<CreatePromotionInput> {
 }
 
 
+

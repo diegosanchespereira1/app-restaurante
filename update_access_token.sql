@@ -19,3 +19,4 @@ WHERE id IS NOT NULL; -- Update all records (or add WHERE clause to target speci
 NOTIFY pgrst, 'reload config';
 
 
+

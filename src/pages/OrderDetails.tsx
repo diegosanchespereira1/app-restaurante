@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer } from "lucide-react"
-import { useRestaurant } from "../context/RestaurantContext"
+import { useRestaurant, type Order } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
 import {
@@ -26,6 +26,7 @@ import type { Product } from "../types/product"
 import { useAuth } from "../context/AuthContext"
 import { X, ShoppingBag } from "lucide-react"
 import { IfoodOrderBadge } from "../components/ifood/IfoodOrderBadge"
+import { getBackendUrl } from "../lib/backend-config"
 
 export function OrderDetails() {
     const { id } = useParams()
@@ -162,18 +163,143 @@ export function OrderDetails() {
         return <div className="p-8 text-center">{t("orderNotFound")}</div>
     }
 
-    const getNextStatus = (currentStatus: typeof order.status) => {
-        const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
-        const currentIndex = flow.indexOf(currentStatus)
-        return flow[currentIndex + 1] as typeof order.status | undefined
+    // Função para obter o próximo status baseado no tipo de pedido
+    const getNextStatus = (currentStatus: typeof order.status, isIfoodOrder: boolean, currentIfoodStatus?: string | null) => {
+        if (isIfoodOrder) {
+            // Fluxo específico do iFood baseado no status atual do iFood
+            if (!currentIfoodStatus) {
+                // Se não tem status do iFood, usar fluxo padrão
+                const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
+                const currentIndex = flow.indexOf(currentStatus)
+                return flow[currentIndex + 1] as typeof order.status | undefined
+            }
+            
+            // Mapear status do iFood para próximo status do sistema
+            switch (currentIfoodStatus) {
+                case 'PLACED':
+                    return "Preparing" // CONFIRMED → PREPARATION_STARTED
+                case 'CONFIRMED':
+                    return "Preparing" // PREPARATION_STARTED
+                case 'PREPARATION_STARTED':
+                    return "Ready" // READY_TO_PICKUP
+                case 'READY_TO_PICKUP':
+                    return "Delivered" // DISPATCHED
+                case 'DISPATCHED':
+                    return "Closed" // CONCLUDED
+                default:
+                    // Fallback para fluxo padrão
+                    const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
+                    const currentIndex = flow.indexOf(currentStatus)
+                    return flow[currentIndex + 1] as typeof order.status | undefined
+            }
+        } else {
+            // Fluxo padrão para pedidos manuais
+            const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
+            const currentIndex = flow.indexOf(currentStatus)
+            return flow[currentIndex + 1] as typeof order.status | undefined
+        }
+    }
+
+    // Função para atualizar status do pedido do iFood através da API específica
+    const updateIfoodOrderStatus = async (orderId: string, nextStatus: string, currentIfoodStatus?: string | null) => {
+        const backendUrl = getBackendUrl()
+        
+        // Mapear status do sistema para ação do iFood
+        let ifoodAction: string | null = null
+        
+        switch (nextStatus) {
+            case 'Preparing':
+                if (currentIfoodStatus === 'PLACED' || currentIfoodStatus === 'CONFIRMED') {
+                    // Se ainda não foi confirmado, confirmar primeiro
+                    if (currentIfoodStatus === 'PLACED') {
+                        try {
+                            const confirmResponse = await fetch(`${backendUrl}/api/ifood/accept-order/${order.ifood_order_id}`, {
+                                method: 'POST'
+                            })
+                            const confirmResult = await confirmResponse.json()
+                            if (!confirmResult.success) {
+                                alert(`Erro ao confirmar pedido no iFood: ${confirmResult.error || confirmResult.message}`)
+                                return { success: false, error: confirmResult.error || confirmResult.message }
+                            }
+                        } catch (error) {
+                            console.error('Erro ao confirmar pedido:', error)
+                            alert(`Erro ao confirmar pedido no iFood`)
+                            return { success: false, error: 'Erro ao confirmar pedido no iFood' }
+                        }
+                    }
+                    // Depois iniciar preparação
+                    ifoodAction = 'start-preparation'
+                } else {
+                    ifoodAction = 'start-preparation'
+                }
+                break
+            case 'Ready':
+                ifoodAction = 'ready-to-pickup'
+                break
+            case 'Delivered':
+                ifoodAction = 'dispatch'
+                break
+            case 'Closed':
+                // Para fechar, não precisa chamar API do iFood, apenas atualizar no sistema
+                // O status CONCLUDED será atualizado automaticamente quando o pedido for concluído
+                break
+        }
+        
+        // Se há ação específica do iFood, chamar o endpoint correspondente
+        if (ifoodAction) {
+            try {
+                let endpoint = ''
+                switch (ifoodAction) {
+                    case 'start-preparation':
+                        endpoint = `${backendUrl}/api/ifood/start-preparation/${order.ifood_order_id}`
+                        break
+                    case 'ready-to-pickup':
+                        endpoint = `${backendUrl}/api/ifood/ready-to-pickup/${order.ifood_order_id}`
+                        break
+                    case 'dispatch':
+                        endpoint = `${backendUrl}/api/ifood/dispatch-order/${order.ifood_order_id}`
+                        break
+                }
+                
+                if (endpoint) {
+                    const response = await fetch(endpoint, {
+                        method: 'POST'
+                    })
+                    const result = await response.json()
+                    
+                    if (!result.success) {
+                        alert(`Erro ao atualizar status no iFood: ${result.error || result.message}`)
+                        return { success: false, error: result.error || result.message }
+                    }
+                }
+            } catch (error) {
+                console.error('Erro ao atualizar status no iFood:', error)
+                alert(`Erro ao atualizar status no iFood`)
+                return { success: false, error: 'Erro ao atualizar status no iFood' }
+            }
+        }
+        
+        // Atualizar status no sistema também
+        return await updateOrderStatus(orderId, nextStatus as Order["status"])
     }
 
     const handleStatusUpdate = async () => {
-        const nextStatus = getNextStatus(order.status)
+        const isIfoodOrder = order.source === 'ifood' && order.ifood_order_id
+        const nextStatus = getNextStatus(order.status, isIfoodOrder, order.ifood_status)
+        
         if (nextStatus) {
-            const result = await updateOrderStatus(order.id, nextStatus)
-            if (!result.success) {
-                alert(`Failed to update status: ${result.error}`)
+            if (isIfoodOrder) {
+                // Usar fluxo específico do iFood
+                const result = await updateIfoodOrderStatus(order.id, nextStatus, order.ifood_status)
+                if (!result.success) {
+                    alert(`Falha ao atualizar status: ${result.error}`)
+                }
+            } else {
+                // Usar fluxo padrão
+                const result = await updateOrderStatus(order.id, nextStatus)
+                if (!result.success) {
+                    alert(`Falha ao atualizar status: ${result.error}`)
+                }
             }
         }
     }
@@ -304,7 +430,9 @@ export function OrderDetails() {
                             ←
                         </button>
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 font-extrabold">
-                            {t("orderId")}: {order.id}
+                            {t("orderId")}: {order.source === 'ifood' && order.ifood_display_id 
+                                ? order.ifood_display_id 
+                                : order.id}
                         </h1>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-600 mt-2 ml-10">
@@ -345,14 +473,59 @@ export function OrderDetails() {
                     </Button>
                     {order.status !== "Closed" && order.status !== "Cancelled" && (
                         <>
-                            {order.status !== "Delivered" && (
-                                <Button 
-                                    onClick={handleStatusUpdate}
-                                    className="flex-1 md:flex-none bg-orange-500 hover:bg-opacity-90 text-white"
-                                >
-                                    {t("updateStatus")} ({t(getNextStatus(order.status)?.toLowerCase() as any) || getNextStatus(order.status)})
-                                </Button>
-                            )}
+                            {(() => {
+                                const isIfoodOrder = order.source === 'ifood' && order.ifood_order_id
+                                const nextStatus = getNextStatus(order.status, isIfoodOrder, order.ifood_status)
+                                
+                                // Para pedidos do iFood, verificar status específico do iFood
+                                if (isIfoodOrder) {
+                                    // Não mostrar botão se já está em DISPATCHED ou CONCLUDED
+                                    if (order.ifood_status === 'DISPATCHED' || order.ifood_status === 'CONCLUDED') {
+                                        return null
+                                    }
+                                } else {
+                                    // Para pedidos manuais, não mostrar se está Delivered
+                                    if (order.status === "Delivered") {
+                                        return null
+                                    }
+                                }
+                                
+                                if (!nextStatus) {
+                                    return null
+                                }
+                                
+                                // Mapear próximo status para texto amigável
+                                let statusLabel = nextStatus
+                                if (isIfoodOrder && order.ifood_status) {
+                                    switch (nextStatus) {
+                                        case 'Preparing':
+                                            if (order.ifood_status === 'PLACED') {
+                                                statusLabel = 'Confirmar e Iniciar Preparação'
+                                            } else {
+                                                statusLabel = 'Iniciar Preparação'
+                                            }
+                                            break
+                                        case 'Ready':
+                                            statusLabel = 'Marcar como Pronto para Retirada'
+                                            break
+                                        case 'Delivered':
+                                            statusLabel = 'Despachar Pedido'
+                                            break
+                                        case 'Closed':
+                                            statusLabel = 'Concluir Pedido'
+                                            break
+                                    }
+                                }
+                                
+                                return (
+                                    <Button 
+                                        onClick={handleStatusUpdate}
+                                        className="flex-1 md:flex-none bg-orange-500 hover:bg-opacity-90 text-white"
+                                    >
+                                        {t("updateStatus")} ({statusLabel})
+                                    </Button>
+                                )
+                            })()}
                             {hasPermission(['admin', 'gerente']) && (
                                 <Dialog open={isCancelOpen} onOpenChange={setIsCancelOpen}>
                                     <DialogTrigger asChild>
@@ -946,8 +1119,14 @@ export function OrderDetails() {
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between">
                                     <span className="text-blue-700 font-medium">ID do Pedido iFood:</span>
-                                    <span className="text-blue-900 font-mono">{order.ifood_order_id}</span>
+                                    <span className="text-blue-900 font-mono">{order.ifood_display_id || order.ifood_order_id}</span>
                                 </div>
+                                {order.ifood_order_id && order.ifood_order_id !== order.ifood_display_id && (
+                                    <div className="flex justify-between">
+                                        <span className="text-blue-700 font-medium text-xs">ID Interno:</span>
+                                        <span className="text-blue-900 font-mono text-xs">{order.ifood_order_id}</span>
+                                    </div>
+                                )}
                                 {order.ifood_status && (
                                     <div className="flex justify-between items-center">
                                         <span className="text-blue-700 font-medium">Status no iFood:</span>

@@ -79,7 +79,11 @@ export function TableDetails() {
                                         onClick={() => navigate(`/orders/${order.id}`, { replace: false })}
                                     >
                                         <div>
-                                            <div className="font-medium">{order.id}</div>
+                                            <div className="font-medium">
+                                                {order.source === 'ifood' && order.ifood_display_id 
+                                                    ? order.ifood_display_id 
+                                                    : order.id}
+                                            </div>
                                             <div className="text-sm text-muted-foreground">
                                                 {order.items.length} {t("items")} • {order.time.split(' ')[1]}
                                             </div>
