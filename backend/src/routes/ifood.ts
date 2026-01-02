@@ -1893,6 +1893,21 @@ router.post('/accept-order/:orderId', async (req: Request, res: Response) => {
     
     if (!confirmResult || !confirmResult.success) {
       console.error(`[accept-order] iFood confirmation failed:`, confirmResult)
+      // Tentar buscar status atual do pedido para retornar informação mais útil
+      const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+      if (orderDetailsResult.success && orderDetailsResult.order) {
+        // Extrair status atual do pedido
+        const currentStatus = extractOrderStatus(orderDetailsResult.order)
+        return res.status(500).json({
+          success: false,
+          message: `Falha ao confirmar pedido no iFood: ${confirmResult?.error || 'Erro desconhecido'}`,
+          error: confirmResult?.error || 'updateOrderStatus retornou resultado inválido',
+          currentStatus: currentStatus.status,
+          currentIfoodStatus: currentStatus.ifoodStatus,
+          statusMessage: getStatusMessage(currentStatus.ifoodStatus)
+        })
+      }
+      
       return res.status(500).json({
         success: false,
         message: `Falha ao confirmar pedido no iFood: ${confirmResult?.error || 'Erro desconhecido'}`,
@@ -2447,6 +2462,20 @@ router.post('/start-preparation/:orderId', async (req: Request, res: Response) =
     const result = await ifoodService.updateOrderStatus(orderId, 'PREPARATION_STARTED')
     
     if (!result.success) {
+      // Tentar buscar status atual do pedido para retornar informação mais útil
+      const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+      if (orderDetailsResult.success && orderDetailsResult.order) {
+        // Extrair status atual do pedido
+        const currentStatus = extractOrderStatus(orderDetailsResult.order)
+        return res.status(500).json({
+          success: false,
+          message: result.error || 'Erro ao iniciar preparação do pedido no iFood',
+          currentStatus: currentStatus.status,
+          currentIfoodStatus: currentStatus.ifoodStatus,
+          statusMessage: getStatusMessage(currentStatus.ifoodStatus)
+        })
+      }
+      
       return res.status(500).json({
         success: false,
         message: result.error || 'Erro ao iniciar preparação do pedido no iFood'
@@ -2506,6 +2535,20 @@ router.post('/ready-to-pickup/:orderId', async (req: Request, res: Response) => 
     const result = await ifoodService.updateOrderStatus(orderId, 'READY_TO_PICKUP')
     
     if (!result.success) {
+      // Tentar buscar status atual do pedido para retornar informação mais útil
+      const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+      if (orderDetailsResult.success && orderDetailsResult.order) {
+        // Extrair status atual do pedido
+        const currentStatus = extractOrderStatus(orderDetailsResult.order)
+        return res.status(500).json({
+          success: false,
+          message: result.error || 'Erro ao marcar pedido como pronto para retirada no iFood',
+          currentStatus: currentStatus.status,
+          currentIfoodStatus: currentStatus.ifoodStatus,
+          statusMessage: getStatusMessage(currentStatus.ifoodStatus)
+        })
+      }
+      
       return res.status(500).json({
         success: false,
         message: result.error || 'Erro ao marcar pedido como pronto para retirada no iFood'
@@ -2565,6 +2608,20 @@ router.post('/dispatch-order/:orderId', async (req: Request, res: Response) => {
     const result = await ifoodService.updateOrderStatus(orderId, 'DISPATCHED')
     
     if (!result.success) {
+      // Tentar buscar status atual do pedido para retornar informação mais útil
+      const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+      if (orderDetailsResult.success && orderDetailsResult.order) {
+        // Extrair status atual do pedido
+        const currentStatus = extractOrderStatus(orderDetailsResult.order)
+        return res.status(500).json({
+          success: false,
+          message: result.error || 'Erro ao despachar pedido no iFood',
+          currentStatus: currentStatus.status,
+          currentIfoodStatus: currentStatus.ifoodStatus,
+          statusMessage: getStatusMessage(currentStatus.ifoodStatus)
+        })
+      }
+      
       return res.status(500).json({
         success: false,
         message: result.error || 'Erro ao despachar pedido no iFood'
@@ -2609,6 +2666,165 @@ router.post('/dispatch-order/:orderId', async (req: Request, res: Response) => {
     })
   }
 })
+
+/**
+ * GET /api/ifood/order-status/:orderId
+ * Get current status of an iFood order
+ */
+router.get('/order-status/:orderId', async (req: Request, res: Response) => {
+  try {
+    const { orderId } = req.params
+    const ifoodService = new IfoodService()
+    
+    console.log(`[order-status] Fetching status for order ${orderId}`)
+    
+    const orderDetailsResult = await ifoodService.getOrderDetails(orderId)
+    
+    if (!orderDetailsResult.success || !orderDetailsResult.order) {
+      return res.status(404).json({
+        success: false,
+        message: orderDetailsResult.error || 'Pedido não encontrado no iFood'
+      })
+    }
+    
+    const status = extractOrderStatus(orderDetailsResult.order)
+    
+    res.json({
+      success: true,
+      status: status.status,
+      ifoodStatus: status.ifoodStatus,
+      statusMessage: getStatusMessage(status.ifoodStatus),
+      order: orderDetailsResult.order
+    })
+  } catch (error: any) {
+    console.error('[order-status] Error:', error)
+    res.status(500).json({
+      success: false,
+      message: `Erro interno: ${error?.message || 'Erro desconhecido'}`
+    })
+  }
+})
+
+/**
+ * Helper function to extract order status from iFood order object
+ */
+function extractOrderStatus(order: any): { status: string; ifoodStatus: string } {
+  // Try multiple ways to get the status
+  let currentIfoodStatus: string | null = null
+  
+  // 1. Check if order has a direct status field
+  if (order.status) {
+    currentIfoodStatus = String(order.status).toUpperCase()
+  }
+  // 2. Check if order has events array and get latest status event
+  else if (order.events && Array.isArray(order.events)) {
+    const events = order.events
+    const statusEvents = events
+      .filter((e: any) => {
+        const code = (e.code || e.fullCode || '').toUpperCase()
+        return ['PLC', 'PLACED', 'CFM', 'CONFIRMED', 'SPS', 'SEPARATION_STARTED', 
+                'SPE', 'SEPARATION_ENDED', 'RTP', 'READY_TO_PICKUP', 
+                'DSP', 'DISPATCHED', 'CON', 'CONCLUDED', 'CAN', 'CANCELLED'].includes(code)
+      })
+      .sort((a: any, b: any) => {
+        const dateA = a.createdAt ? new Date(a.createdAt).getTime() : 0
+        const dateB = b.createdAt ? new Date(b.createdAt).getTime() : 0
+        return dateB - dateA // Most recent first
+      })
+    
+    if (statusEvents.length > 0) {
+      const latestEvent = statusEvents[0]
+      currentIfoodStatus = (latestEvent.fullCode || latestEvent.code || '').toUpperCase()
+    }
+  }
+  // 3. Check if order has a lastEvent field
+  else if (order.lastEvent) {
+    const lastEvent = order.lastEvent
+    currentIfoodStatus = (lastEvent.fullCode || lastEvent.code || '').toUpperCase()
+  }
+  
+  // Normalize status codes
+  const statusMap: Record<string, string> = {
+    'PLC': 'PLACED',
+    'PLACED': 'PLACED',
+    'CFM': 'CONFIRMED',
+    'CONFIRMED': 'CONFIRMED',
+    'SPS': 'PREPARATION_STARTED',
+    'SEPARATION_STARTED': 'PREPARATION_STARTED',
+    'PREPARATION_STARTED': 'PREPARATION_STARTED',
+    'SPE': 'SEPARATION_ENDED',
+    'SEPARATION_ENDED': 'SEPARATION_ENDED',
+    'RTP': 'READY_TO_PICKUP',
+    'READY_TO_PICKUP': 'READY_TO_PICKUP',
+    'DSP': 'DISPATCHED',
+    'DISPATCHED': 'DISPATCHED',
+    'CON': 'CONCLUDED',
+    'CONCLUDED': 'CONCLUDED',
+    'CAN': 'CANCELLED',
+    'CANCELLED': 'CANCELLED'
+  }
+  
+  currentIfoodStatus = currentIfoodStatus ? (statusMap[currentIfoodStatus] || currentIfoodStatus) : 'UNKNOWN'
+  
+  // Map iFood status to system status
+  let systemStatus = 'Unknown'
+  switch (currentIfoodStatus.toUpperCase()) {
+    case 'PLACED':
+    case 'PLC':
+      systemStatus = 'Pending'
+      break
+    case 'CONFIRMED':
+    case 'CFM':
+      systemStatus = 'Preparing'
+      break
+    case 'PREPARATION_STARTED':
+    case 'SEPARATION_STARTED':
+    case 'SPS':
+      systemStatus = 'Preparing'
+      break
+    case 'SEPARATION_ENDED':
+    case 'SPE':
+      systemStatus = 'Preparing'
+      break
+    case 'READY_TO_PICKUP':
+    case 'RTP':
+      systemStatus = 'Ready'
+      break
+    case 'DISPATCHED':
+    case 'DSP':
+      systemStatus = 'Delivered'
+      break
+    case 'CONCLUDED':
+    case 'CON':
+      systemStatus = 'Closed'
+      break
+    case 'CANCELLED':
+    case 'CAN':
+      systemStatus = 'Cancelled'
+      break
+  }
+  
+  return { status: systemStatus, ifoodStatus: currentIfoodStatus }
+}
+
+/**
+ * Helper function to get user-friendly status message
+ */
+function getStatusMessage(ifoodStatus: string): string {
+  const statusMessages: Record<string, string> = {
+    'PLACED': 'Pedido foi realizado e está aguardando confirmação',
+    'CONFIRMED': 'Pedido foi confirmado e está sendo preparado',
+    'PREPARATION_STARTED': 'Preparação do pedido foi iniciada',
+    'SEPARATION_STARTED': 'Separação do pedido foi iniciada',
+    'SEPARATION_ENDED': 'Separação do pedido foi finalizada',
+    'READY_TO_PICKUP': 'Pedido está pronto para retirada',
+    'DISPATCHED': 'Pedido foi despachado para entrega',
+    'CONCLUDED': 'Pedido foi concluído',
+    'CANCELLED': 'Pedido foi cancelado'
+  }
+  
+  return statusMessages[ifoodStatus] || `Status atual: ${ifoodStatus}`
+}
 
 export default router
 

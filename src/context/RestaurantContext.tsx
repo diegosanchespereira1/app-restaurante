@@ -134,6 +134,7 @@ interface RestaurantContextType {
     updateCategory: (id: number, newName: string) => Promise<{ success: boolean; error?: string }>
     deleteCategory: (id: number) => Promise<{ success: boolean; error?: string }>
     generateOrderId: () => Promise<string>
+    refreshData: () => Promise<void>
     isLoading: boolean
     error: string | null
     isDemoMode: boolean
@@ -1632,6 +1633,7 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
                 updateCategory,
                 deleteCategory,
                 generateOrderId,
+                refreshData: fetchData,
                 isLoading,
                 error,
                 isDemoMode: !isSupabaseConfigured

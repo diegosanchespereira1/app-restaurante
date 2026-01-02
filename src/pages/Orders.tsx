@@ -1,7 +1,7 @@
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "../components/ui/button"
-import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair, Store } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { Search, Truck, CheckCircle, Clock, ShoppingBag, Armchair, Store, RefreshCw, AlertCircle, X } from "lucide-react"
+import { useNavigate, useLocation } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useSettings } from "../context/SettingsContext"
 import { Input } from "../components/ui/input"
@@ -12,11 +12,42 @@ import { formatCurrency } from "../lib/utils"
 
 export function Orders() {
     const navigate = useNavigate()
-    const { orders } = useRestaurant()
+    const location = useLocation()
+    const { orders, refreshData, isLoading } = useRestaurant()
     const { isTablesEnabled } = useSettings()
     const [searchQuery, setSearchQuery] = useState("")
     const [statusFilter, setStatusFilter] = useState("all")
     const [isIfoodEnabled, setIsIfoodEnabled] = useState(false)
+    const [isRefreshing, setIsRefreshing] = useState(false)
+    const [errorMessage, setErrorMessage] = useState<string | null>(null)
+    const [statusDetails, setStatusDetails] = useState<{ status: string; ifoodStatus: string; statusMessage: string } | null>(null)
+    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
+
+    // Verificar se há mensagem de erro no state da navegação
+    useEffect(() => {
+        if (location.state?.error) {
+            setErrorMessage(location.state.error)
+            setStatusDetails(location.state.statusDetails || null)
+            // Limpar o state para não mostrar a mensagem novamente ao navegar
+            window.history.replaceState({}, document.title)
+        }
+    }, [location.state])
+
+    // Função para forçar atualização manual
+    const handleManualRefresh = async () => {
+        setIsRefreshing(true)
+        try {
+            // Evita spinner infinito caso a chamada demore ou fique pendente
+            await Promise.race([
+                refreshData(),
+                new Promise(resolve => setTimeout(resolve, 12000)) // timeout de 12s
+            ])
+        } catch (error) {
+            console.error('Erro ao atualizar pedidos:', error)
+        } finally {
+            setIsRefreshing(false)
+        }
+    }
 
     // Verificar se o iFood está habilitado
     useEffect(() => {
@@ -36,6 +67,31 @@ export function Orders() {
         }
         checkIfoodStatus()
     }, [])
+
+    // Atualização automática a cada 30 segundos
+    useEffect(() => {
+        // Limpar intervalo anterior se existir
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current)
+        }
+
+        // Criar novo intervalo de 30 segundos
+        refreshIntervalRef.current = setInterval(async () => {
+            console.log('[Orders] Atualizando pedidos automaticamente...')
+            try {
+                await refreshData()
+            } catch (error) {
+                console.error('[Orders] Erro na atualização automática:', error)
+            }
+        }, 30000) // 30 segundos
+
+        // Limpar intervalo ao desmontar o componente
+        return () => {
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current)
+            }
+        }
+    }, [refreshData])
 
     // Resetar filtro "mesa" se a feature for desabilitada
     useEffect(() => {
@@ -134,19 +190,65 @@ export function Orders() {
 
     return (
         <div className="space-y-8">
+            {/* Mensagem de erro se houver */}
+            {errorMessage && (
+                <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-4">
+                    <div className="flex items-start justify-between">
+                        <div className="flex items-start gap-3 flex-1">
+                            <AlertCircle className="w-5 h-5 text-destructive mt-0.5 shrink-0" />
+                            <div className="flex-1">
+                                <h3 className="font-semibold text-destructive mb-2">Erro ao acessar pedido</h3>
+                                <p className="text-sm text-foreground whitespace-pre-line">{errorMessage}</p>
+                                {statusDetails && (
+                                    <div className="mt-3 pt-3 border-t border-destructive/20">
+                                        <p className="text-xs text-muted-foreground mb-1">Detalhes do status:</p>
+                                        <div className="space-y-1 text-sm">
+                                            <p><span className="font-medium">Status no sistema:</span> {statusDetails.status}</p>
+                                            <p><span className="font-medium">Status no iFood:</span> {statusDetails.ifoodStatus}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setErrorMessage(null)
+                                setStatusDetails(null)
+                            }}
+                            className="shrink-0"
+                        >
+                            <X className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
-            <header className="flex justify-between items-center mb-8">
+            <header className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center mb-8">
                 <div>
                     <h1 className="text-4xl font-bold text-foreground">Pedidos</h1>
                     <p className="text-muted-foreground mt-1">Gerenciar pedidos desta mesa</p>
                 </div>
-                <Button 
-                    onClick={() => navigate("/orders/new")}
-                    className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-6 rounded-lg flex items-center shadow-sm"
-                >
-                    <span className="text-2xl font-light mr-2">+</span>
-                    Novo Pedido
-                </Button>
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3 sm:justify-end">
+                    <Button 
+                        onClick={() => navigate("/orders/new")}
+                        className="bg-primary hover:bg-primary/90 text-primary-foreground font-bold py-2 px-6 rounded-lg flex items-center shadow-sm justify-center"
+                    >
+                        <span className="text-2xl font-light mr-2">+</span>
+                        Novo Pedido
+                    </Button>
+                    <Button 
+                        onClick={handleManualRefresh}
+                        disabled={isRefreshing || isLoading}
+                        variant="outline"
+                        className="flex items-center gap-2 justify-center"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                        {isRefreshing ? 'Atualizando...' : 'Atualizar'}
+                    </Button>
+                </div>
             </header>
 
             {/* Filters */}
@@ -166,70 +268,72 @@ export function Orders() {
                 </div>
 
                 {/* Filter Buttons - Second Line */}
-                <div className="flex justify-between items-center gap-2 border border-border rounded-lg p-2 bg-card">
-                    <Button
-                        variant={statusFilter === "all" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "all"
-                                ? "text-primary bg-primary/10 border border-primary/20"
-                                : "text-muted-foreground hover:bg-accent"
-                        }`}
-                        onClick={() => setStatusFilter("all")}
-                    >
-                        Todos
-                    </Button>
-                    <Button
-                        variant={statusFilter === "delivery" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "delivery"
-                                ? "text-primary bg-primary/10 border border-primary/20"
-                                : "text-muted-foreground hover:bg-accent"
-                        }`}
-                        onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
-                    >
-                        <Truck className="w-4 h-4" />
-                        Delivery
-                    </Button>
-                    <Button
-                        variant={statusFilter === "pickup" ? "default" : "ghost"}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                            statusFilter === "pickup"
-                                ? "text-primary bg-primary/10 border border-primary/20"
-                                : "text-muted-foreground hover:bg-accent"
-                        }`}
-                        onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
-                    >
-                        <ShoppingBag className="w-4 h-4" />
-                        Retirada
-                    </Button>
-                    {isTablesEnabled && (
+                <div className="border border-border rounded-lg p-2 bg-card">
+                    <div className="flex flex-nowrap items-center gap-1 text-xs sm:text-sm w-full">
                         <Button
-                            variant={statusFilter === "mesa" ? "default" : "ghost"}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                                statusFilter === "mesa"
+                            variant={statusFilter === "all" ? "default" : "ghost"}
+                            className={`flex-1 min-w-0 justify-center flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors text-xs sm:text-sm ${
+                                statusFilter === "all"
                                     ? "text-primary bg-primary/10 border border-primary/20"
                                     : "text-muted-foreground hover:bg-accent"
                             }`}
-                            onClick={() => setStatusFilter(statusFilter === "mesa" ? "all" : "mesa")}
+                            onClick={() => setStatusFilter("all")}
                         >
-                            <Armchair className="w-4 h-4" />
-                            Mesa
+                            Todos
                         </Button>
-                    )}
-                    {isIfoodEnabled && (
                         <Button
-                            variant={statusFilter === "ifood" ? "default" : "ghost"}
-                            className={`flex items-center gap-2 px-3 py-2 rounded-md font-medium transition-colors ${
-                                statusFilter === "ifood"
+                            variant={statusFilter === "delivery" ? "default" : "ghost"}
+                            className={`flex-1 min-w-0 justify-center flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors text-xs sm:text-sm ${
+                                statusFilter === "delivery"
                                     ? "text-primary bg-primary/10 border border-primary/20"
                                     : "text-muted-foreground hover:bg-accent"
                             }`}
-                            onClick={() => setStatusFilter(statusFilter === "ifood" ? "all" : "ifood")}
+                            onClick={() => setStatusFilter(statusFilter === "delivery" ? "all" : "delivery")}
                         >
-                            <Store className="w-4 h-4" />
-                            iFood
+                            <Truck className="w-3 h-3" />
+                            Delivery
                         </Button>
-                    )}
+                        <Button
+                            variant={statusFilter === "pickup" ? "default" : "ghost"}
+                            className={`flex-1 min-w-0 justify-center flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors text-xs sm:text-sm ${
+                                statusFilter === "pickup"
+                                    ? "text-primary bg-primary/10 border border-primary/20"
+                                    : "text-muted-foreground hover:bg-accent"
+                            }`}
+                            onClick={() => setStatusFilter(statusFilter === "pickup" ? "all" : "pickup")}
+                        >
+                            <ShoppingBag className="w-3 h-3" />
+                            Retirada
+                        </Button>
+                        {isTablesEnabled && (
+                            <Button
+                                variant={statusFilter === "mesa" ? "default" : "ghost"}
+                                className={`flex-1 min-w-0 justify-center flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors text-xs sm:text-sm ${
+                                    statusFilter === "mesa"
+                                        ? "text-primary bg-primary/10 border border-primary/20"
+                                        : "text-muted-foreground hover:bg-accent"
+                                }`}
+                                onClick={() => setStatusFilter(statusFilter === "mesa" ? "all" : "mesa")}
+                            >
+                                <Armchair className="w-3 h-3" />
+                                Mesa
+                            </Button>
+                        )}
+                        {isIfoodEnabled && (
+                            <Button
+                                variant={statusFilter === "ifood" ? "default" : "ghost"}
+                                className={`flex-1 min-w-0 justify-center flex items-center gap-1 px-2 py-1 rounded-md font-medium transition-colors text-xs sm:text-sm ${
+                                    statusFilter === "ifood"
+                                        ? "text-primary bg-primary/10 border border-primary/20"
+                                        : "text-muted-foreground hover:bg-accent"
+                                }`}
+                                onClick={() => setStatusFilter(statusFilter === "ifood" ? "all" : "ifood")}
+                            >
+                                <Store className="w-3 h-3" />
+                                iFood
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </section>
 

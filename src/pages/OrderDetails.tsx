@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
 import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer } from "lucide-react"
@@ -31,7 +31,7 @@ import { getBackendUrl } from "../lib/backend-config"
 export function OrderDetails() {
     const { id } = useParams()
     const navigate = useNavigate()
-    const { orders, updateOrderStatus, processPayment, menuItems, cancelUnpaidOrder } = useRestaurant()
+    const { orders, updateOrderStatus, processPayment, menuItems, cancelUnpaidOrder, refreshData, isLoading } = useRestaurant()
     const { t } = useLanguage()
     const { printerSettings, settings } = useSettings()
     const { hasPermission } = useAuth()
@@ -46,9 +46,117 @@ export function OrderDetails() {
     const [paymentDiscountType, setPaymentDiscountType] = useState<"fixed" | "percentage" | null>(null)
     const [paymentDiscountValue, setPaymentDiscountValue] = useState<number | null>(null)
     const [discountError, setDiscountError] = useState<string | null>(null)
+    const [isUpdatingStatus, setIsUpdatingStatus] = useState(false)
+    const [optimisticStatus, setOptimisticStatus] = useState<{ status: string; ifood_status?: string } | null>(null)
+    const [isCheckingOrder, setIsCheckingOrder] = useState(true)
+    const hasCheckedRef = useRef(false)
+    const ordersRef = useRef(orders)
+
+    // Manter referência dos pedidos atualizada para consultas após refreshData
+    useEffect(() => {
+        ordersRef.current = orders
+    }, [orders])
 
     const order = orders.find(o => o.id === id)
+    
+    // Verificar se o pedido existe após os dados serem carregados
+    useEffect(() => {
+        // Se encontrou o pedido, não precisa verificar mais
+        if (order) {
+            setIsCheckingOrder(false)
+            hasCheckedRef.current = false
+            return
+        }
 
+        // Se ainda está carregando os dados, aguardar
+        if (isLoading) {
+            return
+        }
+
+        // Aguardar um pouco para garantir que os dados foram carregados
+        // Isso evita verificação prematura quando o componente monta
+        const timeout = setTimeout(() => {
+            // Verificar novamente após o timeout
+            const foundOrder = ordersRef.current.find(o => o.id === id)
+            if (foundOrder) {
+                setIsCheckingOrder(false)
+                return
+            }
+
+            // Se ainda não encontrou e ainda não verificou, fazer verificação adicional
+            if (hasCheckedRef.current) {
+                return
+            }
+
+            const checkOrder = async () => {
+                hasCheckedRef.current = true
+                
+                // Se não encontrou o pedido localmente, tentar atualizar os dados primeiro
+                try {
+                    await refreshData()
+                    // Aguardar para os dados serem atualizados no estado
+                    // O segundo useEffect vai verificar se o pedido foi encontrado após o refresh
+                    await new Promise(resolve => setTimeout(resolve, 2000))
+                } catch (error) {
+                    console.error('Erro ao atualizar dados:', error)
+                }
+
+                // Verificar se o pedido foi encontrado após o refresh
+                const refreshedOrder = ordersRef.current.find(o => o.id === id)
+                if (refreshedOrder) {
+                    setIsCheckingOrder(false)
+                    hasCheckedRef.current = false
+                    return
+                }
+
+                // Se ainda não encontrou após atualizar, tentar buscar informações do iFood
+                let errorMessage = `Pedido não encontrado: ${id}`
+                let statusDetails = null
+
+                // Verificar se pode ser um pedido do iFood
+                const backendUrl = getBackendUrl()
+                try {
+                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${id}`)
+                    if (statusResponse.ok) {
+                        const statusData = await statusResponse.json()
+                        if (statusData.success) {
+                            statusDetails = {
+                                status: statusData.status,
+                                ifoodStatus: statusData.ifoodStatus,
+                                statusMessage: statusData.statusMessage
+                            }
+                            errorMessage = `Pedido do iFood não encontrado no sistema.\n\n${statusData.statusMessage}\n\nStatus atual: ${statusData.status || 'Desconhecido'}`
+                        }
+                    }
+                } catch (error) {
+                    console.error('Erro ao buscar status do pedido no iFood:', error)
+                }
+
+                // Redirecionar para página principal com mensagem de erro
+                navigate('/orders', {
+                    state: {
+                        error: errorMessage,
+                        orderId: id,
+                        statusDetails: statusDetails
+                    },
+                    replace: true
+                })
+            }
+
+            checkOrder()
+        }, 500) // Aguardar 500ms antes de verificar
+
+        return () => clearTimeout(timeout)
+    }, [id, order, navigate, refreshData, isLoading, orders])
+
+
+    // Usar status otimista se estiver atualizando
+    const displayOrder = optimisticStatus && order ? {
+        ...order,
+        status: optimisticStatus.status as Order["status"],
+        ifood_status: optimisticStatus.ifood_status || order.ifood_status
+    } : order
+    
     // Buscar produtos completos para aplicar desconto
     useEffect(() => {
         if (!isSupabaseConfigured || !order) return
@@ -159,10 +267,6 @@ export function OrderDetails() {
         }
     }, [paymentDiscountType, paymentDiscountValue, settings.paymentDiscountLimitType, settings.paymentDiscountLimitValue, subtotalBeforePaymentDiscount, order])
 
-    if (!order) {
-        return <div className="p-8 text-center">{t("orderNotFound")}</div>
-    }
-
     // Função para obter o próximo status baseado no tipo de pedido
     const getNextStatus = (currentStatus: typeof order.status, isIfoodOrder: boolean, currentIfoodStatus?: string | null) => {
         if (isIfoodOrder) {
@@ -206,30 +310,19 @@ export function OrderDetails() {
         
         // Mapear status do sistema para ação do iFood
         let ifoodAction: string | null = null
+        let needsConfirmation = false
         
         switch (nextStatus) {
             case 'Preparing':
-                if (currentIfoodStatus === 'PLACED' || currentIfoodStatus === 'CONFIRMED') {
+                if (currentIfoodStatus === 'PLACED') {
                     // Se ainda não foi confirmado, confirmar primeiro
-                    if (currentIfoodStatus === 'PLACED') {
-                        try {
-                            const confirmResponse = await fetch(`${backendUrl}/api/ifood/accept-order/${order.ifood_order_id}`, {
-                                method: 'POST'
-                            })
-                            const confirmResult = await confirmResponse.json()
-                            if (!confirmResult.success) {
-                                alert(`Erro ao confirmar pedido no iFood: ${confirmResult.error || confirmResult.message}`)
-                                return { success: false, error: confirmResult.error || confirmResult.message }
-                            }
-                        } catch (error) {
-                            console.error('Erro ao confirmar pedido:', error)
-                            alert(`Erro ao confirmar pedido no iFood`)
-                            return { success: false, error: 'Erro ao confirmar pedido no iFood' }
-                        }
-                    }
-                    // Depois iniciar preparação
+                    needsConfirmation = true
+                    ifoodAction = 'start-preparation'
+                } else if (currentIfoodStatus === 'CONFIRMED') {
+                    // Já confirmado, apenas iniciar preparação
                     ifoodAction = 'start-preparation'
                 } else {
+                    // Outros status, iniciar preparação
                     ifoodAction = 'start-preparation'
                 }
                 break
@@ -242,11 +335,77 @@ export function OrderDetails() {
             case 'Closed':
                 // Para fechar, não precisa chamar API do iFood, apenas atualizar no sistema
                 // O status CONCLUDED será atualizado automaticamente quando o pedido for concluído
-                break
+                // Mas vamos atualizar o status localmente
+                return await updateOrderStatus(orderId, nextStatus as Order["status"])
+        }
+        
+        // Se precisa confirmar primeiro (status PLACED)
+        if (needsConfirmation && order.ifood_order_id) {
+            try {
+                console.log(`[updateIfoodOrderStatus] Confirming order ${order.ifood_order_id} first...`)
+                const confirmResponse = await fetch(`${backendUrl}/api/ifood/accept-order/${order.ifood_order_id}`, {
+                    method: 'POST'
+                })
+                
+                if (!confirmResponse.ok) {
+                    const errorText = await confirmResponse.text()
+                    let errorData
+                    try {
+                        errorData = JSON.parse(errorText)
+                    } catch {
+                        errorData = { message: errorText }
+                    }
+                    console.error(`[updateIfoodOrderStatus] Confirm failed: ${confirmResponse.status} - ${errorText}`)
+                    
+                    // Se houver informação de status atual, mostrar mensagem mais útil
+                    if (errorData.statusMessage) {
+                        alert(`Não foi possível confirmar o pedido no iFood.\n\n${errorData.statusMessage}\n\nStatus atual: ${errorData.currentStatus || 'Desconhecido'}`)
+                    } else {
+                        alert(`Erro ao confirmar pedido no iFood: ${errorData.message || errorData.error || confirmResponse.status}`)
+                    }
+                    return { success: false, error: errorData.statusMessage || errorData.message || errorData.error || `Erro ao confirmar pedido: ${confirmResponse.status}` }
+                }
+                
+                const confirmResult = await confirmResponse.json()
+                if (!confirmResult.success) {
+                    console.error(`[updateIfoodOrderStatus] Confirm failed:`, confirmResult)
+                    
+                    // Se houver informação de status atual, mostrar mensagem mais útil
+                    if (confirmResult.statusMessage) {
+                        alert(`Não foi possível confirmar o pedido no iFood.\n\n${confirmResult.statusMessage}\n\nStatus atual: ${confirmResult.currentStatus || 'Desconhecido'}`)
+                    } else {
+                        alert(`Erro ao confirmar pedido no iFood: ${confirmResult.error || confirmResult.message}`)
+                    }
+                    return { success: false, error: confirmResult.statusMessage || confirmResult.error || confirmResult.message }
+                }
+                
+                console.log(`[updateIfoodOrderStatus] Order confirmed successfully`)
+                
+                // Aguardar mais tempo para garantir que a confirmação foi processada e o banco atualizado
+                // O iFood pode retornar 202 (async), então precisamos aguardar
+                await new Promise(resolve => setTimeout(resolve, 2000))
+            } catch (error) {
+                console.error('[updateIfoodOrderStatus] Erro ao confirmar pedido:', error)
+                // Tentar buscar status atual do pedido para mostrar informação útil
+                try {
+                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${order.ifood_order_id}`)
+                    if (statusResponse.ok) {
+                        const statusData = await statusResponse.json()
+                        if (statusData.success && statusData.statusMessage) {
+                            alert(`Erro ao confirmar pedido no iFood.\n\n${statusData.statusMessage}\n\nStatus atual: ${statusData.status || 'Desconhecido'}`)
+                            return { success: false, error: statusData.statusMessage }
+                        }
+                    }
+                } catch (statusError) {
+                    console.error('[updateIfoodOrderStatus] Erro ao buscar status do pedido:', statusError)
+                }
+                alert(`Erro ao confirmar pedido no iFood`)
+                return { success: false, error: 'Erro ao confirmar pedido no iFood' }
+            }
         }
         
         // Se há ação específica do iFood, chamar o endpoint correspondente
-        if (ifoodAction) {
+        if (ifoodAction && order.ifood_order_id) {
             try {
                 let endpoint = ''
                 switch (ifoodAction) {
@@ -262,45 +421,157 @@ export function OrderDetails() {
                 }
                 
                 if (endpoint) {
+                    console.log(`[updateIfoodOrderStatus] Calling endpoint: ${endpoint}`)
                     const response = await fetch(endpoint, {
                         method: 'POST'
                     })
+                    
+                    if (!response.ok) {
+                        const errorText = await response.text()
+                        console.error(`[updateIfoodOrderStatus] Endpoint failed: ${response.status} - ${errorText}`)
+                        
+                        let errorData
+                        try {
+                            errorData = JSON.parse(errorText)
+                        } catch {
+                            errorData = { message: errorText }
+                        }
+                        
+                        // Se houver informação de status atual, mostrar mensagem mais útil
+                        if (errorData.statusMessage) {
+                            alert(`Não foi possível atualizar o status do pedido no iFood.\n\n${errorData.statusMessage}\n\nStatus atual: ${errorData.currentStatus || 'Desconhecido'}`)
+                        } else {
+                            alert(`Erro ao atualizar status no iFood: ${response.status}`)
+                        }
+                        return { success: false, error: errorData.statusMessage || `Erro ao atualizar status: ${response.status}` }
+                    }
+                    
                     const result = await response.json()
                     
                     if (!result.success) {
-                        alert(`Erro ao atualizar status no iFood: ${result.error || result.message}`)
-                        return { success: false, error: result.error || result.message }
+                        console.error(`[updateIfoodOrderStatus] Endpoint returned error:`, result)
+                        
+                        // Se houver informação de status atual, mostrar mensagem mais útil
+                        if (result.statusMessage) {
+                            alert(`Não foi possível atualizar o status do pedido no iFood.\n\n${result.statusMessage}\n\nStatus atual: ${result.currentStatus || 'Desconhecido'}`)
+                        } else {
+                            alert(`Erro ao atualizar status no iFood: ${result.error || result.message}`)
+                        }
+                        return { success: false, error: result.statusMessage || result.error || result.message }
                     }
+                    
+                    console.log(`[updateIfoodOrderStatus] Status updated successfully via endpoint`)
+                    
+                    // Os endpoints do backend já atualizam o banco de dados
+                    // Não precisamos chamar updateOrderStatus novamente para evitar conflito
+                    // O real-time subscription do Supabase deve atualizar automaticamente
+                    return { success: true }
                 }
             } catch (error) {
-                console.error('Erro ao atualizar status no iFood:', error)
+                console.error('[updateIfoodOrderStatus] Erro ao atualizar status no iFood:', error)
+                // Tentar buscar status atual do pedido para mostrar informação útil
+                try {
+                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${order.ifood_order_id}`)
+                    if (statusResponse.ok) {
+                        const statusData = await statusResponse.json()
+                        if (statusData.success && statusData.statusMessage) {
+                            alert(`Erro ao atualizar status no iFood.\n\n${statusData.statusMessage}\n\nStatus atual: ${statusData.status || 'Desconhecido'}`)
+                            return { success: false, error: statusData.statusMessage }
+                        }
+                    }
+                } catch (statusError) {
+                    console.error('[updateIfoodOrderStatus] Erro ao buscar status do pedido:', statusError)
+                }
                 alert(`Erro ao atualizar status no iFood`)
                 return { success: false, error: 'Erro ao atualizar status no iFood' }
             }
         }
         
-        // Atualizar status no sistema também
-        return await updateOrderStatus(orderId, nextStatus as Order["status"])
+        return { success: true }
     }
 
     const handleStatusUpdate = async () => {
-        const isIfoodOrder = order.source === 'ifood' && order.ifood_order_id
-        const nextStatus = getNextStatus(order.status, isIfoodOrder, order.ifood_status)
+        if (isUpdatingStatus || !displayOrder) {
+            return
+        }
         
-        if (nextStatus) {
+        const isIfoodOrder = displayOrder.source === 'ifood' && displayOrder.ifood_order_id
+        const nextStatus = getNextStatus(displayOrder.status, isIfoodOrder, displayOrder.ifood_status)
+        
+        if (!nextStatus) {
+            return
+        }
+        
+        setIsUpdatingStatus(true)
+        
+        // Atualização otimista - atualizar status imediatamente na UI
+        let optimisticIfoodStatus = displayOrder.ifood_status
+        if (isIfoodOrder) {
+            switch (nextStatus) {
+                case 'Preparing':
+                    if (displayOrder.ifood_status === 'PLACED') {
+                        optimisticIfoodStatus = 'CONFIRMED'
+                    } else {
+                        optimisticIfoodStatus = 'PREPARATION_STARTED'
+                    }
+                    break
+                case 'Ready':
+                    optimisticIfoodStatus = 'READY_TO_PICKUP'
+                    break
+                case 'Delivered':
+                    optimisticIfoodStatus = 'DISPATCHED'
+                    break
+                case 'Closed':
+                    optimisticIfoodStatus = 'CONCLUDED'
+                    break
+            }
+        }
+        
+        setOptimisticStatus({
+            status: nextStatus,
+            ifood_status: optimisticIfoodStatus || undefined
+        })
+        
+        try {
             if (isIfoodOrder) {
                 // Usar fluxo específico do iFood
-                const result = await updateIfoodOrderStatus(order.id, nextStatus, order.ifood_status)
+                const result = await updateIfoodOrderStatus(displayOrder.id, nextStatus, displayOrder.ifood_status)
                 if (!result.success) {
+                    // Reverter atualização otimista em caso de erro
+                    setOptimisticStatus(null)
+                    setIsUpdatingStatus(false)
                     alert(`Falha ao atualizar status: ${result.error}`)
+                    return
                 }
+                
+                // Os endpoints do backend já atualizam o banco de dados
+                // Aguardar um pouco para garantir que a atualização foi processada
+                // e então recarregar a página para mostrar o novo status
+                setTimeout(() => {
+                    window.location.reload()
+                }, 1500)
             } else {
                 // Usar fluxo padrão
-                const result = await updateOrderStatus(order.id, nextStatus)
+                const result = await updateOrderStatus(displayOrder.id, nextStatus)
                 if (!result.success) {
+                    // Reverter atualização otimista em caso de erro
+                    setOptimisticStatus(null)
+                    setIsUpdatingStatus(false)
                     alert(`Falha ao atualizar status: ${result.error}`)
+                    return
                 }
+                
+                // Atualização bem-sucedida, limpar status otimista após um tempo
+                setTimeout(() => {
+                    setOptimisticStatus(null)
+                    setIsUpdatingStatus(false)
+                }, 1000)
             }
+        } catch (error) {
+            // Reverter atualização otimista em caso de erro
+            setOptimisticStatus(null)
+            setIsUpdatingStatus(false)
+            alert(`Erro ao atualizar status: ${error instanceof Error ? error.message : 'Erro desconhecido'}`)
         }
     }
 
@@ -388,12 +659,38 @@ export function OrderDetails() {
 
     const getStatusColor = (status: typeof order.status) => {
         switch (status) {
-            case "Pending": return "bg-yellow-500"
-            case "Preparing": return "bg-yellow-500"
+            case "Pending": return "bg-orange-500"
+            case "Preparing": return "bg-blue-500"
             case "Ready": return "bg-green-500"
-            case "Delivered": return "bg-blue-500"
+            case "Delivered": return "bg-purple-500"
             case "Closed": return "bg-gray-500"
+            case "Cancelled": return "bg-red-500"
             default: return "bg-gray-500"
+        }
+    }
+    
+    const getStatusLabel = (status: typeof order.status, ifoodStatus?: string | null) => {
+        if (order?.source === 'ifood' && ifoodStatus) {
+            switch (ifoodStatus) {
+                case 'PLACED': return 'Aguardando Confirmação'
+                case 'CONFIRMED': return 'Confirmado'
+                case 'PREPARATION_STARTED': return 'Em Preparação'
+                case 'READY_TO_PICKUP': return 'Pronto para Retirada'
+                case 'DISPATCHED': return 'Despachado'
+                case 'CONCLUDED': return 'Concluído'
+                case 'CANCELLED': return 'Cancelado'
+                default: return status
+            }
+        }
+        
+        switch (status) {
+            case "Pending": return "Pendente"
+            case "Preparing": return "Em Preparação"
+            case "Ready": return "Pronto"
+            case "Delivered": return "Entregue"
+            case "Closed": return "Fechado"
+            case "Cancelled": return "Cancelado"
+            default: return status
         }
     }
 
@@ -415,6 +712,23 @@ export function OrderDetails() {
         }
     }
 
+    // Mostrar loading enquanto verifica o pedido
+    if (isCheckingOrder) {
+        return (
+            <div className="flex items-center justify-center min-h-screen">
+                <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                    <p className="text-muted-foreground">Verificando pedido...</p>
+                </div>
+            </div>
+        )
+    }
+    
+    // Garantir que displayOrder existe antes de usar
+    if (!displayOrder) {
+        return null // O useEffect já vai redirecionar
+    }
+
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
             {/* BEGIN: MainHeader */}
@@ -430,9 +744,9 @@ export function OrderDetails() {
                             ←
                         </button>
                         <h1 className="text-2xl md:text-3xl font-bold text-gray-900 font-extrabold">
-                            {t("orderId")}: {order.source === 'ifood' && order.ifood_display_id 
-                                ? order.ifood_display_id 
-                                : order.id}
+                            {t("orderId")}: {displayOrder && (displayOrder.source === 'ifood' && displayOrder.ifood_display_id 
+                                ? displayOrder.ifood_display_id 
+                                : displayOrder.id)}
                         </h1>
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-600 mt-2 ml-10">
@@ -444,18 +758,18 @@ export function OrderDetails() {
                         <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
                         <span>•</span>
                         <span>{t("customer")}: {order.customer}</span>
-                        {order.source === 'ifood' && (
+                        {displayOrder.source === 'ifood' && (
                             <>
                                 <span>•</span>
-                                <IfoodOrderBadge ifoodStatus={order.ifood_status} />
+                                <IfoodOrderBadge ifoodStatus={displayOrder.ifood_status} />
                             </>
                         )}
-                        {order.status === "Closed" && order.paymentMethod && (
+                        {displayOrder.status === "Closed" && displayOrder.paymentMethod && (
                             <>
                                 <span>•</span>
                                 <div className="flex items-center gap-1.5">
-                                    {getPaymentMethodIcon(order.paymentMethod)}
-                                    <span>{t("paymentMethod")}: {t(order.paymentMethod.toLowerCase() as any)}</span>
+                                    {getPaymentMethodIcon(displayOrder.paymentMethod)}
+                                    <span>{t("paymentMethod")}: {t(displayOrder.paymentMethod.toLowerCase() as any)}</span>
                                 </div>
                             </>
                         )}
@@ -471,21 +785,23 @@ export function OrderDetails() {
                         <Printer className="h-5 w-5" />
                         {t("printReceipt")}
                     </Button>
-                    {order.status !== "Closed" && order.status !== "Cancelled" && (
+                    {displayOrder && displayOrder.status !== "Closed" && displayOrder.status !== "Cancelled" && (
                         <>
                             {(() => {
-                                const isIfoodOrder = order.source === 'ifood' && order.ifood_order_id
-                                const nextStatus = getNextStatus(order.status, isIfoodOrder, order.ifood_status)
+                                const isIfoodOrder = displayOrder.source === 'ifood' && displayOrder.ifood_order_id
+                                const currentStatus = displayOrder.status
+                                const currentIfoodStatus = displayOrder.ifood_status
+                                const nextStatus = getNextStatus(currentStatus, isIfoodOrder, currentIfoodStatus)
                                 
                                 // Para pedidos do iFood, verificar status específico do iFood
                                 if (isIfoodOrder) {
                                     // Não mostrar botão se já está em DISPATCHED ou CONCLUDED
-                                    if (order.ifood_status === 'DISPATCHED' || order.ifood_status === 'CONCLUDED') {
+                                    if (currentIfoodStatus === 'DISPATCHED' || currentIfoodStatus === 'CONCLUDED') {
                                         return null
                                     }
                                 } else {
                                     // Para pedidos manuais, não mostrar se está Delivered
-                                    if (order.status === "Delivered") {
+                                    if (currentStatus === "Delivered") {
                                         return null
                                     }
                                 }
@@ -496,23 +812,46 @@ export function OrderDetails() {
                                 
                                 // Mapear próximo status para texto amigável
                                 let statusLabel = nextStatus
-                                if (isIfoodOrder && order.ifood_status) {
+                                let buttonColor = "bg-orange-500 hover:bg-orange-600"
+                                
+                                if (isIfoodOrder && currentIfoodStatus) {
                                     switch (nextStatus) {
                                         case 'Preparing':
-                                            if (order.ifood_status === 'PLACED') {
+                                            if (currentIfoodStatus === 'PLACED') {
                                                 statusLabel = 'Confirmar e Iniciar Preparação'
+                                                buttonColor = "bg-blue-500 hover:bg-blue-600"
                                             } else {
                                                 statusLabel = 'Iniciar Preparação'
+                                                buttonColor = "bg-indigo-500 hover:bg-indigo-600"
                                             }
                                             break
                                         case 'Ready':
                                             statusLabel = 'Marcar como Pronto para Retirada'
+                                            buttonColor = "bg-green-500 hover:bg-green-600"
                                             break
                                         case 'Delivered':
                                             statusLabel = 'Despachar Pedido'
+                                            buttonColor = "bg-purple-500 hover:bg-purple-600"
                                             break
                                         case 'Closed':
                                             statusLabel = 'Concluir Pedido'
+                                            buttonColor = "bg-gray-500 hover:bg-gray-600"
+                                            break
+                                    }
+                                } else {
+                                    // Cores diferentes para pedidos manuais também
+                                    switch (nextStatus) {
+                                        case 'Preparing':
+                                            buttonColor = "bg-blue-500 hover:bg-blue-600"
+                                            break
+                                        case 'Ready':
+                                            buttonColor = "bg-green-500 hover:bg-green-600"
+                                            break
+                                        case 'Delivered':
+                                            buttonColor = "bg-purple-500 hover:bg-purple-600"
+                                            break
+                                        case 'Closed':
+                                            buttonColor = "bg-gray-500 hover:bg-gray-600"
                                             break
                                     }
                                 }
@@ -520,9 +859,17 @@ export function OrderDetails() {
                                 return (
                                     <Button 
                                         onClick={handleStatusUpdate}
-                                        className="flex-1 md:flex-none bg-orange-500 hover:bg-opacity-90 text-white"
+                                        disabled={isUpdatingStatus}
+                                        className={`flex-1 md:flex-none ${buttonColor} text-white ${isUpdatingStatus ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     >
-                                        {t("updateStatus")} ({statusLabel})
+                                        {isUpdatingStatus ? (
+                                            <>
+                                                <Clock className="h-4 w-4 mr-2 animate-spin" />
+                                                Atualizando...
+                                            </>
+                                        ) : (
+                                            statusLabel
+                                        )}
                                     </Button>
                                 )
                             })()}
@@ -824,17 +1171,26 @@ export function OrderDetails() {
                     {/* Order Status Card */}
                     <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
                         <h3 className="text-base font-medium text-gray-700 mb-3">{t("status")} {t("orderType")}</h3>
-                        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold text-base text-white ${getStatusColor(order.status)}`}>
-                            {getStatusIcon(order.status)}
-                            <span>{t(order.status.toLowerCase() as any) || order.status}</span>
+                        <div className={`flex items-center gap-2 px-4 py-3 rounded-lg font-semibold text-base text-white transition-all duration-300 ${getStatusColor(displayOrder.status)} ${isUpdatingStatus ? 'animate-pulse' : ''}`}>
+                            {isUpdatingStatus ? (
+                                <>
+                                    <Clock className="h-6 w-6 text-white animate-spin" />
+                                    <span>Atualizando...</span>
+                                </>
+                            ) : (
+                                <>
+                                    {getStatusIcon(displayOrder.status)}
+                                    <span>{getStatusLabel(displayOrder.status, displayOrder.ifood_status)}</span>
+                                </>
+                            )}
                         </div>
-                        {order.status === "Closed" && order.paymentMethod && (
+                        {displayOrder.status === "Closed" && displayOrder.paymentMethod && (
                             <div className="mt-4 pt-4 border-t border-gray-200">
                                 <div className="flex items-center justify-between">
                                     <span className="text-sm font-medium text-gray-700">{t("paymentMethod")}:</span>
                                     <div className="flex items-center gap-2">
-                                        {getPaymentMethodIcon(order.paymentMethod, "h-4 w-4 text-gray-600")}
-                                        <span className="text-sm font-semibold text-gray-900">{t(order.paymentMethod.toLowerCase() as any)}</span>
+                                        {getPaymentMethodIcon(displayOrder.paymentMethod, "h-4 w-4 text-gray-600")}
+                                        <span className="text-sm font-semibold text-gray-900">{t(displayOrder.paymentMethod.toLowerCase() as any)}</span>
                                     </div>
                                 </div>
                             </div>

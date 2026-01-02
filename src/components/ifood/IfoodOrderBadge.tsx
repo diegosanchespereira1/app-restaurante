@@ -17,6 +17,9 @@ export function IfoodOrderBadge({ ifoodStatus, className }: IfoodOrderBadgeProps
       case 'CONFIRMED':
       case 'CFM':
         return "bg-blue-100 text-blue-700 border-blue-200"
+      case 'PREPARATION_STARTED':
+      case 'PRS':
+        return "bg-orange-100 text-orange-700 border-orange-200"
       case 'SEPARATION_STARTED':
       case 'SPS':
         return "bg-cyan-100 text-cyan-700 border-cyan-200"
@@ -50,6 +53,9 @@ export function IfoodOrderBadge({ ifoodStatus, className }: IfoodOrderBadgeProps
       case 'CONFIRMED':
       case 'CFM':
         return "iFood - Confirmado"
+      case 'PREPARATION_STARTED':
+      case 'PRS':
+        return "Ifood - Em preparo"
       case 'SEPARATION_STARTED':
       case 'SPS':
         return "iFood - Separação Iniciada"
