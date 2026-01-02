@@ -29,8 +29,6 @@ export function NewOrder() {
     const [customerName, setCustomerName] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
-    const [orderDiscountType, setOrderDiscountType] = useState<"fixed" | "percentage" | null>(null)
-    const [orderDiscountValue, setOrderDiscountValue] = useState<number | null>(null)
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
     const LOCAL_DRAFT_KEY = "new-order-draft"
@@ -42,8 +40,6 @@ export function NewOrder() {
         if (parsed.orderType) setOrderType(parsed.orderType)
         if (parsed.customerName) setCustomerName(parsed.customerName)
         if (parsed.selectedCategory) setSelectedCategory(parsed.selectedCategory)
-        if (parsed.orderDiscountType !== undefined) setOrderDiscountType(parsed.orderDiscountType)
-        if (parsed.orderDiscountValue !== undefined) setOrderDiscountValue(parsed.orderDiscountValue)
         if (parsed.searchQuery) setSearchQuery(parsed.searchQuery)
     }
 
@@ -154,8 +150,6 @@ export function NewOrder() {
             orderType,
             customerName,
             selectedCategory,
-            orderDiscountType,
-            orderDiscountValue,
             searchQuery,
             timestamp: Date.now()
         }
@@ -174,7 +168,7 @@ export function NewOrder() {
         return () => {
             if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
         }
-    }, [selectedItems, selectedTable, orderType, customerName, selectedCategory, orderDiscountType, orderDiscountValue, searchQuery, remoteDraftId])
+    }, [selectedItems, selectedTable, orderType, customerName, selectedCategory, searchQuery, remoteDraftId])
 
     const clearDraft = async () => {
         clearLocalDraft()
@@ -226,19 +220,22 @@ export function NewOrder() {
     }
 
     const calculateTotal = () => {
-        const subtotal = calculateSubtotal()
-        
-        // Aplicar desconto do pedido se configurado
-        if (orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0) {
-            if (orderDiscountType === 'fixed') {
-                return Math.max(0, subtotal - orderDiscountValue)
-            } else if (orderDiscountType === 'percentage') {
-                const discountAmount = (subtotal * orderDiscountValue) / 100
-                return Math.max(0, subtotal - discountAmount)
-            }
-        }
-        
-        return subtotal
+        return calculateSubtotal()
+    }
+
+    const resetOrderState = () => {
+        setSelectedItems([])
+        setSelectedTable("")
+        setCustomerName("")
+        setOrderType(isTablesEnabled ? "dine_in" : "takeout")
+        setSelectedCategory("all")
+        setSearchQuery("")
+    }
+
+    const handleCancelOrder = () => {
+        resetOrderState()
+        // Limpar rascunho sem bloquear a UI
+        void clearDraft()
     }
 
     const handleCreateOrder = async () => {
@@ -271,14 +268,14 @@ export function NewOrder() {
                 }
             }),
             total: calculateTotal(),
-            time: formattedDate,
-            order_discount_type: orderDiscountType,
-            order_discount_value: orderDiscountValue
+            time: formattedDate
         }
 
         try {
             const result = await addOrder(newOrder)
             if (result.success) {
+                // Resetar estado para próxima compra
+                resetOrderState()
                 clearDraft()
                 navigate("/orders")
             } else {
@@ -495,73 +492,12 @@ export function NewOrder() {
                             </div>
 
                             <div className="pt-6 mt-6 border-t shrink-0">
-                                {/* Seção de Desconto */}
-                                <div className="space-y-3 mb-4">
-                                    <Label className="text-sm font-medium">Desconto do Pedido</Label>
-                                    <div className="flex gap-2">
-                                        <Select
-                                            value={orderDiscountType || 'none'}
-                                            onValueChange={(value) => {
-                                                if (value === 'none') {
-                                                    setOrderDiscountType(null)
-                                                    setOrderDiscountValue(null)
-                                                } else {
-                                                    setOrderDiscountType(value as "fixed" | "percentage")
-                                                    if (orderDiscountValue === null) {
-                                                        setOrderDiscountValue(0)
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger className="flex-1">
-                                                <SelectValue placeholder="Tipo" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">Sem desconto</SelectItem>
-                                                <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
-                                                <SelectItem value="percentage">Percentual (%)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        {orderDiscountType && (
-                                            <Input
-                                                type="number"
-                                                step={orderDiscountType === 'fixed' ? "0.01" : "0.1"}
-                                                min="0"
-                                                max={orderDiscountType === 'percentage' ? "100" : undefined}
-                                                value={orderDiscountValue || ''}
-                                                onChange={(e) => setOrderDiscountValue(e.target.value ? parseFloat(e.target.value) : null)}
-                                                placeholder={orderDiscountType === 'fixed' ? "0.00" : "0"}
-                                                className="flex-1"
-                                            />
-                                        )}
-                                    </div>
-                                    {orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0 && (
-                                        <p className="text-xs text-muted-foreground">
-                                            {orderDiscountType === 'fixed' 
-                                                ? `Desconto de ${formatCurrency(orderDiscountValue)}`
-                                                : `Desconto de ${orderDiscountValue}%`
-                                            }
-                                        </p>
-                                    )}
-                                </div>
-
                                 {/* Resumo de valores */}
                                 <div className="space-y-2 mb-4">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Subtotal:</span>
                                         <span>{formatCurrency(calculateSubtotal())}</span>
                                     </div>
-                                    {orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0 && (
-                                        <div className="flex justify-between text-sm text-green-600">
-                                            <span>Desconto:</span>
-                                            <span>
-                                                {orderDiscountType === 'fixed' 
-                                                    ? `-${formatCurrency(orderDiscountValue)}`
-                                                    : `-${formatCurrency((calculateSubtotal() * orderDiscountValue) / 100)}`
-                                                }
-                                            </span>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div className="flex justify-between items-center mb-6 pt-2 border-t">
@@ -586,6 +522,13 @@ export function NewOrder() {
                                 </div>
                                 <Button className="w-full" size="lg" onClick={handleCreateOrder} disabled={(orderType === "dine_in" && isTablesEnabled && !selectedTable) || selectedItems.length === 0}>
                                     {t("createOrder")}
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    className="w-full mt-2" 
+                                    onClick={handleCancelOrder}
+                                >
+                                    Cancelar pedido
                                 </Button>
                                 {((orderType === "dine_in" && isTablesEnabled && !selectedTable) || selectedItems.length === 0) && (
                                     <p className="text-sm text-center text-muted-foreground mt-2">
@@ -617,11 +560,8 @@ export function NewOrder() {
                 setSelectedTable={setSelectedTable}
                 setCustomerName={setCustomerName}
                 handleCreateOrder={handleCreateOrder}
+                handleCancelOrder={handleCancelOrder}
                 calculateTotal={calculateTotal}
-                orderDiscountType={orderDiscountType}
-                orderDiscountValue={orderDiscountValue}
-                setOrderDiscountType={setOrderDiscountType}
-                setOrderDiscountValue={setOrderDiscountValue}
                 calculateSubtotal={calculateSubtotal}
             />
         </div>

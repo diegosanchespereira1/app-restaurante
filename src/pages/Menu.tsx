@@ -30,8 +30,6 @@ export function Menu() {
     const [promotions, setPromotions] = useState<PromotionWithItems[]>([])
     const [orderType, setOrderType] = useState<"dine_in" | "takeout" | "delivery">("takeout")
     const [selectedTable, setSelectedTable] = useState("")
-    const [orderDiscountType, setOrderDiscountType] = useState<"fixed" | "percentage" | null>(null)
-    const [orderDiscountValue, setOrderDiscountValue] = useState<number | null>(null)
     const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
     const lastDraftRef = useRef<any>(null)
 
@@ -329,6 +327,19 @@ export function Menu() {
         }, 0)
     }
 
+    const resetOrderState = () => {
+        setSelectedItems([])
+        setCustomerName("")
+        setSelectedCategory("all")
+        setOrderType("takeout")
+        setSelectedTable("")
+    }
+
+    const handleCancelOrder = () => {
+        resetOrderState()
+        void clearDraft()
+    }
+
     const handleCreateOrder = async () => {
         const now = new Date()
         const day = String(now.getDate()).padStart(2, '0')
@@ -367,8 +378,7 @@ export function Menu() {
 
             const result = await addOrder(newOrder)
             if (result.success) {
-                setCustomerName("")
-                setSelectedItems([])
+                resetOrderState()
                 await clearDraft()
                 navigate("/orders")
             }
@@ -378,18 +388,6 @@ export function Menu() {
             setIsLoading(false)
         }
     }
-
-    // Ocultar menu inferior quando houver itens selecionados
-    useEffect(() => {
-        if (selectedItems.length > 0) {
-            document.body.classList.add('hide-mobile-nav')
-        } else {
-            document.body.classList.remove('hide-mobile-nav')
-        }
-        return () => {
-            document.body.classList.remove('hide-mobile-nav')
-        }
-    }, [selectedItems.length])
 
     // Handler para quando clicar em uma promoção no carrossel
     const handlePromotionClick = (promotion: PromotionWithItems) => {
@@ -687,11 +685,8 @@ export function Menu() {
                 setSelectedTable={setSelectedTable}
                 setCustomerName={setCustomerName}
                 handleCreateOrder={handleCreateOrder}
+                handleCancelOrder={handleCancelOrder}
                 calculateTotal={calculateTotal}
-                orderDiscountType={orderDiscountType}
-                orderDiscountValue={orderDiscountValue}
-                setOrderDiscountType={setOrderDiscountType}
-                setOrderDiscountValue={setOrderDiscountValue}
                 calculateSubtotal={calculateSubtotal}
             />
 
