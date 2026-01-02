@@ -82,15 +82,17 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           if (error && error.code !== 'PGRST116') { // PGRST116 = not found
             console.error('Error loading settings from database:', error)
             // Fallback para localStorage em caso de erro
-            loadFromLocalStorage()
+            const loaded = loadFromLocalStorage()
+            if (!loaded) setSettings(defaultSettings)
           } else if (data && data.settings) {
             console.log('Settings loaded from database:', data.settings)
             // Merge com defaults para garantir que novas configurações sejam incluídas
             const mergedSettings = { ...defaultSettings, ...data.settings }
             setSettings(mergedSettings)
           } else {
-            console.log('No settings found in database, using defaults')
-            setSettings(defaultSettings)
+            console.log('No settings found in database, trying localStorage then defaults')
+            const loaded = loadFromLocalStorage()
+            if (!loaded) setSettings(defaultSettings)
           }
         } else {
           // Modo demo: usar localStorage
@@ -113,12 +115,15 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           const parsed = JSON.parse(savedSettings)
           const mergedSettings = { ...defaultSettings, ...parsed }
           setSettings(mergedSettings)
+          return true
         } else {
           setSettings(defaultSettings)
+          return false
         }
       } catch (error) {
         console.error('Error loading from localStorage:', error)
         setSettings(defaultSettings)
+        return false
       }
     }
 
