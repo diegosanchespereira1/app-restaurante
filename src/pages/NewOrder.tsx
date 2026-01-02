@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
@@ -8,17 +8,20 @@ import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
+import { useAuth } from "../context/AuthContext"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 
 import { formatCurrency } from "../lib/utils"
 import { MobileOrderSummaryCompact } from "../components/orders/MobileOrderSummaryCompact"
+import { supabase, isSupabaseConfigured } from "../lib/supabase"
 
 export function NewOrder() {
     const navigate = useNavigate()
     const { menuItems, tables, addOrder, generateOrderId } = useRestaurant()
     const { t } = useLanguage()
     const { isTablesEnabled } = useSettings()
+    const { user } = useAuth()
 
     const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [selectedTable, setSelectedTable] = useState("")
@@ -28,6 +31,155 @@ export function NewOrder() {
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
     const [orderDiscountType, setOrderDiscountType] = useState<"fixed" | "percentage" | null>(null)
     const [orderDiscountValue, setOrderDiscountValue] = useState<number | null>(null)
+    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+    const LOCAL_DRAFT_KEY = "new-order-draft"
+    const remoteDraftId = user?.id ? `draft-${user.id}` : null
+
+    const applyDraft = (parsed: any) => {
+        if (parsed.selectedItems) setSelectedItems(parsed.selectedItems)
+        if (parsed.selectedTable) setSelectedTable(parsed.selectedTable)
+        if (parsed.orderType) setOrderType(parsed.orderType)
+        if (parsed.customerName) setCustomerName(parsed.customerName)
+        if (parsed.selectedCategory) setSelectedCategory(parsed.selectedCategory)
+        if (parsed.orderDiscountType !== undefined) setOrderDiscountType(parsed.orderDiscountType)
+        if (parsed.orderDiscountValue !== undefined) setOrderDiscountValue(parsed.orderDiscountValue)
+        if (parsed.searchQuery) setSearchQuery(parsed.searchQuery)
+    }
+
+    const loadLocalDraft = () => {
+        try {
+            const raw = localStorage.getItem(LOCAL_DRAFT_KEY)
+            if (!raw) return false
+            const parsed = JSON.parse(raw)
+            applyDraft(parsed)
+            return true
+        } catch (error) {
+            console.error("Erro ao carregar rascunho local:", error)
+            return false
+        }
+    }
+
+    const saveLocalDraft = (draft: any) => {
+        try {
+            localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(draft))
+        } catch (error) {
+            console.error("Erro ao salvar rascunho local:", error)
+        }
+    }
+
+    const clearLocalDraft = () => {
+        try {
+            localStorage.removeItem(LOCAL_DRAFT_KEY)
+        } catch (error) {
+            console.error("Erro ao limpar rascunho local:", error)
+        }
+    }
+
+    const loadRemoteDraft = async () => {
+        if (!isSupabaseConfigured || !remoteDraftId) return false
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('settings')
+                .eq('id', remoteDraftId)
+                .single()
+            if (error && error.code !== 'PGRST116') {
+                console.error("Erro ao buscar rascunho remoto:", error)
+                return false
+            }
+            if (data?.settings) {
+                applyDraft(data.settings)
+                return true
+            }
+            return false
+        } catch (err) {
+            console.error("Erro ao carregar rascunho remoto:", err)
+            return false
+        }
+    }
+
+    const saveRemoteDraft = async (draft: any) => {
+        if (!isSupabaseConfigured || !remoteDraftId) return
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({
+                    id: remoteDraftId,
+                    settings: draft,
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'id'
+                })
+            if (error) {
+                console.error("Erro ao salvar rascunho remoto:", error)
+            }
+        } catch (err) {
+            console.error("Erro ao salvar rascunho remoto:", err)
+        }
+    }
+
+    const clearRemoteDraft = async () => {
+        if (!isSupabaseConfigured || !remoteDraftId) return
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .delete()
+                .eq('id', remoteDraftId)
+            if (error) {
+                console.error("Erro ao limpar rascunho remoto:", error)
+            }
+        } catch (err) {
+            console.error("Erro ao limpar rascunho remoto:", err)
+        }
+    }
+
+    // Carregar rascunho salvo ao montar / trocar usuário
+    useEffect(() => {
+        const loadDrafts = async () => {
+            const loadedRemote = await loadRemoteDraft()
+            if (!loadedRemote) {
+                loadLocalDraft()
+            }
+        }
+        loadDrafts()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [remoteDraftId])
+
+    // Persistir rascunho sempre que algo relevante mudar (debounce 300ms)
+    useEffect(() => {
+        const draft = {
+            selectedItems,
+            selectedTable,
+            orderType,
+            customerName,
+            selectedCategory,
+            orderDiscountType,
+            orderDiscountValue,
+            searchQuery,
+            timestamp: Date.now()
+        }
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
+        }
+        saveTimeoutRef.current = setTimeout(() => {
+            if (isSupabaseConfigured && remoteDraftId) {
+                saveRemoteDraft(draft)
+            } else {
+                saveLocalDraft(draft)
+            }
+        }, 300)
+
+        return () => {
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+        }
+    }, [selectedItems, selectedTable, orderType, customerName, selectedCategory, orderDiscountType, orderDiscountValue, searchQuery, remoteDraftId])
+
+    const clearDraft = async () => {
+        clearLocalDraft()
+        await clearRemoteDraft()
+    }
 
     // Usar menuItems diretamente (já são produtos com price)
     const availableItems = menuItems.filter(item => item.price != null && item.price > 0 && item.status === "Available")
@@ -127,6 +279,7 @@ export function NewOrder() {
         try {
             const result = await addOrder(newOrder)
             if (result.success) {
+                clearDraft()
                 navigate("/orders")
             } else {
                 alert(`Failed to create order: ${result.error}`)
