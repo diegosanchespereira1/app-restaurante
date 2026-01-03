@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react"
 import { useParams, useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
-import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer } from "lucide-react"
+import { Clock, CheckCircle, CreditCard, QrCode, Ticket, Wallet, Printer, MapPin, Phone, Info, ShoppingBag, X } from "lucide-react"
 import { useRestaurant, type Order } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
@@ -24,9 +24,9 @@ import { printReceipt } from "../lib/printer"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
 import type { Product } from "../types/product"
 import { useAuth } from "../context/AuthContext"
-import { X, ShoppingBag } from "lucide-react"
 import { IfoodOrderBadge } from "../components/ifood/IfoodOrderBadge"
 import { getBackendUrl } from "../lib/backend-config"
+import type { IfoodOrderAddress, IfoodOrderDetails, IfoodOrderItemOption } from "../types/ifood"
 
 export function OrderDetails() {
     const { id } = useParams()
@@ -51,6 +51,21 @@ export function OrderDetails() {
     const [isCheckingOrder, setIsCheckingOrder] = useState(true)
     const hasCheckedRef = useRef(false)
     const ordersRef = useRef(orders)
+    const [ifoodDetails, setIfoodDetails] = useState<IfoodOrderDetails | null>(null)
+    const [isLoadingIfoodDetails, setIsLoadingIfoodDetails] = useState(false)
+    const [ifoodDetailsError, setIfoodDetailsError] = useState<string | null>(null)
+
+    // Garantir que o topo fique visível ao abrir no mobile (layout usa container scrollável)
+    useEffect(() => {
+        if (typeof window === 'undefined') return
+
+        const scrollContainer = document.querySelector<HTMLElement>('.mobile-content')
+        if (scrollContainer) {
+            scrollContainer.scrollTo({ top: 0, behavior: 'auto' })
+        } else {
+            window.scrollTo({ top: 0, behavior: 'auto' })
+        }
+    }, [id])
 
     // Manter referência dos pedidos atualizada para consultas após refreshData
     useEffect(() => {
@@ -156,6 +171,58 @@ export function OrderDetails() {
         status: optimisticStatus.status as Order["status"],
         ifood_status: optimisticStatus.ifood_status || order.ifood_status
     } : order
+    const isIfoodOrder = !!(displayOrder?.source === 'ifood' && displayOrder?.ifood_order_id)
+
+    // Buscar detalhes completos do pedido do iFood para exibir pagamento/entrega
+    useEffect(() => {
+        if (!displayOrder || displayOrder.source !== 'ifood' || !displayOrder.ifood_order_id) {
+            setIfoodDetails(null)
+            setIfoodDetailsError(null)
+            setIsLoadingIfoodDetails(false)
+            return
+        }
+
+        let cancelled = false
+        const fetchDetails = async () => {
+            setIsLoadingIfoodDetails(true)
+            setIfoodDetailsError(null)
+
+            try {
+                const backendUrl = getBackendUrl()
+                const response = await fetch(`${backendUrl}/api/ifood/order-details/${displayOrder.ifood_order_id}`)
+
+                if (!response.ok) {
+                    const message = `Erro ao buscar detalhes do iFood (${response.status})`
+                    throw new Error(message)
+                }
+
+                const result = await response.json()
+                if (cancelled) return
+
+                if (result.success && result.order) {
+                    setIfoodDetails(result.order as IfoodOrderDetails)
+                } else {
+                    setIfoodDetailsError(result.message || result.error || 'Não foi possível carregar os detalhes do iFood.')
+                    setIfoodDetails(null)
+                }
+            } catch (error) {
+                if (cancelled) return
+                const message = error instanceof Error ? error.message : 'Falha ao buscar detalhes do iFood.'
+                setIfoodDetailsError(message)
+                setIfoodDetails(null)
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingIfoodDetails(false)
+                }
+            }
+        }
+
+        fetchDetails()
+
+        return () => {
+            cancelled = true
+        }
+    }, [displayOrder?.ifood_order_id, displayOrder?.source])
     
     // Buscar produtos completos para aplicar desconto
     useEffect(() => {
@@ -245,6 +312,67 @@ export function OrderDetails() {
         
         return total
     }, [order, subtotalBeforePaymentDiscount, paymentDiscountType, paymentDiscountValue])
+
+    const ifoodOrderAmount = useMemo(() => {
+        if (!ifoodDetails) return null
+        if (ifoodDetails.total?.orderAmount != null) return ifoodDetails.total.orderAmount
+        if (ifoodDetails.totalPrice?.amount != null) return ifoodDetails.totalPrice.amount
+        return null
+    }, [ifoodDetails])
+
+    const isIfoodPaid = useMemo(() => {
+        if (!isIfoodOrder) return false
+        const pending = ifoodDetails?.payments?.pending
+        const prepaid = ifoodDetails?.payments?.prepaid
+        const total = ifoodOrderAmount ?? displayOrder?.total ?? 0
+
+        if (typeof pending === 'number') {
+            return pending <= 0.01
+        }
+
+        if (typeof prepaid === 'number') {
+            return prepaid >= total
+        }
+
+        return false
+    }, [displayOrder?.total, ifoodDetails, ifoodOrderAmount, isIfoodOrder])
+
+    type DisplayItem = {
+        name: string
+        quantity: number
+        unitPrice: number
+        totalPrice: number
+        observations?: string
+        options?: IfoodOrderItemOption[]
+    }
+
+    const displayItems: DisplayItem[] = useMemo(() => {
+        if (ifoodDetails?.items?.length) {
+            return ifoodDetails.items.map((item) => {
+                const unitPrice = item.unitPrice ?? item.price ?? (item.totalPrice && item.quantity ? item.totalPrice / item.quantity : 0)
+                const totalPrice = item.totalPrice ?? (unitPrice * item.quantity)
+                return {
+                    name: item.name,
+                    quantity: item.quantity,
+                    unitPrice,
+                    totalPrice,
+                    observations: item.observations,
+                    options: item.options
+                }
+            })
+        }
+
+        if (order) {
+            return order.items.map((item) => ({
+                name: item.name,
+                quantity: item.quantity,
+                unitPrice: item.price,
+                totalPrice: item.price * item.quantity
+            }))
+        }
+
+        return []
+    }, [ifoodDetails?.items, order])
 
     // Validar desconto quando o valor mudar
     useEffect(() => {
@@ -712,6 +840,31 @@ export function OrderDetails() {
         }
     }
 
+    const formatPaymentMethodLabel = (method?: string) => {
+        if (!method) return 'Método não informado'
+        switch (method.toUpperCase()) {
+            case 'CREDIT': return 'Cartão de crédito'
+            case 'DEBIT': return 'Cartão de débito'
+            case 'PIX': return 'Pix'
+            case 'CASH': return 'Dinheiro'
+            case 'VOUCHER': return 'Voucher'
+            default: return method
+        }
+    }
+
+    const formatIfoodAddress = (address?: IfoodOrderAddress | null) => {
+        if (!address) return ''
+        const street = address.streetName || address.street || ''
+        const number = address.streetNumber || address.number || ''
+        const parts = [
+            [street, number].filter(Boolean).join(', '),
+            address.neighborhood,
+            [address.city, address.state].filter(Boolean).join(' - '),
+            address.postalCode || address.zipCode
+        ].filter(Boolean)
+        return parts.join(' | ')
+    }
+
     // Mostrar loading enquanto verifica o pedido
     if (isCheckingOrder) {
         return (
@@ -732,10 +885,10 @@ export function OrderDetails() {
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
             {/* BEGIN: MainHeader */}
-            <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8">
+            <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
                 {/* Header Left: Title and Metadata */}
-                <div>
-                    <div className="flex items-center gap-4">
+                <div className="w-full space-y-3">
+                    <div className="flex items-center flex-wrap gap-3">
                         {/* Back arrow icon */}
                         <button 
                             className="text-gray-500 hover:text-gray-800 text-2xl" 
@@ -748,25 +901,22 @@ export function OrderDetails() {
                                 ? displayOrder.ifood_display_id 
                                 : displayOrder.id)}
                         </h1>
+                        {displayOrder.source === 'ifood' && (
+                            <IfoodOrderBadge ifoodStatus={displayOrder.ifood_status} />
+                        )}
                     </div>
-                    <div className="flex items-center gap-4 text-sm text-gray-600 mt-2 ml-10">
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-gray-600 md:ml-10">
                         <div className="flex items-center gap-1.5">
                             <Clock className="h-4 w-4" />
                             <span>{order.time}</span>
                         </div>
-                        <span>•</span>
+                        <span className="hidden sm:inline">•</span>
                         <span>{order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}</span>
-                        <span>•</span>
+                        <span className="hidden sm:inline">•</span>
                         <span>{t("customer")}: {order.customer}</span>
-                        {displayOrder.source === 'ifood' && (
-                            <>
-                                <span>•</span>
-                                <IfoodOrderBadge ifoodStatus={displayOrder.ifood_status} />
-                            </>
-                        )}
                         {displayOrder.status === "Closed" && displayOrder.paymentMethod && (
                             <>
-                                <span>•</span>
+                                <span className="hidden sm:inline">•</span>
                                 <div className="flex items-center gap-1.5">
                                     {getPaymentMethodIcon(displayOrder.paymentMethod)}
                                     <span>{t("paymentMethod")}: {t(displayOrder.paymentMethod.toLowerCase() as any)}</span>
@@ -776,7 +926,7 @@ export function OrderDetails() {
                     </div>
                 </div>
                 {/* Header Right: Action Buttons */}
-                <div className="flex items-center gap-2 mt-4 md:mt-0 w-full md:w-auto">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 mt-2 md:mt-0 w-full md:w-auto">
                     <Button 
                         variant="outline" 
                         onClick={handlePrint}
@@ -944,200 +1094,202 @@ export function OrderDetails() {
                                     </DialogContent>
                                 </Dialog>
                             )}
-                            <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
-                                <DialogTrigger asChild>
-                                    <Button className="flex-1 md:flex-none bg-orange-600 hover:bg-orange-700 text-white">
-                                        {t("payNow")}
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent>
-                                    <DialogHeader>
-                                        <DialogTitle>{t("confirmPayment")}</DialogTitle>
-                                        <DialogDescription>
-                                            {t("selectPaymentMethod")} {formatCurrency(totalWithDiscount)}.
-                                        </DialogDescription>
-                                    </DialogHeader>
-                                    <div className="grid gap-4 py-4">
-                                        <div className="space-y-2">
-                                            <Label>{t("paymentMethod")}</Label>
-                                            <RadioGroup
-                                                value={paymentMethod}
-                                                onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
-                                                className="grid grid-cols-2 gap-4"
-                                            >
-                                                <div>
-                                                    <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="cash"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
-                                                    >
-                                                        <Wallet className="mb-3 h-6 w-6" />
-                                                        {t("cash")}
-                                                    </Label>
-                                                </div>
-                                                <div>
-                                                    <RadioGroupItem value="Card" id="card" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="card"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
-                                                    >
-                                                        <CreditCard className="mb-3 h-6 w-6" />
-                                                        {t("card")}
-                                                    </Label>
-                                                </div>
-                                                <div>
-                                                    <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="voucher"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
-                                                    >
-                                                        <Ticket className="mb-3 h-6 w-6" />
-                                                        {t("voucher")}
-                                                    </Label>
-                                                </div>
-                                                <div>
-                                                    <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
-                                                    <Label
-                                                        htmlFor="pix"
-                                                        className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
-                                                    >
-                                                        <QrCode className="mb-3 h-6 w-6" />
-                                                        {t("pix")}
-                                                    </Label>
-                                                </div>
-                                            </RadioGroup>
-                                        </div>
-
-                                        {/* Campo de Desconto no Pagamento */}
-                                        <div className="space-y-2">
-                                            <Label>Desconto no Pagamento</Label>
-                                            <div className="flex gap-2">
-                                                <Select
-                                                    value={paymentDiscountType || 'none'}
-                                                    onValueChange={(value) => {
-                                                        if (value === 'none') {
-                                                            setPaymentDiscountType(null)
-                                                            setPaymentDiscountValue(null)
-                                                            setDiscountError(null)
-                                                        } else {
-                                                            setPaymentDiscountType(value as "fixed" | "percentage")
-                                                            if (paymentDiscountValue === null) {
-                                                                setPaymentDiscountValue(0)
-                                                            }
-                                                            // Validar se já há valor definido
-                                                            if (paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
-                                                                const validation = validatePaymentDiscount(
-                                                                    value as "fixed" | "percentage",
-                                                                    paymentDiscountValue,
-                                                                    settings.paymentDiscountLimitType,
-                                                                    settings.paymentDiscountLimitValue,
-                                                                    subtotalBeforePaymentDiscount
-                                                                )
-                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
-                                                            }
-                                                        }
-                                                    }}
+                            {!(isIfoodOrder && isIfoodPaid) && (
+                                <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
+                                    <DialogTrigger asChild>
+                                        <Button className="flex-1 md:flex-none bg-orange-600 hover:bg-orange-700 text-white">
+                                            {t("payNow")}
+                                        </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                        <DialogHeader>
+                                            <DialogTitle>{t("confirmPayment")}</DialogTitle>
+                                            <DialogDescription>
+                                                {t("selectPaymentMethod")} {formatCurrency(totalWithDiscount)}.
+                                            </DialogDescription>
+                                        </DialogHeader>
+                                        <div className="grid gap-4 py-4">
+                                            <div className="space-y-2">
+                                                <Label>{t("paymentMethod")}</Label>
+                                                <RadioGroup
+                                                    value={paymentMethod}
+                                                    onValueChange={(value: "Cash" | "Card" | "Voucher" | "PIX") => setPaymentMethod(value)}
+                                                    className="grid grid-cols-2 gap-4"
                                                 >
-                                                    <SelectTrigger className="flex-1">
-                                                        <SelectValue placeholder="Tipo" />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="none">Sem desconto</SelectItem>
-                                                        <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
-                                                        <SelectItem value="percentage">Percentual (%)</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                                {paymentDiscountType && (
-                                                    <Input
-                                                        type="number"
-                                                        step={paymentDiscountType === 'fixed' ? "0.01" : "0.1"}
-                                                        min="0"
-                                                        max={paymentDiscountType === 'percentage' ? "100" : undefined}
-                                                        value={paymentDiscountValue || ''}
-                                                        onChange={(e) => {
-                                                            const value = e.target.value
-                                                            const numValue = value ? parseFloat(value) : null
-                                                            setPaymentDiscountValue(numValue)
-                                                            
-                                                            // Validação em tempo real
-                                                            if (numValue !== null && numValue > 0 && order) {
-                                                                const validation = validatePaymentDiscount(
-                                                                    paymentDiscountType,
-                                                                    numValue,
-                                                                    settings.paymentDiscountLimitType,
-                                                                    settings.paymentDiscountLimitValue,
-                                                                    subtotalBeforePaymentDiscount
-                                                                )
-                                                                setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
-                                                            } else {
+                                                    <div>
+                                                        <RadioGroupItem value="Cash" id="cash" className="peer sr-only" />
+                                                        <Label
+                                                            htmlFor="cash"
+                                                            className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                        >
+                                                            <Wallet className="mb-3 h-6 w-6" />
+                                                            {t("cash")}
+                                                        </Label>
+                                                    </div>
+                                                    <div>
+                                                        <RadioGroupItem value="Card" id="card" className="peer sr-only" />
+                                                        <Label
+                                                            htmlFor="card"
+                                                            className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                        >
+                                                            <CreditCard className="mb-3 h-6 w-6" />
+                                                            {t("card")}
+                                                        </Label>
+                                                    </div>
+                                                    <div>
+                                                        <RadioGroupItem value="Voucher" id="voucher" className="peer sr-only" />
+                                                        <Label
+                                                            htmlFor="voucher"
+                                                            className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                        >
+                                                            <Ticket className="mb-3 h-6 w-6" />
+                                                            {t("voucher")}
+                                                        </Label>
+                                                    </div>
+                                                    <div>
+                                                        <RadioGroupItem value="PIX" id="pix" className="peer sr-only" />
+                                                        <Label
+                                                            htmlFor="pix"
+                                                            className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-orange-600 peer-data-[state=checked]:bg-orange-50 peer-data-[state=checked]:text-orange-900 peer-data-[state=checked]:shadow-md [&:has([data-state=checked])]:border-orange-600 [&:has([data-state=checked])]:bg-orange-50 [&:has([data-state=checked])]:text-orange-900 [&:has([data-state=checked])]:shadow-md"
+                                                        >
+                                                            <QrCode className="mb-3 h-6 w-6" />
+                                                            {t("pix")}
+                                                        </Label>
+                                                    </div>
+                                                </RadioGroup>
+                                            </div>
+
+                                            {/* Campo de Desconto no Pagamento */}
+                                            <div className="space-y-2">
+                                                <Label>Desconto no Pagamento</Label>
+                                                <div className="flex gap-2">
+                                                    <Select
+                                                        value={paymentDiscountType || 'none'}
+                                                        onValueChange={(value) => {
+                                                            if (value === 'none') {
+                                                                setPaymentDiscountType(null)
+                                                                setPaymentDiscountValue(null)
                                                                 setDiscountError(null)
+                                                            } else {
+                                                                setPaymentDiscountType(value as "fixed" | "percentage")
+                                                                if (paymentDiscountValue === null) {
+                                                                    setPaymentDiscountValue(0)
+                                                                }
+                                                                // Validar se já há valor definido
+                                                                if (paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+                                                                    const validation = validatePaymentDiscount(
+                                                                        value as "fixed" | "percentage",
+                                                                        paymentDiscountValue,
+                                                                        settings.paymentDiscountLimitType,
+                                                                        settings.paymentDiscountLimitValue,
+                                                                        subtotalBeforePaymentDiscount
+                                                                    )
+                                                                    setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                                }
                                                             }
                                                         }}
-                                                        placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
-                                                        className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
-                                                    />
+                                                    >
+                                                        <SelectTrigger className="flex-1">
+                                                            <SelectValue placeholder="Tipo" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            <SelectItem value="none">Sem desconto</SelectItem>
+                                                            <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
+                                                            <SelectItem value="percentage">Percentual (%)</SelectItem>
+                                                        </SelectContent>
+                                                    </Select>
+                                                    {paymentDiscountType && (
+                                                        <Input
+                                                            type="number"
+                                                            step={paymentDiscountType === 'fixed' ? "0.01" : "0.1"}
+                                                            min="0"
+                                                            max={paymentDiscountType === 'percentage' ? "100" : undefined}
+                                                            value={paymentDiscountValue || ''}
+                                                            onChange={(e) => {
+                                                                const value = e.target.value
+                                                                const numValue = value ? parseFloat(value) : null
+                                                                setPaymentDiscountValue(numValue)
+                                                                
+                                                                // Validação em tempo real
+                                                                if (numValue !== null && numValue > 0 && order) {
+                                                                    const validation = validatePaymentDiscount(
+                                                                        paymentDiscountType,
+                                                                        numValue,
+                                                                        settings.paymentDiscountLimitType,
+                                                                        settings.paymentDiscountLimitValue,
+                                                                        subtotalBeforePaymentDiscount
+                                                                    )
+                                                                    setDiscountError(validation.isValid ? null : (validation.errorMessage || null))
+                                                                } else {
+                                                                    setDiscountError(null)
+                                                                }
+                                                            }}
+                                                            placeholder={paymentDiscountType === 'fixed' ? "0.00" : "0"}
+                                                            className={`flex-1 ${discountError ? 'border-red-500' : ''}`}
+                                                        />
+                                                    )}
+                                                </div>
+                                                {discountError && (
+                                                    <div className="text-sm text-red-600 mt-1">
+                                                        {discountError}
+                                                    </div>
                                                 )}
                                             </div>
-                                            {discountError && (
-                                                <div className="text-sm text-red-600 mt-1">
-                                                    {discountError}
-                                                </div>
-                                            )}
-                                        </div>
 
-                                        {/* Resumo de valores */}
-                                        <div className="space-y-2 pt-2 border-t">
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-muted-foreground">Subtotal:</span>
-                                                <span>{formatCurrency(subtotalWithPaymentDiscount)}</span>
-                                            </div>
-                                            {order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0 && (
-                                                <div className="flex justify-between text-sm text-green-600">
-                                                    <span>Desconto do Pedido:</span>
-                                                    <span>
-                                                        {order.order_discount_type === 'fixed' 
-                                                            ? `-${formatCurrency(order.order_discount_value)}`
-                                                            : `-${formatCurrency((subtotalWithPaymentDiscount * order.order_discount_value) / 100)}`
-                                                        }
-                                                    </span>
+                                            {/* Resumo de valores */}
+                                            <div className="space-y-2 pt-2 border-t">
+                                                <div className="flex justify-between text-sm">
+                                                    <span className="text-muted-foreground">Subtotal:</span>
+                                                    <span>{formatCurrency(subtotalWithPaymentDiscount)}</span>
                                                 </div>
-                                            )}
-                                            {paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && (
-                                                <div className="flex justify-between text-sm text-green-600">
-                                                    <span>Desconto no Pagamento:</span>
-                                                    <span>
-                                                        {paymentDiscountType === 'fixed' 
-                                                            ? `-${formatCurrency(paymentDiscountValue)}`
-                                                            : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
-                                                        }
-                                                    </span>
+                                                {order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0 && (
+                                                    <div className="flex justify-between text-sm text-green-600">
+                                                        <span>Desconto do Pedido:</span>
+                                                        <span>
+                                                            {order.order_discount_type === 'fixed' 
+                                                                ? `-${formatCurrency(order.order_discount_value)}`
+                                                                : `-${formatCurrency((subtotalWithPaymentDiscount * order.order_discount_value) / 100)}`
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                {paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && (
+                                                    <div className="flex justify-between text-sm text-green-600">
+                                                        <span>Desconto no Pagamento:</span>
+                                                        <span>
+                                                            {paymentDiscountType === 'fixed' 
+                                                                ? `-${formatCurrency(paymentDiscountValue)}`
+                                                                : `-${formatCurrency((subtotalBeforePaymentDiscount * paymentDiscountValue) / 100)}`
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                )}
+                                                <div className="flex justify-between font-bold pt-2 border-t">
+                                                    <span>Total:</span>
+                                                    {(() => {
+                                                        const hasDiscount = totalWithDiscount < subtotalBeforePaymentDiscount
+                                                        return hasDiscount ? (
+                                                            <div className="flex flex-col items-end">
+                                                                <span className="line-through text-muted-foreground text-sm">
+                                                                    {formatCurrency(subtotalBeforePaymentDiscount)}
+                                                                </span>
+                                                                <span className="text-green-600 text-lg">
+                                                                    {formatCurrency(totalWithDiscount)}
+                                                                </span>
+                                                            </div>
+                                                        ) : (
+                                                            <span>{formatCurrency(totalWithDiscount)}</span>
+                                                        )
+                                                    })()}
                                                 </div>
-                                            )}
-                                            <div className="flex justify-between font-bold pt-2 border-t">
-                                                <span>Total:</span>
-                                                {(() => {
-                                                    const hasDiscount = totalWithDiscount < subtotalBeforePaymentDiscount
-                                                    return hasDiscount ? (
-                                                        <div className="flex flex-col items-end">
-                                                            <span className="line-through text-muted-foreground text-sm">
-                                                                {formatCurrency(subtotalBeforePaymentDiscount)}
-                                                            </span>
-                                                            <span className="text-green-600 text-lg">
-                                                                {formatCurrency(totalWithDiscount)}
-                                                            </span>
-                                                        </div>
-                                                    ) : (
-                                                        <span>{formatCurrency(totalWithDiscount)}</span>
-                                                    )
-                                                })()}
                                             </div>
                                         </div>
-                                    </div>
-                                    <DialogFooter>
-                                        <Button onClick={handlePayment}>{t("confirmPayment")}</Button>
-                                    </DialogFooter>
-                                </DialogContent>
-                            </Dialog>
+                                        <DialogFooter>
+                                            <Button onClick={handlePayment}>{t("confirmPayment")}</Button>
+                                        </DialogFooter>
+                                    </DialogContent>
+                                </Dialog>
+                            )}
                         </>
                     )}
                 </div>
@@ -1266,7 +1418,7 @@ export function OrderDetails() {
                                 </div>
                             </div>
                         )}
-                        {order.status !== "Closed" && (
+                        {order.status !== "Closed" && !(isIfoodOrder && isIfoodPaid) && (
                             <Dialog open={isPaymentOpen} onOpenChange={setIsPaymentOpen}>
                                 <DialogTrigger asChild>
                                     <Button className="w-full bg-orange-600 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center space-x-2 text-base hover:bg-orange-700 transition-colors">
@@ -1493,6 +1645,170 @@ export function OrderDetails() {
                         </section>
                     )}
 
+                    {isIfoodOrder && (
+                        <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
+                            <div className="flex items-center justify-between mb-3">
+                                <h3 className="text-base font-medium text-gray-700">Pagamento e entrega (iFood)</h3>
+                                {isIfoodPaid && (
+                                    <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-full">Pré-pago</span>
+                                )}
+                            </div>
+                            {ifoodDetailsError && (
+                                <div className="mb-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md p-2">
+                                    {ifoodDetailsError}
+                                </div>
+                            )}
+                            {isLoadingIfoodDetails && (
+                                <p className="text-sm text-muted-foreground">Carregando detalhes do iFood...</p>
+                            )}
+                            {!isLoadingIfoodDetails && !ifoodDetails && !ifoodDetailsError && (
+                                <p className="text-sm text-muted-foreground">Nenhum detalhe adicional retornado pelo iFood.</p>
+                            )}
+                            {ifoodDetails && (
+                                <div className="space-y-4">
+                                    <div className="space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <span className="text-sm font-medium text-gray-700">Status de pagamento</span>
+                                            <span className={`text-sm font-semibold ${isIfoodPaid ? 'text-green-700' : 'text-orange-600'}`}>
+                                                {isIfoodPaid ? 'Pedido pago no iFood' : 'Pagamento pendente'}
+                                            </span>
+                                        </div>
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-sm bg-gray-50 border border-gray-100 rounded-lg p-3">
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Pré-pago</span>
+                                                <span className="font-semibold">{formatCurrency(ifoodDetails.payments?.prepaid ?? 0)}</span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Pendente</span>
+                                                <span className="font-semibold">
+                                                    {ifoodDetails.payments?.pending != null
+                                                        ? formatCurrency(ifoodDetails.payments.pending)
+                                                        : '—'}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center justify-between">
+                                                <span className="text-muted-foreground">Total pedido</span>
+                                                <span className="font-semibold">
+                                                    {formatCurrency(ifoodOrderAmount ?? displayOrder.total)}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        {ifoodDetails.payments?.methods?.length ? (
+                                            <div className="space-y-2">
+                                                <p className="text-sm font-medium text-gray-700">Métodos informados</p>
+                                                <div className="space-y-2">
+                                                    {ifoodDetails.payments.methods.map((method, idx) => (
+                                                        <div key={`${method.method || method.type || idx}-${idx}`} className="flex items-start justify-between rounded-lg border border-gray-100 bg-gray-50 p-3">
+                                                            <div className="flex flex-col gap-1">
+                                                                <span className="font-semibold text-gray-900">
+                                                                    {formatPaymentMethodLabel(method.method || method.type)}
+                                                                    {method.card?.brand ? ` · ${method.card.brand}` : ''}
+                                                                </span>
+                                                                {method.transaction?.authorizationCode && (
+                                                                    <span className="text-xs text-muted-foreground">
+                                                                        Autorização: {method.transaction.authorizationCode}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                            <span className="text-sm font-semibold text-gray-900">
+                                                                {formatCurrency(method.value ?? 0)}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ) : null}
+                                    </div>
+
+                                    <div className="space-y-2 pt-2 border-t border-dashed">
+                                        <p className="text-sm font-medium text-gray-700">Entrega / Retirada</p>
+                                        <div className="space-y-1 text-sm text-gray-700">
+                                            <div className="flex items-center gap-2">
+                                                <Info className="h-4 w-4 text-gray-500" />
+                                                <span>
+                                                    {ifoodDetails.orderType === 'TAKEOUT' ? 'Retirada' : 'Entrega'} {ifoodDetails.delivery?.deliveredBy ? `• ${ifoodDetails.delivery.deliveredBy}` : ''}
+                                                </span>
+                                            </div>
+                                            {ifoodDetails.delivery?.deliveryDateTime && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <Clock className="h-4 w-4" />
+                                                    <span>Previsão: {new Date(ifoodDetails.delivery.deliveryDateTime).toLocaleString('pt-BR')}</span>
+                                                </div>
+                                            )}
+                                            {ifoodDetails.takeout?.takeoutDateTime && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <Clock className="h-4 w-4" />
+                                                    <span>Retirada: {new Date(ifoodDetails.takeout.takeoutDateTime).toLocaleString('pt-BR')}</span>
+                                                </div>
+                                            )}
+                                            {formatIfoodAddress(ifoodDetails.delivery?.address || ifoodDetails.delivery?.deliveryAddress) && (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <MapPin className="h-4 w-4" />
+                                                    <span>{formatIfoodAddress(ifoodDetails.delivery?.address || ifoodDetails.delivery?.deliveryAddress)}</span>
+                                                </div>
+                                            )}
+                                            {ifoodDetails.customer?.phone?.number || ifoodDetails.customer?.phoneNumber ? (
+                                                <div className="flex items-center gap-2 text-muted-foreground">
+                                                    <Phone className="h-4 w-4" />
+                                                    <span>Contato: {ifoodDetails.customer?.phone?.number || ifoodDetails.customer?.phoneNumber}</span>
+                                                </div>
+                                            ) : null}
+                                            {ifoodDetails.delivery?.pickupCode && (
+                                                <div className="text-sm text-gray-700">
+                                                    Código de retirada: <span className="font-semibold">{ifoodDetails.delivery.pickupCode}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-2 pt-2 border-t border-dashed">
+                                        <p className="text-sm font-medium text-gray-700">Taxas e valores</p>
+                                        <div className="space-y-1 text-sm text-gray-700">
+                                            <div className="flex justify-between">
+                                                <span>Subtotal</span>
+                                                <span>{formatCurrency(ifoodDetails.total?.subTotal ?? ifoodDetails.total?.orderAmount ?? displayOrder.total)}</span>
+                                            </div>
+                                            {ifoodDetails.total?.deliveryFee != null && (
+                                                <div className="flex justify-between">
+                                                    <span>Taxa de entrega</span>
+                                                    <span>{formatCurrency(ifoodDetails.total.deliveryFee)}</span>
+                                                </div>
+                                            )}
+                                            {ifoodDetails.total?.additionalFees != null && (
+                                                <div className="flex justify-between">
+                                                    <span>Taxas adicionais</span>
+                                                    <span>{formatCurrency(ifoodDetails.total.additionalFees)}</span>
+                                                </div>
+                                            )}
+                                            {ifoodDetails.total?.benefits != null && (
+                                                <div className="flex justify-between text-green-700">
+                                                    <span>Benefícios/Descontos</span>
+                                                    <span>-{formatCurrency(ifoodDetails.total.benefits)}</span>
+                                                </div>
+                                            )}
+                                            <div className="flex justify-between font-semibold pt-1 border-t border-gray-200">
+                                                <span>Total iFood</span>
+                                                <span>{formatCurrency(ifoodOrderAmount ?? displayOrder.total)}</span>
+                                            </div>
+                                            {ifoodDetails.additionalFees?.length ? (
+                                                <div className="text-xs text-muted-foreground">
+                                                    <span className="font-semibold text-gray-700">Detalhes de taxas:</span>
+                                                    <ul className="list-disc pl-5 space-y-1 mt-1">
+                                                        {ifoodDetails.additionalFees.map((fee, idx) => (
+                                                            <li key={`${fee.type || 'fee'}-${idx}`}>
+                                                                {fee.type || 'Taxa'}: {formatCurrency(fee.value || 0)}
+                                                            </li>
+                                                        ))}
+                                                    </ul>
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </section>
+                    )}
+
                     {/* Observations Card */}
                     <section className="bg-white p-6 rounded-xl shadow-md border border-gray-100">
                         <h3 className="text-base font-medium text-gray-700 mb-3">{t("notes")}</h3>
@@ -1517,18 +1833,37 @@ export function OrderDetails() {
                     <div className="bg-white p-6 rounded-xl shadow-md h-full border border-gray-100">
                         <h2 className="text-xl font-semibold text-gray-900 mb-5">{t("items")}</h2>
                         <ul className="space-y-6">
-                            {order.items.map((item, index) => (
-                                <li key={item.id} className="flex items-center pb-4 border-b border-gray-200 last:border-b-0">
-                                    <div className="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-600 mr-4">
-                                        {index + 1}
+                            {displayItems.map((item, index) => (
+                                <li key={`${item.name}-${index}`} className="flex flex-col gap-2 pb-4 border-b border-gray-200 last:border-b-0">
+                                    <div className="flex items-center">
+                                        <div className="flex items-center justify-center h-8 w-8 bg-gray-100 rounded-full text-sm font-semibold text-gray-600 mr-4">
+                                            {index + 1}
+                                        </div>
+                                        <div className="flex-grow">
+                                            <p className="font-medium text-gray-900">{item.name}</p>
+                                            <p className="text-sm text-gray-600">{formatCurrency(item.unitPrice)}</p>
+                                        </div>
+                                        <p className="text-gray-900 text-sm font-medium">
+                                            {item.quantity}x {formatCurrency(item.totalPrice)}
+                                        </p>
                                     </div>
-                                    <div className="flex-grow">
-                                        <p className="font-medium text-gray-900">{item.name}</p>
-                                        <p className="text-sm text-gray-600">{formatCurrency(item.price)}</p>
-                                    </div>
-                                    <p className="text-gray-900 text-sm font-medium">
-                                        {item.quantity}x {formatCurrency(item.price * item.quantity)}
-                                    </p>
+                                    {item.observations && (
+                                        <p className="text-xs text-muted-foreground pl-12">Obs.: {item.observations}</p>
+                                    )}
+                                    {item.options?.length ? (
+                                        <div className="pl-12 text-xs text-gray-700 space-y-1">
+                                            {item.options.map((option, idx) => (
+                                                <div key={`${option.id || option.name}-${idx}`} className="flex justify-between">
+                                                    <span>{option.groupName ? `${option.groupName}: ` : ''}{option.name}</span>
+                                                    {option.price != null && (
+                                                        <span className="text-muted-foreground">
+                                                            {formatCurrency(option.price)}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : null}
                                 </li>
                             ))}
                         </ul>

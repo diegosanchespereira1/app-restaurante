@@ -159,11 +159,16 @@ export function Orders() {
     const getStatusInfo = (status: string) => {
         switch (status.toLowerCase()) {
             case "pending":
-            case "preparing":
                 return {
                     label: "Pendente",
                     className: "bg-destructive/10 text-destructive border-destructive/20",
                     icon: Clock
+                }
+            case "preparing":
+                return {
+                    label: "Em Preparo",
+                    className: "bg-blue-100 text-blue-700 border-blue-200",
+                    icon: RefreshCw
                 }
             case "ready":
                 return {
@@ -357,7 +362,19 @@ export function Orders() {
                                         .join(", ")
 
                                     return (
-                                        <article key={order.id} className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 relative">
+                                        <article
+                                            key={order.id}
+                                            className="bg-white rounded-2xl p-5 shadow-sm border border-gray-100 relative cursor-pointer"
+                                            role="button"
+                                            tabIndex={0}
+                                            onClick={() => navigate(`/orders/${order.id}`)}
+                                            onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                    e.preventDefault()
+                                                    navigate(`/orders/${order.id}`)
+                                                }
+                                            }}
+                                        >
                                             <div className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full mb-3 ${statusInfo.className}`}>
                                                 <statusInfo.icon className={`w-3.5 h-3.5 ${statusInfo.spinner ? "animate-spin" : ""}`} />
                                                 <span>{statusInfo.label}</span>
@@ -365,7 +382,10 @@ export function Orders() {
 
                                             <button
                                                 className="absolute top-5 right-5 text-gray-400"
-                                                onClick={() => setExpandedOrders((prev) => ({ ...prev, [order.id]: !isExpanded }))}
+                                                onClick={(e) => {
+                                                    e.stopPropagation()
+                                                    setExpandedOrders((prev) => ({ ...prev, [order.id]: !isExpanded }))
+                                                }}
                                                 aria-label={isExpanded ? "Recolher" : "Expandir"}
                                             >
                                                 {isExpanded ? <ChevronUp /> : <ChevronDown />}
@@ -381,6 +401,11 @@ export function Orders() {
                                                 <div className="flex items-center gap-1.5 text-gray-600">
                                                     <OrderTypeIcon className="w-4 h-4 text-gray-500" />
                                                     <span>{getOrderTypeLabel(order.orderType || "dine_in")} - {formatOrderTime(order.time)}</span>
+                                                    {order.source === "ifood" && (
+                                                        <span className="ml-2 text-red-600 italic font-black text-xs tracking-tight" aria-label="Pedido do iFood">
+                                                            ifood
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </div>
 

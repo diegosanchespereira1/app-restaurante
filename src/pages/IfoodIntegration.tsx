@@ -756,6 +756,12 @@ export function IfoodIntegration() {
 
   const finishedOrders = concludedOrders
 
+  // Em mobile, limita a altura das listas quando houver mais de 10 cards e habilita scroll interno
+  const getMobileOrderListScrollClass = (count: number) => 
+    count > 10 
+      ? 'max-h-[75vh] overflow-y-auto pr-2 md:max-h-none md:overflow-visible' 
+      : ''
+ 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleString('pt-BR')
   }
@@ -1123,7 +1129,7 @@ export function IfoodIntegration() {
                         <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
                       </div>
                     ) : (
-                      <div className="flex flex-wrap gap-3">
+                      <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(pendingOrders.length)}`}>
                         {pendingOrders.map((order) => {
                             try {
                               console.log('[Frontend] Rendering order:', {
@@ -1219,7 +1225,7 @@ export function IfoodIntegration() {
                     <p className="text-sm text-muted-foreground">Nenhum pedido em preparo</p>
                   </div>
                 ) : (
-                  <div className={`flex flex-wrap gap-3 ${preparingOrders.length > 5 ? 'max-h-[500px] overflow-y-auto pr-2' : ''}`}>
+                  <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(preparingOrders.length)} ${preparingOrders.length > 5 ? 'md:max-h-[500px] md:overflow-y-auto md:pr-2' : ''}`}>
                     {preparingOrders.map((order: any) => {
                       const orderDisplayId = order.ifood_display_id || order.id
                       const createdAt = order.created_at || order.createdAt || order.time
@@ -1281,7 +1287,7 @@ export function IfoodIntegration() {
                     <p className="text-sm text-muted-foreground">Aqui ficarão seus pedidos prontos para coleta</p>
                   </div>
                 ) : (
-                  <div className="flex flex-wrap gap-3">
+                  <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(readyOrders.length)}`}>
                     {readyOrders.map((order: any) => {
                       const orderDisplayId = order.ifood_display_id || order.id
                       const isSelected = selectedDashboardOrder?.id === order.id
@@ -1334,7 +1340,7 @@ export function IfoodIntegration() {
                   <p className="text-sm text-muted-foreground">Nenhum pedido em rota</p>
                 </div>
               ) : (
-                <div className="flex flex-wrap gap-3">
+                <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(routeOrders.length)}`}>
                   {routeOrders.map((order: any) => {
                     const orderDisplayId = order.ifood_display_id || order.id
                     const createdAt = order.created_at || order.createdAt || order.closedAt
@@ -1389,7 +1395,7 @@ export function IfoodIntegration() {
                   <p className="text-sm text-muted-foreground">Nenhum pedido finalizado</p>
                 </div>
               ) : (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(finishedOrders.length)}`}>
                   {finishedOrders.map((order: any) => {
                     const orderDisplayId = order.ifood_display_id || order.id
                     const isCancelled = order.status === 'Cancelled' || order.ifood_status === 'CANCELLED'

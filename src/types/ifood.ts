@@ -137,5 +137,131 @@ export interface IfoodAuthInfo {
   token_expires_in_seconds?: number | null
 }
 
+// Tipagem simplificada para detalhes completos de pedido retornados pelo iFood
+export interface IfoodOrderPaymentMethod {
+  value?: number
+  currency?: string
+  method?: string
+  type?: string
+  prepaid?: boolean
+  card?: {
+    brand?: string
+  }
+  transaction?: {
+    authorizationCode?: string
+    acquirerDocument?: string
+  }
+}
 
+export interface IfoodOrderPayments {
+  prepaid?: number
+  pending?: number
+  methods?: IfoodOrderPaymentMethod[]
+}
 
+export interface IfoodOrderItemOption {
+  id?: string
+  name: string
+  groupName?: string
+  quantity?: number
+  unitPrice?: number
+  price?: number
+  addition?: number
+  customizations?: IfoodOrderItemOption[]
+}
+
+export interface IfoodOrderItem {
+  id?: string
+  name: string
+  quantity: number
+  unitPrice?: number
+  price?: number
+  totalPrice?: number
+  observations?: string
+  options?: IfoodOrderItemOption[]
+}
+
+export interface IfoodOrderAddress {
+  streetName?: string
+  street?: string
+  streetNumber?: string
+  number?: string
+  formattedAddress?: string
+  neighborhood?: string
+  complement?: string
+  reference?: string
+  postalCode?: string
+  zipCode?: string
+  city?: string
+  state?: string
+  country?: string
+}
+
+export interface IfoodOrderDetails {
+  id: string
+  displayId?: string
+  shortReference?: string
+  orderType?: 'DELIVERY' | 'TAKEOUT' | 'DINE_IN' | 'INDOOR'
+  orderTiming?: 'IMMEDIATE' | 'SCHEDULED'
+  salesChannel?: string
+  category?: string
+  createdAt?: string
+  preparationStartDateTime?: string
+  total?: {
+    subTotal?: number
+    deliveryFee?: number
+    additionalFees?: number
+    benefits?: number
+    orderAmount?: number
+  }
+  totalPrice?: {
+    amount?: number
+    currency?: string
+  }
+  payments?: IfoodOrderPayments
+  customer?: {
+    id?: string
+    name?: string
+    documentNumber?: string
+    phone?: {
+      number?: string
+      localizer?: string
+    }
+    phoneNumber?: string
+  }
+  items?: IfoodOrderItem[]
+  benefits?: Array<{
+    value?: number
+    target?: string
+    targetId?: string
+    sponsorshipValues?: Array<{ name?: string; value?: number }>
+  }>
+  additionalFees?: Array<{
+    type?: string
+    value?: number
+  }>
+  delivery?: {
+    mode?: string
+    description?: string
+    deliveredBy?: string
+    deliveryDateTime?: string
+    observations?: string
+    pickupCode?: string
+    address?: IfoodOrderAddress
+    deliveryAddress?: IfoodOrderAddress
+  }
+  takeout?: {
+    mode?: string
+    description?: string
+    takeoutDateTime?: string
+    observations?: string
+    pickupCode?: string
+  }
+  schedule?: {
+    deliveryDateTimeStart?: string
+    deliveryDateTimeEnd?: string
+  }
+  additionalInfo?: {
+    metadata?: Record<string, string>
+  }
+}
