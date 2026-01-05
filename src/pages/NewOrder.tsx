@@ -29,7 +29,7 @@ export function NewOrder() {
     const [customerName, setCustomerName] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
-    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
     const LOCAL_DRAFT_KEY = "new-order-draft"
     const remoteDraftId = user?.id ? `draft-${user.id}` : null

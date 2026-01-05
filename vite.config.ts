@@ -19,6 +19,39 @@ export default defineConfig({
   build: {
     // Garantir que o build funcione corretamente com a base URL
     outDir: 'dist',
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    rollupOptions: {
+      output: {
+        manualChunks: (id: string) => {
+          // Split vendor chunks for better caching
+          if (id.includes('node_modules')) {
+            // React core libraries
+            if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+              return 'vendor-react'
+            }
+            // Supabase client
+            if (id.includes('@supabase')) {
+              return 'vendor-supabase'
+            }
+            // Radix UI components
+            if (id.includes('@radix-ui')) {
+              return 'vendor-radix'
+            }
+            // Chart library
+            if (id.includes('recharts') || id.includes('d3-')) {
+              return 'vendor-charts'
+            }
+            // Icons
+            if (id.includes('lucide-react')) {
+              return 'vendor-icons'
+            }
+            // Framer Motion
+            if (id.includes('framer-motion')) {
+              return 'vendor-framer'
+            }
+          }
+        }
+      }
+    }
   }
 })

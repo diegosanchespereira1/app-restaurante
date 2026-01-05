@@ -82,11 +82,26 @@ export interface IfoodOrder {
   salesChannel: string
   createdAt: string
   preparationTimeInSeconds?: number
+  orderType?: string
+  category?: string
+  preparationStartDateTime?: string
+  isTest?: boolean
+  extraInfo?: any
+  takeout?: any
+  dineIn?: any
+  indoor?: any
+  schedule?: any
+  total?: {
+    orderAmount?: number
+    benefits?: number
+    additionalFees?: Array<{ type?: string; value?: number }>
+  }
   items: IfoodOrderItem[]
   customer: {
     id: string
     name: string
     phoneNumber?: string
+    phone?: { number?: string }
   }
   delivery?: {
     address: {
@@ -98,6 +113,22 @@ export interface IfoodOrder {
       state: string
       zipCode: string
     }
+    deliveryAddress?: {
+      streetName?: string
+      street?: string
+      streetNumber?: string
+      number?: string
+      complement?: string
+      neighborhood?: string
+      city?: string
+      state?: string
+      postalCode?: string
+      zipCode?: string
+    }
+    pickupCode?: string
+    deliveredBy?: string
+    deliveryDateTime?: string
+    takeoutDateTime?: string
   }
   totalPrice: {
     amount: number
@@ -107,6 +138,10 @@ export interface IfoodOrder {
     method: string
     value: number
   }>
+  benefits?: any
+  additionalFees?: any
+  picking?: any
+  additionalInfo?: any
 }
 
 export interface IfoodOrderItem {

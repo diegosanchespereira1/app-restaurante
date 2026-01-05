@@ -1,15 +1,13 @@
 import { useState, useEffect, useRef } from "react"
 import { useNavigate } from "react-router-dom"
 import { Button } from "../components/ui/button"
-import { Card, CardContent } from "../components/ui/card"
-import { Plus, Minus, ShoppingCart, Pencil, Trash2, Snowflake } from "lucide-react"
+import { Plus, Minus, Pencil, Trash2, Snowflake } from "lucide-react"
 import { useRestaurant, type MenuItem } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useAuth } from "../context/AuthContext"
 import { formatCurrency } from "../lib/utils"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogDescription } from "../components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "../components/ui/dialog"
 import { Input } from "../components/ui/input"
-import { Label } from "../components/ui/label"
 import { supabase, isSupabaseConfigured } from "../lib/supabase"
 import type { PromotionWithItems } from "../types/promotion"
 import { PromotionCarousel } from "../components/promotions/PromotionCarousel"
@@ -23,14 +21,13 @@ export function Menu() {
     const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [customerName, setCustomerName] = useState("")
     const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
-    const [isLoading, setIsLoading] = useState(false)
     const [newCategoryName, setNewCategoryName] = useState("")
     const [editingCategory, setEditingCategory] = useState<{ id: number, name: string } | null>(null)
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
     const [promotions, setPromotions] = useState<PromotionWithItems[]>([])
     const [orderType, setOrderType] = useState<"dine_in" | "takeout" | "delivery">("takeout")
     const [selectedTable, setSelectedTable] = useState("")
-    const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
     const lastDraftRef = useRef<any>(null)
 
     const LOCAL_DRAFT_KEY = "new-order-draft"
@@ -349,7 +346,6 @@ export function Menu() {
         const minutes = String(now.getMinutes()).padStart(2, '0')
         const formattedDate = `${day}/${month}/${year} ${hours}:${minutes}`
 
-        setIsLoading(true)
         try {
             const orderId = await generateOrderId()
 
@@ -384,8 +380,6 @@ export function Menu() {
             }
         } catch (err: any) {
             console.error(err)
-        } finally {
-            setIsLoading(false)
         }
     }
 

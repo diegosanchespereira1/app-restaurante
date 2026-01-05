@@ -508,15 +508,16 @@ export class IfoodPollingService {
 
       // Build delivery address string if available
       let deliveryAddress: string | undefined
-      const deliveryAddr = ifoodOrder.delivery?.deliveryAddress || ifoodOrder.delivery?.address
+      const deliveryAddr = (ifoodOrder as any)?.delivery?.deliveryAddress || (ifoodOrder as any)?.delivery?.address
       if (deliveryAddr) {
-        const street = deliveryAddr.streetName || deliveryAddr.street || ''
-        const number = deliveryAddr.streetNumber || deliveryAddr.number || ''
-        const complement = deliveryAddr.complement || ''
-        const neighborhood = deliveryAddr.neighborhood || ''
-        const city = deliveryAddr.city || ''
-        const state = deliveryAddr.state || ''
-        const zipCode = deliveryAddr.postalCode || deliveryAddr.zipCode || ''
+        const addr: any = deliveryAddr
+        const street = addr.streetName || addr.street || ''
+        const number = addr.streetNumber || addr.number || ''
+        const complement = addr.complement || ''
+        const neighborhood = addr.neighborhood || ''
+        const city = addr.city || ''
+        const state = addr.state || ''
+        const zipCode = addr.postalCode || addr.zipCode || ''
         
         deliveryAddress = `${street}, ${number}${complement ? ` - ${complement}` : ''}, ${neighborhood}, ${city} - ${state}${zipCode ? `, ${zipCode}` : ''}`.trim()
       }

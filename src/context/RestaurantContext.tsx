@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react'
 import { supabase, isSupabaseConfigured } from '../lib/supabase'
 import type { Product, CreateProductInput } from '../types/product'
+import { getBackendUrl } from '../lib/backend-config'
 
 // Types - MenuItem mantido para compatibilidade durante transição
 export interface MenuItem {
@@ -597,7 +598,6 @@ export function RestaurantProvider({ children }: { children: ReactNode }) {
         // Sync status to iFood API if this is an iFood order
         if (isIfoodOrder) {
             try {
-                const { getBackendUrl } = await import('../lib/backend-config')
                 const backendUrl = getBackendUrl()
                 const syncResponse = await fetch(`${backendUrl}/api/ifood/sync-order-status/${orderId}`, {
                     method: 'POST',

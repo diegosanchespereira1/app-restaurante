@@ -793,7 +793,7 @@ router.post('/webhook', async (req: Request, res: Response) => {
     // Buscar pedido pelo ifood_order_id
     const { data: order } = await supabase
       .from('orders')
-      .select('id, status')
+      .select('id, status, ifood_status')
       .eq('ifood_order_id', orderId)
       .single()
     
@@ -889,14 +889,14 @@ router.post('/webhook', async (req: Request, res: Response) => {
         case 'CANCELLATION_REQUESTED':
         case 'CAR':
           // Cancellation requested - keep current status (pending confirmation)
-          systemStatus = existingOrder?.status || 'Preparing'
-          ifoodStatus = existingOrder?.ifood_status || 'CONFIRMED'
+          systemStatus = order.status || 'Preparing'
+          ifoodStatus = order.ifood_status || 'CONFIRMED'
           break
         case 'CANCELLATION_REQUEST_FAILED':
         case 'CARF':
           // Cancellation failed - keep current status
-          systemStatus = existingOrder?.status || 'Preparing'
-          ifoodStatus = existingOrder?.ifood_status || 'CONFIRMED'
+          systemStatus = order.status || 'Preparing'
+          ifoodStatus = order.ifood_status || 'CONFIRMED'
           break
       }
       
@@ -1033,11 +1033,12 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     // Events from polling need to be processed - extract order IDs and fetch full order details
     // Ensure events is an array
     let events: any[] = []
-    if (Array.isArray(result.orders)) {
-      events = result.orders
-    } else if (result.orders && typeof result.orders === 'object') {
+    const ordersPayload: any = result.orders as any
+    if (Array.isArray(ordersPayload)) {
+      events = ordersPayload
+    } else if (ordersPayload && typeof ordersPayload === 'object') {
       // Try to extract events from object structure
-      events = result.orders.events || result.orders.data || result.orders.items || [result.orders]
+      events = ordersPayload.events || ordersPayload.data || ordersPayload.items || [ordersPayload]
     } else {
       console.warn('[pending-orders] Formato inesperado de eventos:', typeof result.orders, result.orders)
       events = []

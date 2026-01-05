@@ -72,12 +72,12 @@ export function OrderDetails() {
         ordersRef.current = orders
     }, [orders])
 
-    const order = orders.find(o => o.id === id)
+    const baseOrder = orders.find(o => o.id === id)
     
     // Verificar se o pedido existe após os dados serem carregados
     useEffect(() => {
         // Se encontrou o pedido, não precisa verificar mais
-        if (order) {
+        if (baseOrder) {
             setIsCheckingOrder(false)
             hasCheckedRef.current = false
             return
@@ -162,15 +162,15 @@ export function OrderDetails() {
         }, 500) // Aguardar 500ms antes de verificar
 
         return () => clearTimeout(timeout)
-    }, [id, order, navigate, refreshData, isLoading, orders])
+    }, [id, baseOrder, navigate, refreshData, isLoading, orders])
 
 
     // Usar status otimista se estiver atualizando
-    const displayOrder = optimisticStatus && order ? {
-        ...order,
+    const displayOrder = optimisticStatus && baseOrder ? {
+        ...baseOrder,
         status: optimisticStatus.status as Order["status"],
-        ifood_status: optimisticStatus.ifood_status || order.ifood_status
-    } : order
+        ifood_status: optimisticStatus.ifood_status || baseOrder.ifood_status
+    } : baseOrder
     const isIfoodOrder = !!(displayOrder?.source === 'ifood' && displayOrder?.ifood_order_id)
 
     // Buscar detalhes completos do pedido do iFood para exibir pagamento/entrega
@@ -226,10 +226,10 @@ export function OrderDetails() {
     
     // Buscar produtos completos para aplicar desconto
     useEffect(() => {
-        if (!isSupabaseConfigured || !order) return
+        if (!isSupabaseConfigured || !displayOrder) return
 
         const fetchProducts = async () => {
-            const productIds = order.items.map(item => item.id).filter(id => id != null)
+            const productIds = displayOrder.items.map(item => item.id).filter(id => id != null)
             
             if (productIds.length === 0) return
 
@@ -244,15 +244,15 @@ export function OrderDetails() {
         }
 
         fetchProducts()
-    }, [order, isSupabaseConfigured])
+    }, [displayOrder, isSupabaseConfigured])
 
     // Calcular subtotal com desconto por método de pagamento
     const subtotalWithPaymentDiscount = useMemo(() => {
-        if (!order) return 0
+        if (!displayOrder) return 0
         
         let subtotal = 0
         
-        for (const item of order.items) {
+        for (const item of displayOrder.items) {
             const product = products.find(p => p.id === item.id)
             const menuItem = menuItems.find(m => m.id === item.id)
             
@@ -273,30 +273,30 @@ export function OrderDetails() {
         }
         
         return subtotal
-    }, [order, products, menuItems, paymentMethod])
+    }, [displayOrder, products, menuItems, paymentMethod])
 
     // Calcular subtotal antes do desconto no pagamento (com desconto do pedido aplicado)
     const subtotalBeforePaymentDiscount = useMemo(() => {
-        if (!order) return 0
+        if (!displayOrder) return 0
         
         let total = subtotalWithPaymentDiscount
         
         // Aplicar desconto do pedido se existir
-        if (order.order_discount_type && order.order_discount_value !== null && order.order_discount_value !== undefined && order.order_discount_value > 0) {
-            if (order.order_discount_type === 'fixed') {
-                total = Math.max(0, total - order.order_discount_value)
-            } else if (order.order_discount_type === 'percentage') {
-                const discountAmount = (total * order.order_discount_value) / 100
+        if (displayOrder.order_discount_type && displayOrder.order_discount_value !== null && displayOrder.order_discount_value !== undefined && displayOrder.order_discount_value > 0) {
+            if (displayOrder.order_discount_type === 'fixed') {
+                total = Math.max(0, total - displayOrder.order_discount_value)
+            } else if (displayOrder.order_discount_type === 'percentage') {
+                const discountAmount = (total * displayOrder.order_discount_value) / 100
                 total = Math.max(0, total - discountAmount)
             }
         }
         
         return total
-    }, [order, subtotalWithPaymentDiscount])
+    }, [displayOrder, subtotalWithPaymentDiscount])
 
     // Calcular total com desconto aplicado (incluindo desconto do pedido e desconto no pagamento)
     const totalWithDiscount = useMemo(() => {
-        if (!order) return 0
+        if (!displayOrder) return 0
         
         let total = subtotalBeforePaymentDiscount
         
@@ -311,7 +311,7 @@ export function OrderDetails() {
         }
         
         return total
-    }, [order, subtotalBeforePaymentDiscount, paymentDiscountType, paymentDiscountValue])
+    }, [displayOrder, subtotalBeforePaymentDiscount, paymentDiscountType, paymentDiscountValue])
 
     const ifoodOrderAmount = useMemo(() => {
         if (!ifoodDetails) return null
@@ -362,8 +362,8 @@ export function OrderDetails() {
             })
         }
 
-        if (order) {
-            return order.items.map((item) => ({
+        if (baseOrder) {
+            return baseOrder.items.map((item) => ({
                 name: item.name,
                 quantity: item.quantity,
                 unitPrice: item.price,
@@ -372,11 +372,11 @@ export function OrderDetails() {
         }
 
         return []
-    }, [ifoodDetails?.items, order])
+    }, [ifoodDetails?.items, baseOrder])
 
     // Validar desconto quando o valor mudar
     useEffect(() => {
-        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && baseOrder) {
             const validation = validatePaymentDiscount(
                 paymentDiscountType,
                 paymentDiscountValue,
@@ -393,17 +393,17 @@ export function OrderDetails() {
         } else {
             setDiscountError(null)
         }
-    }, [paymentDiscountType, paymentDiscountValue, settings.paymentDiscountLimitType, settings.paymentDiscountLimitValue, subtotalBeforePaymentDiscount, order])
+    }, [paymentDiscountType, paymentDiscountValue, settings.paymentDiscountLimitType, settings.paymentDiscountLimitValue, subtotalBeforePaymentDiscount, baseOrder])
 
     // Função para obter o próximo status baseado no tipo de pedido
-    const getNextStatus = (currentStatus: typeof order.status, isIfoodOrder: boolean, currentIfoodStatus?: string | null) => {
+    const getNextStatus = (currentStatus: Order["status"], isIfoodOrder: boolean, currentIfoodStatus?: string | null) => {
         if (isIfoodOrder) {
             // Fluxo específico do iFood baseado no status atual do iFood
             if (!currentIfoodStatus) {
                 // Se não tem status do iFood, usar fluxo padrão
                 const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
                 const currentIndex = flow.indexOf(currentStatus)
-                return flow[currentIndex + 1] as typeof order.status | undefined
+                return flow[currentIndex + 1] as Order["status"] | undefined
             }
             
             // Mapear status do iFood para próximo status do sistema
@@ -422,18 +422,21 @@ export function OrderDetails() {
                     // Fallback para fluxo padrão
                     const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
                     const currentIndex = flow.indexOf(currentStatus)
-                    return flow[currentIndex + 1] as typeof order.status | undefined
+                    return flow[currentIndex + 1] as Order["status"] | undefined
             }
         } else {
             // Fluxo padrão para pedidos manuais
             const flow = ["Pending", "Preparing", "Ready", "Delivered", "Closed"]
             const currentIndex = flow.indexOf(currentStatus)
-            return flow[currentIndex + 1] as typeof order.status | undefined
+            return flow[currentIndex + 1] as Order["status"] | undefined
         }
     }
 
     // Função para atualizar status do pedido do iFood através da API específica
     const updateIfoodOrderStatus = async (orderId: string, nextStatus: string, currentIfoodStatus?: string | null) => {
+        if (!baseOrder) {
+            return { success: false, error: 'Pedido não encontrado' }
+        }
         const backendUrl = getBackendUrl()
         
         // Mapear status do sistema para ação do iFood
@@ -468,10 +471,10 @@ export function OrderDetails() {
         }
         
         // Se precisa confirmar primeiro (status PLACED)
-        if (needsConfirmation && order.ifood_order_id) {
+        if (needsConfirmation && baseOrder.ifood_order_id) {
             try {
-                console.log(`[updateIfoodOrderStatus] Confirming order ${order.ifood_order_id} first...`)
-                const confirmResponse = await fetch(`${backendUrl}/api/ifood/accept-order/${order.ifood_order_id}`, {
+                console.log(`[updateIfoodOrderStatus] Confirming order ${baseOrder.ifood_order_id} first...`)
+                const confirmResponse = await fetch(`${backendUrl}/api/ifood/accept-order/${baseOrder.ifood_order_id}`, {
                     method: 'POST'
                 })
                 
@@ -516,7 +519,7 @@ export function OrderDetails() {
                 console.error('[updateIfoodOrderStatus] Erro ao confirmar pedido:', error)
                 // Tentar buscar status atual do pedido para mostrar informação útil
                 try {
-                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${order.ifood_order_id}`)
+                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${baseOrder.ifood_order_id}`)
                     if (statusResponse.ok) {
                         const statusData = await statusResponse.json()
                         if (statusData.success && statusData.statusMessage) {
@@ -533,18 +536,18 @@ export function OrderDetails() {
         }
         
         // Se há ação específica do iFood, chamar o endpoint correspondente
-        if (ifoodAction && order.ifood_order_id) {
+        if (ifoodAction && baseOrder.ifood_order_id) {
             try {
                 let endpoint = ''
                 switch (ifoodAction) {
                     case 'start-preparation':
-                        endpoint = `${backendUrl}/api/ifood/start-preparation/${order.ifood_order_id}`
+                        endpoint = `${backendUrl}/api/ifood/start-preparation/${baseOrder.ifood_order_id}`
                         break
                     case 'ready-to-pickup':
-                        endpoint = `${backendUrl}/api/ifood/ready-to-pickup/${order.ifood_order_id}`
+                        endpoint = `${backendUrl}/api/ifood/ready-to-pickup/${baseOrder.ifood_order_id}`
                         break
                     case 'dispatch':
-                        endpoint = `${backendUrl}/api/ifood/dispatch-order/${order.ifood_order_id}`
+                        endpoint = `${backendUrl}/api/ifood/dispatch-order/${baseOrder.ifood_order_id}`
                         break
                 }
                 
@@ -599,7 +602,7 @@ export function OrderDetails() {
                 console.error('[updateIfoodOrderStatus] Erro ao atualizar status no iFood:', error)
                 // Tentar buscar status atual do pedido para mostrar informação útil
                 try {
-                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${order.ifood_order_id}`)
+                    const statusResponse = await fetch(`${backendUrl}/api/ifood/order-status/${baseOrder.ifood_order_id}`)
                     if (statusResponse.ok) {
                         const statusData = await statusResponse.json()
                         if (statusData.success && statusData.statusMessage) {
@@ -623,7 +626,7 @@ export function OrderDetails() {
             return
         }
         
-        const isIfoodOrder = displayOrder.source === 'ifood' && displayOrder.ifood_order_id
+        const isIfoodOrder = !!(displayOrder.source === 'ifood' && displayOrder.ifood_order_id)
         const nextStatus = getNextStatus(displayOrder.status, isIfoodOrder, displayOrder.ifood_status)
         
         if (!nextStatus) {
@@ -705,7 +708,7 @@ export function OrderDetails() {
 
     const handlePayment = async () => {
         // Validar desconto antes de processar o pagamento
-        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && order) {
+        if (paymentDiscountType && paymentDiscountValue !== null && paymentDiscountValue > 0 && baseOrder) {
             const validation = validatePaymentDiscount(
                 paymentDiscountType,
                 paymentDiscountValue,
@@ -720,7 +723,9 @@ export function OrderDetails() {
             }
         }
 
-        const result = await processPayment(order.id, paymentMethod)
+        if (!baseOrder) return
+
+        const result = await processPayment(baseOrder.id, paymentMethod)
         if (result.success) {
             setIsPaymentOpen(false)
         } else {
@@ -729,7 +734,7 @@ export function OrderDetails() {
     }
 
     const handleCancel = async () => {
-        if (!order) return
+        if (!baseOrder) return
         
         if (!cancelPassword) {
             setCancelError("Por favor, insira a senha de admin/gerente")
@@ -742,7 +747,7 @@ export function OrderDetails() {
         }
 
         setCancelError(null)
-        const result = await cancelUnpaidOrder(order.id, cancelPassword, cancellationReason)
+        const result = await cancelUnpaidOrder(baseOrder.id, cancelPassword, cancellationReason)
         
         if (result.success) {
             setIsCancelOpen(false)
@@ -755,24 +760,26 @@ export function OrderDetails() {
     }
 
     const handlePrint = async () => {
+        if (!baseOrder) return
+
         if (printerSettings.enabled) {
             // Usa o módulo de impressão configurado
             const printData = {
-                orderId: order.id,
-                customer: order.customer,
-                table: order.table,
-                orderType: order.orderType,
-                items: order.items.map(item => ({
+                orderId: baseOrder.id,
+                customer: baseOrder.customer,
+                table: baseOrder.table,
+                orderType: baseOrder.orderType,
+                items: baseOrder.items.map(item => ({
                     name: item.name,
                     quantity: item.quantity,
                     price: item.price
                 })),
-                subtotal: order.total,
-                total: order.total,
-                paymentMethod: order.paymentMethod,
+                subtotal: baseOrder.total,
+                total: baseOrder.total,
+                paymentMethod: baseOrder.paymentMethod,
                 notes: note || undefined,
                 date: new Date().toLocaleDateString('pt-BR'),
-                time: order.time || new Date().toLocaleTimeString('pt-BR')
+                time: baseOrder.time || new Date().toLocaleTimeString('pt-BR')
             }
             
             const success = await printReceipt(printData, printerSettings)
@@ -785,7 +792,7 @@ export function OrderDetails() {
         }
     }
 
-    const getStatusColor = (status: typeof order.status) => {
+    const getStatusColor = (status: Order["status"]) => {
         switch (status) {
             case "Pending": return "bg-orange-500"
             case "Preparing": return "bg-blue-500"
@@ -797,8 +804,8 @@ export function OrderDetails() {
         }
     }
     
-    const getStatusLabel = (status: typeof order.status, ifoodStatus?: string | null) => {
-        if (order?.source === 'ifood' && ifoodStatus) {
+    const getStatusLabel = (status: Order["status"], ifoodStatus?: string | null) => {
+        if (displayOrder?.source === 'ifood' && ifoodStatus) {
             switch (ifoodStatus) {
                 case 'PLACED': return 'Aguardando Confirmação'
                 case 'CONFIRMED': return 'Confirmado'
@@ -822,7 +829,7 @@ export function OrderDetails() {
         }
     }
 
-    const getStatusIcon = (status: typeof order.status) => {
+    const getStatusIcon = (status: Order["status"]) => {
         switch (status) {
             case "Ready": 
             case "Delivered": 
@@ -881,6 +888,7 @@ export function OrderDetails() {
     if (!displayOrder) {
         return null // O useEffect já vai redirecionar
     }
+    const order = displayOrder
 
     return (
         <div className="container mx-auto p-4 sm:p-6 lg:p-8">
@@ -938,7 +946,7 @@ export function OrderDetails() {
                     {displayOrder && displayOrder.status !== "Closed" && displayOrder.status !== "Cancelled" && (
                         <>
                             {(() => {
-                                const isIfoodOrder = displayOrder.source === 'ifood' && displayOrder.ifood_order_id
+                                const isIfoodOrder = !!(displayOrder.source === 'ifood' && displayOrder.ifood_order_id)
                                 const currentStatus = displayOrder.status
                                 const currentIfoodStatus = displayOrder.ifood_status
                                 const nextStatus = getNextStatus(currentStatus, isIfoodOrder, currentIfoodStatus)
@@ -961,7 +969,7 @@ export function OrderDetails() {
                                 }
                                 
                                 // Mapear próximo status para texto amigável
-                                let statusLabel = nextStatus
+                                let statusLabel: string = nextStatus
                                 let buttonColor = "bg-orange-500 hover:bg-orange-600"
                                 
                                 if (isIfoodOrder && currentIfoodStatus) {

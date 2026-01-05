@@ -22,7 +22,7 @@ export function Orders() {
     const [errorMessage, setErrorMessage] = useState<string | null>(null)
     const [statusDetails, setStatusDetails] = useState<{ status: string; ifoodStatus: string; statusMessage: string } | null>(null)
     const [expandedOrders, setExpandedOrders] = useState<Record<string, boolean>>({})
-    const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null)
+    const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
     // Verificar se há mensagem de erro no state da navegação
     useEffect(() => {
