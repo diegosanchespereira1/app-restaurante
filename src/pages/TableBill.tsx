@@ -198,7 +198,9 @@ export function TableBill() {
                         <Card key={order.id}>
                             <CardHeader className="pb-2">
                                 <div className="flex justify-between items-center">
-                                    <CardTitle className="text-base">{t("orderId")}: {order.id}</CardTitle>
+                                    <CardTitle className="text-base">{t("orderId")}: {order.source === 'ifood' && order.ifood_display_id 
+                                        ? order.ifood_display_id 
+                                        : order.id}</CardTitle>
                                     <span className="text-sm text-muted-foreground">{order.time}</span>
                                 </div>
                             </CardHeader>

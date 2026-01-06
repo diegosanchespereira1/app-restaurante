@@ -20,11 +20,29 @@ cp .env.example .env
 - `PRINTER_TIMEOUT`: Timeout de conexão com impressora em ms (padrão: 5000)
 - `SUPABASE_URL`: URL do projeto Supabase (obrigatório para integração iFood)
 - `SUPABASE_SERVICE_ROLE_KEY`: Service Role Key do Supabase (obrigatório para integração iFood)
-- `IFOOD_ENCRYPTION_KEY`: Chave para criptografar credenciais do iFood (opcional, usa chave padrão se não fornecido)
+- `IFOOD_ENCRYPTION_KEY`: Chave OBRIGATÓRIA (mín. 32 caracteres ou 64 hex) para criptografar credenciais do iFood. O backend não inicia sem esta variável. Gere uma chave com `openssl rand -hex 32` e mantenha-a fora do código-fonte.
 - `IFOOD_API_TIMEOUT`: Timeout para requisições à API do iFood em ms (padrão: 30000)
 - `BACKEND_URL` ou `BACKEND_PUBLIC_URL`: URL pública do backend para webhooks (opcional)
 
 **Importante**: Consulte `IFOOD_BEST_PRACTICES.md` antes de fazer alterações no código de integração com iFood.
+
+### Rotação da IFOOD_ENCRYPTION_KEY
+- Defina uma nova chave forte (≥32 caracteres ou 64 hex) e reinicie o backend.
+- Regrave as credenciais do iFood via endpoint de configuração para que sejam criptografadas com a nova chave.
+- Nunca use chaves padrão ou armazenadas no repositório.
+
+## Documentação iFood
+
+Para referência completa da API do iFood, consulte:
+
+- **`IFOOD_API_REFERENCE.md`** - Referência completa com links para documentação oficial
+- **`IFOOD_BEST_PRACTICES.md`** - Boas práticas recomendadas pelo iFood
+- **`TROUBLESHOOTING_IFOOD.md`** - Guia de resolução de problemas
+
+**Documentação Oficial do iFood**:
+- Swagger/API Reference: https://developer.ifood.com.br/pt-BR/docs/references/
+- Guia de Documentação: https://developer.ifood.com.br/pt-BR/docs/guides/
+- Endpoint OAuth Token: https://developer.ifood.com.br/pt-BR/docs/references/#operations-OAuth-oauthTokenV1
 
 ## Desenvolvimento
 

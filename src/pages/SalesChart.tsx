@@ -564,7 +564,7 @@ export function SalesChart() {
                                                 <tr 
                                                     key={order.id} 
                                                     className="border-b hover:bg-muted/50 cursor-pointer transition-colors"
-                                                    onClick={() => navigate(`/orders/${order.id}`)}
+                                                    onClick={() => navigate(`/orders/${order.id}`, { replace: false })}
                                                 >
                                                     <td className="py-3 px-4 font-mono text-sm">{order.id}</td>
                                                     <td className="py-3 px-4">{order.customer}</td>

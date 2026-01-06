@@ -91,7 +91,9 @@ export function Dashboard() {
                                     <div className="space-y-1">
                                         <p className="text-sm font-medium leading-none">{order.customer}</p>
                                         <p className="text-sm text-muted-foreground">
-                                            {order.id} • {order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}
+                                            {order.source === 'ifood' && order.ifood_display_id 
+                                                ? order.ifood_display_id 
+                                                : order.id} • {order.table ? `${t("table")} ${order.table}` : (order.orderType ? t(order.orderType === 'dine_in' ? 'dineIn' : order.orderType) : t('dineIn'))}
                                         </p>
                                     </div>
                                     <div className="ml-auto font-medium">+{formatCurrency(order.total)}</div>

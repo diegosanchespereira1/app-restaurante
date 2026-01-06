@@ -61,3 +61,5 @@ export interface UpdatePromotionInput extends Partial<CreatePromotionInput> {
   id: number
 }
 
+
+

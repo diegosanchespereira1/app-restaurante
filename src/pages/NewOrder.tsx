@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Button } from "../components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card"
 import { Input } from "../components/ui/input"
@@ -8,17 +8,20 @@ import { useNavigate } from "react-router-dom"
 import { useRestaurant } from "../context/RestaurantContext"
 import { useLanguage } from "../context/LanguageContext"
 import { useSettings } from "../context/SettingsContext"
+import { useAuth } from "../context/AuthContext"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select"
 import { RadioGroup, RadioGroupItem } from "../components/ui/radio-group"
 
 import { formatCurrency } from "../lib/utils"
 import { MobileOrderSummaryCompact } from "../components/orders/MobileOrderSummaryCompact"
+import { supabase, isSupabaseConfigured } from "../lib/supabase"
 
 export function NewOrder() {
     const navigate = useNavigate()
     const { menuItems, tables, addOrder, generateOrderId } = useRestaurant()
     const { t } = useLanguage()
     const { isTablesEnabled } = useSettings()
+    const { user } = useAuth()
 
     const [selectedItems, setSelectedItems] = useState<{ id: number; quantity: number }[]>([])
     const [selectedTable, setSelectedTable] = useState("")
@@ -26,8 +29,151 @@ export function NewOrder() {
     const [customerName, setCustomerName] = useState("")
     const [searchQuery, setSearchQuery] = useState("")
     const [selectedCategory, setSelectedCategory] = useState<string>("all")
-    const [orderDiscountType, setOrderDiscountType] = useState<"fixed" | "percentage" | null>(null)
-    const [orderDiscountValue, setOrderDiscountValue] = useState<number | null>(null)
+    const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+    const LOCAL_DRAFT_KEY = "new-order-draft"
+    const remoteDraftId = user?.id ? `draft-${user.id}` : null
+
+    const applyDraft = (parsed: any) => {
+        if (parsed.selectedItems) setSelectedItems(parsed.selectedItems)
+        if (parsed.selectedTable) setSelectedTable(parsed.selectedTable)
+        if (parsed.orderType) setOrderType(parsed.orderType)
+        if (parsed.customerName) setCustomerName(parsed.customerName)
+        if (parsed.selectedCategory) setSelectedCategory(parsed.selectedCategory)
+        if (parsed.searchQuery) setSearchQuery(parsed.searchQuery)
+    }
+
+    const loadLocalDraft = () => {
+        try {
+            const raw = localStorage.getItem(LOCAL_DRAFT_KEY)
+            if (!raw) return false
+            const parsed = JSON.parse(raw)
+            applyDraft(parsed)
+            return true
+        } catch (error) {
+            console.error("Erro ao carregar rascunho local:", error)
+            return false
+        }
+    }
+
+    const saveLocalDraft = (draft: any) => {
+        try {
+            localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(draft))
+        } catch (error) {
+            console.error("Erro ao salvar rascunho local:", error)
+        }
+    }
+
+    const clearLocalDraft = () => {
+        try {
+            localStorage.removeItem(LOCAL_DRAFT_KEY)
+        } catch (error) {
+            console.error("Erro ao limpar rascunho local:", error)
+        }
+    }
+
+    const loadRemoteDraft = async () => {
+        if (!isSupabaseConfigured || !remoteDraftId) return false
+        try {
+            const { data, error } = await supabase
+                .from('app_settings')
+                .select('settings')
+                .eq('id', remoteDraftId)
+                .single()
+            if (error && error.code !== 'PGRST116') {
+                console.error("Erro ao buscar rascunho remoto:", error)
+                return false
+            }
+            if (data?.settings) {
+                applyDraft(data.settings)
+                return true
+            }
+            return false
+        } catch (err) {
+            console.error("Erro ao carregar rascunho remoto:", err)
+            return false
+        }
+    }
+
+    const saveRemoteDraft = async (draft: any) => {
+        if (!isSupabaseConfigured || !remoteDraftId) return
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .upsert({
+                    id: remoteDraftId,
+                    settings: draft,
+                    updated_at: new Date().toISOString()
+                }, {
+                    onConflict: 'id'
+                })
+            if (error) {
+                console.error("Erro ao salvar rascunho remoto:", error)
+            }
+        } catch (err) {
+            console.error("Erro ao salvar rascunho remoto:", err)
+        }
+    }
+
+    const clearRemoteDraft = async () => {
+        if (!isSupabaseConfigured || !remoteDraftId) return
+        try {
+            const { error } = await supabase
+                .from('app_settings')
+                .delete()
+                .eq('id', remoteDraftId)
+            if (error) {
+                console.error("Erro ao limpar rascunho remoto:", error)
+            }
+        } catch (err) {
+            console.error("Erro ao limpar rascunho remoto:", err)
+        }
+    }
+
+    // Carregar rascunho salvo ao montar / trocar usuário
+    useEffect(() => {
+        const loadDrafts = async () => {
+            const loadedRemote = await loadRemoteDraft()
+            if (!loadedRemote) {
+                loadLocalDraft()
+            }
+        }
+        loadDrafts()
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [remoteDraftId])
+
+    // Persistir rascunho sempre que algo relevante mudar (debounce 300ms)
+    useEffect(() => {
+        const draft = {
+            selectedItems,
+            selectedTable,
+            orderType,
+            customerName,
+            selectedCategory,
+            searchQuery,
+            timestamp: Date.now()
+        }
+
+        if (saveTimeoutRef.current) {
+            clearTimeout(saveTimeoutRef.current)
+        }
+        saveTimeoutRef.current = setTimeout(() => {
+            if (isSupabaseConfigured && remoteDraftId) {
+                saveRemoteDraft(draft)
+            } else {
+                saveLocalDraft(draft)
+            }
+        }, 300)
+
+        return () => {
+            if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current)
+        }
+    }, [selectedItems, selectedTable, orderType, customerName, selectedCategory, searchQuery, remoteDraftId])
+
+    const clearDraft = async () => {
+        clearLocalDraft()
+        await clearRemoteDraft()
+    }
 
     // Usar menuItems diretamente (já são produtos com price)
     const availableItems = menuItems.filter(item => item.price != null && item.price > 0 && item.status === "Available")
@@ -74,19 +220,22 @@ export function NewOrder() {
     }
 
     const calculateTotal = () => {
-        const subtotal = calculateSubtotal()
-        
-        // Aplicar desconto do pedido se configurado
-        if (orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0) {
-            if (orderDiscountType === 'fixed') {
-                return Math.max(0, subtotal - orderDiscountValue)
-            } else if (orderDiscountType === 'percentage') {
-                const discountAmount = (subtotal * orderDiscountValue) / 100
-                return Math.max(0, subtotal - discountAmount)
-            }
-        }
-        
-        return subtotal
+        return calculateSubtotal()
+    }
+
+    const resetOrderState = () => {
+        setSelectedItems([])
+        setSelectedTable("")
+        setCustomerName("")
+        setOrderType(isTablesEnabled ? "dine_in" : "takeout")
+        setSelectedCategory("all")
+        setSearchQuery("")
+    }
+
+    const handleCancelOrder = () => {
+        resetOrderState()
+        // Limpar rascunho sem bloquear a UI
+        void clearDraft()
     }
 
     const handleCreateOrder = async () => {
@@ -119,14 +268,15 @@ export function NewOrder() {
                 }
             }),
             total: calculateTotal(),
-            time: formattedDate,
-            order_discount_type: orderDiscountType,
-            order_discount_value: orderDiscountValue
+            time: formattedDate
         }
 
         try {
             const result = await addOrder(newOrder)
             if (result.success) {
+                // Resetar estado para próxima compra
+                resetOrderState()
+                clearDraft()
                 navigate("/orders")
             } else {
                 alert(`Failed to create order: ${result.error}`)
@@ -342,73 +492,12 @@ export function NewOrder() {
                             </div>
 
                             <div className="pt-6 mt-6 border-t shrink-0">
-                                {/* Seção de Desconto */}
-                                <div className="space-y-3 mb-4">
-                                    <Label className="text-sm font-medium">Desconto do Pedido</Label>
-                                    <div className="flex gap-2">
-                                        <Select
-                                            value={orderDiscountType || 'none'}
-                                            onValueChange={(value) => {
-                                                if (value === 'none') {
-                                                    setOrderDiscountType(null)
-                                                    setOrderDiscountValue(null)
-                                                } else {
-                                                    setOrderDiscountType(value as "fixed" | "percentage")
-                                                    if (orderDiscountValue === null) {
-                                                        setOrderDiscountValue(0)
-                                                    }
-                                                }
-                                            }}
-                                        >
-                                            <SelectTrigger className="flex-1">
-                                                <SelectValue placeholder="Tipo" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="none">Sem desconto</SelectItem>
-                                                <SelectItem value="fixed">Valor fixo (R$)</SelectItem>
-                                                <SelectItem value="percentage">Percentual (%)</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                        {orderDiscountType && (
-                                            <Input
-                                                type="number"
-                                                step={orderDiscountType === 'fixed' ? "0.01" : "0.1"}
-                                                min="0"
-                                                max={orderDiscountType === 'percentage' ? "100" : undefined}
-                                                value={orderDiscountValue || ''}
-                                                onChange={(e) => setOrderDiscountValue(e.target.value ? parseFloat(e.target.value) : null)}
-                                                placeholder={orderDiscountType === 'fixed' ? "0.00" : "0"}
-                                                className="flex-1"
-                                            />
-                                        )}
-                                    </div>
-                                    {orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0 && (
-                                        <p className="text-xs text-muted-foreground">
-                                            {orderDiscountType === 'fixed' 
-                                                ? `Desconto de ${formatCurrency(orderDiscountValue)}`
-                                                : `Desconto de ${orderDiscountValue}%`
-                                            }
-                                        </p>
-                                    )}
-                                </div>
-
                                 {/* Resumo de valores */}
                                 <div className="space-y-2 mb-4">
                                     <div className="flex justify-between text-sm">
                                         <span className="text-muted-foreground">Subtotal:</span>
                                         <span>{formatCurrency(calculateSubtotal())}</span>
                                     </div>
-                                    {orderDiscountType && orderDiscountValue !== null && orderDiscountValue > 0 && (
-                                        <div className="flex justify-between text-sm text-green-600">
-                                            <span>Desconto:</span>
-                                            <span>
-                                                {orderDiscountType === 'fixed' 
-                                                    ? `-${formatCurrency(orderDiscountValue)}`
-                                                    : `-${formatCurrency((calculateSubtotal() * orderDiscountValue) / 100)}`
-                                                }
-                                            </span>
-                                        </div>
-                                    )}
                                 </div>
 
                                 <div className="flex justify-between items-center mb-6 pt-2 border-t">
@@ -433,6 +522,13 @@ export function NewOrder() {
                                 </div>
                                 <Button className="w-full" size="lg" onClick={handleCreateOrder} disabled={(orderType === "dine_in" && isTablesEnabled && !selectedTable) || selectedItems.length === 0}>
                                     {t("createOrder")}
+                                </Button>
+                                <Button 
+                                    variant="outline" 
+                                    className="w-full mt-2" 
+                                    onClick={handleCancelOrder}
+                                >
+                                    Cancelar pedido
                                 </Button>
                                 {((orderType === "dine_in" && isTablesEnabled && !selectedTable) || selectedItems.length === 0) && (
                                     <p className="text-sm text-center text-muted-foreground mt-2">
@@ -464,11 +560,8 @@ export function NewOrder() {
                 setSelectedTable={setSelectedTable}
                 setCustomerName={setCustomerName}
                 handleCreateOrder={handleCreateOrder}
+                handleCancelOrder={handleCancelOrder}
                 calculateTotal={calculateTotal}
-                orderDiscountType={orderDiscountType}
-                orderDiscountValue={orderDiscountValue}
-                setOrderDiscountType={setOrderDiscountType}
-                setOrderDiscountValue={setOrderDiscountValue}
                 calculateSubtotal={calculateSubtotal}
             />
         </div>

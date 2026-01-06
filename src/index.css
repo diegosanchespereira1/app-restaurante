@@ -74,6 +74,7 @@
     /* Default padding when admin cards are not visible */
     .mobile-content {
       padding-bottom: calc(80px + env(safe-area-inset-bottom));
+      padding-top: calc(1rem + env(safe-area-inset-top));
     }
     
     .mb-safe {

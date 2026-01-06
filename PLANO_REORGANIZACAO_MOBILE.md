@@ -151,3 +151,5 @@ Quando um usuário adiciona um novo item ao pedido no mobile, o item aparece no 
 - Garantir que a experiência desktop não seja afetada
 
 
+
+

@@ -7,24 +7,25 @@ const TAG_LENGTH = 16
 const KEY_LENGTH = 32
 
 /**
- * Get encryption key from environment variable or generate a default one
- * In production, this should be a secure random key stored in environment variables
+ * Recupera a chave de criptografia obrigatória a partir da variável de ambiente.
+ * Falha imediatamente se a chave estiver ausente ou for fraca.
  */
-function getEncryptionKey(): Buffer {
+export function getEncryptionKey(): Buffer {
   const key = process.env.IFOOD_ENCRYPTION_KEY
-  
+
   if (!key) {
-    console.warn('IFOOD_ENCRYPTION_KEY not set. Using default key (NOT SECURE FOR PRODUCTION)')
-    // Default key for development only - should be changed in production
-    return crypto.scryptSync('default-key-change-in-production', 'salt', KEY_LENGTH)
+    throw new Error('IFOOD_ENCRYPTION_KEY environment variable is required')
   }
-  
-  // If key is provided as hex string, convert it
-  if (key.length === KEY_LENGTH * 2) {
+
+  if (key.length < KEY_LENGTH) {
+    throw new Error('IFOOD_ENCRYPTION_KEY must be at least 32 characters')
+  }
+
+  const isHexKey = key.length === KEY_LENGTH * 2 && /^[0-9a-fA-F]+$/.test(key)
+  if (isHexKey) {
     return Buffer.from(key, 'hex')
   }
-  
-  // Otherwise, derive key from the string
+
   return crypto.scryptSync(key, 'ifood-salt', KEY_LENGTH)
 }
 
@@ -89,8 +90,8 @@ export function decrypt(encryptedText: string): string {
     
     return decrypted
   } catch (error) {
-    console.error('Decryption error:', error)
-    throw new Error('Failed to decrypt data')
+    console.error('Decryption error with active IFOOD_ENCRYPTION_KEY:', error)
+    throw new Error('Failed to decrypt data. Validate IFOOD_ENCRYPTION_KEY and re-encrypt secrets if needed.')
   }
 }
 

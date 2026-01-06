@@ -116,3 +116,5 @@ CREATE TRIGGER update_promotions_updated_at_trigger
 -- Force schema cache reload
 NOTIFY pgrst, 'reload config';
 
+
+
