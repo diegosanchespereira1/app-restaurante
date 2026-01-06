@@ -42,7 +42,7 @@ O código já está preparado! Os arquivos necessários foram criados:
    SUPABASE_URL=https://seu-projeto.supabase.co
    SUPABASE_SERVICE_ROLE_KEY=sua-service-role-key
    FRONTEND_URL=https://diegosanchespereira1.github.io
-   IFOOD_ENCRYPTION_KEY=chave-opcional-para-criptografia
+   IFOOD_ENCRYPTION_KEY=sua-chave-secreta-min-32-caracteres-ou-64-hex
    IFOOD_API_TIMEOUT=30000
    ```
 

@@ -1096,111 +1096,113 @@ export function IfoodIntegration() {
           <div className={`grid gap-6 ${selectedDashboardOrder ? 'lg:grid-cols-[2fr_1fr]' : 'lg:grid-cols-2'}`}>
             {/* Coluna Esquerda - Seções de Pedidos */}
             <div className={`space-y-6 ${selectedDashboardOrder ? '' : 'lg:col-span-2'}`}>
-              {/* Seção: Pedidos Pendentes */}
-              {pendingOrders.length > 0 && (
-                <Card className="bg-gray-50">
-                  <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <CardTitle className="text-lg">Pedidos Pendentes</CardTitle>
-                        <Badge className="bg-gray-700 text-white">{pendingOrders.length}</Badge>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={loadPendingOrders}
-                          disabled={loadingOrders}
-                        >
-                          <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
-                          Atualizar
-                        </Button>
-                        <ChevronUp className="h-4 w-4 text-muted-foreground" />
-                      </div>
+              {/* Seção: Pedidos Pendentes (sempre visível, mesmo vazio) */}
+              <Card className="bg-gray-50">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <CardTitle className="text-lg">Pedidos Pendentes</CardTitle>
+                      <Badge className="bg-gray-700 text-white">{pendingOrders.length}</Badge>
                     </div>
-                    <CardDescription className="mt-1">
-                      Pedidos recebidos do iFood aguardando aceitação
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    {loadingOrders ? (
-                      <div className="text-center py-8">
-                        <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
-                        <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
-                      </div>
-                    ) : (
-                      <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(pendingOrders.length)}`}>
-                        {pendingOrders.map((order) => {
-                            try {
-                              console.log('[Frontend] Rendering order:', {
-                                id: order.id,
-                                displayId: order.displayId,
-                                shortReference: order.shortReference,
-                                customer: order.customer,
-                                hasItems: !!(order.items && order.items.length > 0)
-                              })
-                              
-                              const orderType = order.orderType || 'DELIVERY'
-                              const isDelivery = orderType === 'DELIVERY'
-                              const isTakeout = orderType === 'TAKEOUT'
-                              const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
-                              
-                              const orderDisplayId = order.displayId || order.shortReference || order.id
-                              const createdAt = order.createdAt
-                              const elapsedTime = createdAt ? getElapsedTime(createdAt) : '0min'
-                              
-                              return (
-                                <div
-                                  key={order.id}
-                                  className="bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow"
-                                  onClick={() => {
-                                    setSelectedOrder(order)
-                                    setIsOrderDetailOpen(true)
-                                  }}
-                                >
-                                  <div className="flex items-start gap-2 mb-2">
-                                    <input
-                                      type="checkbox"
-                                      className="mt-1"
-                                      onClick={(e) => e.stopPropagation()}
-                                    />
-                                    <div className="flex items-center gap-1 text-xs text-muted-foreground flex-1">
-                                      <ShoppingBag className="h-3 w-3" />
-                                      <span>{isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Própria'}</span>
-                                    </div>
-                                  </div>
-                                  <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
-                                  <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
-                                  <div className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded text-center mb-2">
-                                    {elapsedTime}
-                                  </div>
-                                  <div className="text-xs text-muted-foreground">
-                                    {formatCurrency(totalAmount)}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={loadPendingOrders}
+                        disabled={loadingOrders}
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${loadingOrders ? 'animate-spin' : ''}`} />
+                        Atualizar
+                      </Button>
+                      <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                    </div>
+                  </div>
+                  <CardDescription className="mt-1">
+                    Pedidos recebidos do iFood aguardando aceitação
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {loadingOrders ? (
+                    <div className="text-center py-8">
+                      <RefreshCw className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Carregando pedidos...</p>
+                    </div>
+                  ) : pendingOrders.length === 0 ? (
+                    <div className="text-center py-8 text-sm text-muted-foreground">
+                      Nenhum pedido pendente no momento.
+                    </div>
+                  ) : (
+                    <div className={`grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 ${getMobileOrderListScrollClass(pendingOrders.length)}`}>
+                      {pendingOrders.map((order) => {
+                          try {
+                            console.log('[Frontend] Rendering order:', {
+                              id: order.id,
+                              displayId: order.displayId,
+                              shortReference: order.shortReference,
+                              customer: order.customer,
+                              hasItems: !!(order.items && order.items.length > 0)
+                            })
+                            
+                            const orderType = order.orderType || 'DELIVERY'
+                            const isDelivery = orderType === 'DELIVERY'
+                            const isTakeout = orderType === 'TAKEOUT'
+                            const totalAmount = order.total?.orderAmount || order.totalPrice?.amount || 0
+                            
+                            const orderDisplayId = order.displayId || order.shortReference || order.id
+                            const createdAt = order.createdAt
+                            const elapsedTime = createdAt ? getElapsedTime(createdAt) : '0min'
+                            
+                            return (
+                              <div
+                                key={order.id}
+                                className="bg-white border rounded-lg p-3 min-w-[140px] flex-1 max-w-[200px] cursor-pointer hover:shadow-md transition-shadow"
+                                onClick={() => {
+                                  setSelectedOrder(order)
+                                  setIsOrderDetailOpen(true)
+                                }}
+                              >
+                                <div className="flex items-start gap-2 mb-2">
+                                  <input
+                                    type="checkbox"
+                                    className="mt-1"
+                                    onClick={(e) => e.stopPropagation()}
+                                  />
+                                  <div className="flex items-center gap-1 text-xs text-muted-foreground flex-1">
+                                    <ShoppingBag className="h-3 w-3" />
+                                    <span>{isDelivery ? 'Delivery' : isTakeout ? 'Retirada' : 'Própria'}</span>
                                   </div>
                                 </div>
-                              )
-                            } catch (error) {
-                              // #region agent log
-                              fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
-                              // #endregion
-                              console.error('Error rendering order:', error, order)
-                              console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
-                              // Return a simple card with minimal rendering to avoid cascading errors
-                              return (
-                                <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
-                                  <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
-                                  <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
-                                  <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
-                                  <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
+                                <div className="text-2xl font-bold mb-1">{orderDisplayId}</div>
+                                <div className="text-xs text-muted-foreground mb-2">Pedido P.</div>
+                                <div className="bg-orange-100 text-orange-700 text-xs px-2 py-1 rounded text-center mb-2">
+                                  {elapsedTime}
                                 </div>
-                              )
-                            }
-                          })}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              )}
+                                <div className="text-xs text-muted-foreground">
+                                  {formatCurrency(totalAmount)}
+                                </div>
+                              </div>
+                            )
+                          } catch (error) {
+                            // #region agent log
+                            fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IfoodIntegration.tsx:1045',message:'error rendering order',data:{orderId:order.id,error:error instanceof Error?error.message:String(error),errorStack:error instanceof Error?error.stack:undefined,orderDisplayId:order.displayId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+                            // #endregion
+                            console.error('Error rendering order:', error, order)
+                            console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
+                            // Return a simple card with minimal rendering to avoid cascading errors
+                            return (
+                              <div key={order.id || `error-${Math.random()}`} className="border rounded-lg p-4 bg-red-50">
+                                <p className="text-red-800 text-sm font-semibold">Erro ao renderizar pedido</p>
+                                <p className="text-red-600 text-xs mt-1">ID: {order.id || 'Desconhecido'}</p>
+                                <p className="text-red-600 text-xs">Display ID: {order.displayId || order.shortReference || 'N/A'}</p>
+                                <p className="text-red-500 text-xs mt-2">Erro: {error instanceof Error ? error.message : String(error)}</p>
+                              </div>
+                            )
+                          }
+                        })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               {/* Seção: Em Preparo */}
               <Card className="bg-gray-50">

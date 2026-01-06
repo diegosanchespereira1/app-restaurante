@@ -20,7 +20,7 @@ cp .env.example .env
 - `PRINTER_TIMEOUT`: Timeout de conexão com impressora em ms (padrão: 5000)
 - `SUPABASE_URL`: URL do projeto Supabase (obrigatório para integração iFood)
 - `SUPABASE_SERVICE_ROLE_KEY`: Service Role Key do Supabase (obrigatório para integração iFood)
-- `IFOOD_ENCRYPTION_KEY`: Chave para criptografar credenciais do iFood (opcional, usa chave padrão se não fornecido)
+- `IFOOD_ENCRYPTION_KEY`: Chave OBRIGATÓRIA (mín. 32 caracteres ou 64 hex) para criptografar credenciais do iFood. O backend não inicia sem esta variável.
 - `IFOOD_API_TIMEOUT`: Timeout para requisições à API do iFood em ms (padrão: 30000)
 - `BACKEND_URL` ou `BACKEND_PUBLIC_URL`: URL pública do backend para webhooks (opcional)
 

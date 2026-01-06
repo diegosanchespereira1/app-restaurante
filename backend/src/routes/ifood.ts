@@ -982,17 +982,13 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       })
     }
     
-    // If no events returned, return empty array
-    if (!result.orders || result.orders.length === 0) {
+    // Mesmo sem eventos do polling, ainda vamos checar o banco por pedidos pendentes
+    const noPollingEvents = !result.orders || result.orders.length === 0
+    if (noPollingEvents) {
       // #region agent log
-      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:940',message:'returning empty orders - no events',data:{success:result.success,hasOrders:!!result.orders,ordersLength:result.orders?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:940',message:'no polling events returned - will check DB pending',data:{success:result.success,hasOrders:!!result.orders,ordersLength:result.orders?.length||0},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
       // #endregion
-      console.log('[pending-orders] Nenhum evento retornado do polling')
-      return res.status(200).json({
-        success: true,
-        orders: [],
-        message: 'Nenhum evento novo disponível'
-      })
+      console.log('[pending-orders] Nenhum evento retornado do polling - buscando pendentes já salvos no banco')
     }
 
     // Filter out orders that already exist in our system
@@ -1015,15 +1011,20 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     // Get existing iFood order IDs with their status
     const { data: existingOrders } = await supabase
       .from('orders')
-      .select('ifood_order_id, ifood_status')
+      .select('ifood_order_id, ifood_status, status')
       .not('ifood_order_id', 'is', null)
     
     const existingIds = new Set(existingOrders?.map(o => o.ifood_order_id) || [])
-    // Map of orderId -> ifood_status for quick lookup
+    // Map of orderId -> status (normalizado) para consulta rápida
     const existingOrdersStatusMap = new Map<string, string>()
+    const pendingDbOrderIds = new Set<string>()
     existingOrders?.forEach((o: any) => {
       if (o.ifood_order_id) {
-        existingOrdersStatusMap.set(o.ifood_order_id, o.ifood_status || '')
+        const normalizedStatus = (o.ifood_status || o.status || '').toUpperCase()
+        existingOrdersStatusMap.set(o.ifood_order_id, normalizedStatus)
+        if (normalizedStatus === 'PLACED' || normalizedStatus === 'PLC' || normalizedStatus === 'PENDING') {
+          pendingDbOrderIds.add(o.ifood_order_id)
+        }
       }
     })
     // #region agent log
@@ -1034,7 +1035,9 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
     // Ensure events is an array
     let events: any[] = []
     const ordersPayload: any = result.orders as any
-    if (Array.isArray(ordersPayload)) {
+    if (!ordersPayload) {
+      events = []
+    } else if (Array.isArray(ordersPayload)) {
       events = ordersPayload
     } else if (ordersPayload && typeof ordersPayload === 'object') {
       // Try to extract events from object structure
@@ -1315,6 +1318,15 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
         })
       }
     }
+    // Garantir que pedidos pendentes já salvos sejam retornados mesmo sem novos eventos
+    if (pendingDbOrderIds.size > 0) {
+      for (const pendingId of pendingDbOrderIds) {
+        if (!orderIdsSet.has(pendingId)) {
+          console.log(`[pending-orders] Adding pending DB order ${pendingId} to fetch list (sem novos eventos)`)
+          orderIdsSet.add(pendingId)
+        }
+      }
+    }
     const orderIdsToFetch = Array.from(orderIdsSet)
     
     // #region agent log
@@ -1349,7 +1361,7 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
         success: true,
         orders: [],
         message: events.length === 0 
-          ? 'Nenhum evento disponível' 
+          ? 'Nenhum pedido pendente encontrado' 
           : eventsWithoutOrderId.length > 0
             ? `Nenhum pedido novo encontrado. ${eventsWithoutOrderId.length} eventos sem orderId.`
             : 'Nenhum pedido novo encontrado nos eventos',
@@ -1547,8 +1559,9 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
         // Se o pedido existe no banco, verificar o status lá
         // Se não existe, assumir que é PLACED (veio de evento PLC)
         if (dbStatus) {
-          const isPlaced = dbStatus === 'PLACED' || dbStatus === 'PLC'
-          console.log(`[pending-orders] Order ${orderId} (displayId: ${displayId}) exists in DB with status ${dbStatus}, isPlaced: ${isPlaced}`)
+          const normalizedDbStatus = (dbStatus || '').toUpperCase()
+          const isPlaced = normalizedDbStatus === 'PLACED' || normalizedDbStatus === 'PLC' || normalizedDbStatus === 'PENDING'
+          console.log(`[pending-orders] Order ${orderId} (displayId: ${displayId}) exists in DB with status ${dbStatus}, normalized: ${normalizedDbStatus}, isPlaced: ${isPlaced}`)
           return isPlaced
         } else {
           // Pedido não existe no banco, veio de evento PLC, então é PLACED
@@ -1594,6 +1607,49 @@ router.get('/pending-orders', async (req: Request, res: Response) => {
       // #endregion
       
       pendingOrders.push(...uniqueOrders)
+
+      // Incluir pedidos pendentes já salvos no banco (ex: criados antes, sem novos eventos)
+      try {
+        const { data: dbPendingOrders } = await supabase
+          .from('orders')
+          .select('id, ifood_order_id, ifood_display_id, customer, status, ifood_status, total, created_at, order_type, source')
+          .or('status.eq.PLACED,status.eq.PLC,status.eq.PENDING,ifood_status.eq.PLACED,ifood_status.eq.PLC,ifood_status.eq.PENDING')
+
+        if (dbPendingOrders && dbPendingOrders.length > 0) {
+          const pendingMap = new Map<string, any>()
+          
+          // Indexar já retornados para evitar duplicação
+          for (const o of pendingOrders) {
+            const key = o.ifood_order_id || o.id
+            if (key) pendingMap.set(key, o)
+          }
+
+          for (const dbOrder of dbPendingOrders) {
+            const key = dbOrder.ifood_order_id || dbOrder.id
+            if (!key) continue
+            if (pendingMap.has(key)) continue
+
+            pendingMap.set(key, {
+              id: dbOrder.ifood_order_id || dbOrder.id,
+              ifood_order_id: dbOrder.ifood_order_id || null,
+              displayId: dbOrder.ifood_display_id || dbOrder.ifood_order_id || dbOrder.id,
+              shortReference: dbOrder.ifood_display_id || dbOrder.id,
+              orderType: (dbOrder.order_type || 'DELIVERY').toUpperCase(),
+              createdAt: dbOrder.created_at,
+              total: dbOrder.total ? { orderAmount: dbOrder.total } : null,
+              customer: typeof dbOrder.customer === 'string' ? { name: dbOrder.customer } : dbOrder.customer || { name: 'Cliente iFood' },
+              ifoodStatus: (dbOrder.ifood_status || dbOrder.status || 'PLACED').toUpperCase(),
+              status: dbOrder.status,
+              source: dbOrder.source || 'ifood'
+            })
+          }
+
+          pendingOrders.length = 0
+          pendingOrders.push(...Array.from(pendingMap.values()))
+        }
+      } catch (dbPendingErr) {
+        console.warn('[pending-orders] Falha ao incluir pendentes do banco:', dbPendingErr)
+      }
     } catch (error) {
       // #region agent log
       fetch('http://127.0.0.1:7243/ingest/b058c8da-e202-4622-9483-5c45531d7867',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'ifood.ts:1035',message:'error in Promise.race',data:{error:error instanceof Error?error.message:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});

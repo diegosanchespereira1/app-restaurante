@@ -65,7 +65,8 @@ FRONTEND_URL=http://localhost:5173
 # Impressora
 PRINTER_TIMEOUT=5000
 
-# iFood (opcional)
+# iFood (obrigatório)
+# Mínimo 32 caracteres (ou 64 em hexadecimal). O backend não inicia sem esta chave.
 IFOOD_ENCRYPTION_KEY=
 IFOOD_API_TIMEOUT=30000
 ```

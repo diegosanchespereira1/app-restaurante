@@ -4,9 +4,18 @@ import dotenv from 'dotenv'
 import printerRoutes from './routes/printer.js'
 import ifoodRoutes from './routes/ifood.js'
 import { IfoodPollingService } from './services/ifood-polling.js'
+import { getEncryptionKey } from './utils/encryption.js'
 
 // Carregar variáveis de ambiente
 dotenv.config()
+
+try {
+  getEncryptionKey()
+} catch (error) {
+  console.error('Erro de configuração: IFOOD_ENCRYPTION_KEY inválida ou ausente')
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
 
 const app = express()
 const PORT = parseInt(process.env.BACKEND_PORT || '3000', 10)
