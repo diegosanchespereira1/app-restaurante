@@ -5,8 +5,6 @@ const IV_LENGTH = 16
 const SALT_LENGTH = 64
 const TAG_LENGTH = 16
 const KEY_LENGTH = 32
-const LEGACY_FALLBACK_KEY_PASSPHRASE = 'default-key-change-in-production'
-const LEGACY_FALLBACK_SALT = 'salt'
 
 /**
  * Recupera a chave de criptografia obrigatória a partir da variável de ambiente.
@@ -29,10 +27,6 @@ export function getEncryptionKey(): Buffer {
   }
 
   return crypto.scryptSync(key, 'ifood-salt', KEY_LENGTH)
-}
-
-function getLegacyEncryptionKey(): Buffer {
-  return crypto.scryptSync(LEGACY_FALLBACK_KEY_PASSPHRASE, LEGACY_FALLBACK_SALT, KEY_LENGTH)
 }
 
 /**
@@ -96,27 +90,8 @@ export function decrypt(encryptedText: string): string {
     
     return decrypted
   } catch (error) {
-    // Tentativa de compatibilidade: decifrar com chave legada (fallback antigo)
-    try {
-      const legacyKey = getLegacyEncryptionKey()
-      const combined = Buffer.from(encryptedText, 'base64')
-
-      const iv = combined.slice(0, IV_LENGTH)
-      const tag = combined.slice(IV_LENGTH, IV_LENGTH + TAG_LENGTH)
-      const encrypted = combined.slice(IV_LENGTH + TAG_LENGTH)
-
-      const decipher = crypto.createDecipheriv(ALGORITHM, legacyKey, iv)
-      decipher.setAuthTag(tag)
-
-      let decrypted = decipher.update(encrypted, undefined, 'utf8')
-      decrypted += decipher.final('utf8')
-
-      console.warn('Decrypt usando chave legada. Regrave client_secret para rotacionar com a nova IFOOD_ENCRYPTION_KEY.')
-      return decrypted
-    } catch (legacyError) {
-      console.error('Decryption error (primary and legacy keys failed):', legacyError)
-      throw new Error('Failed to decrypt data')
-    }
+    console.error('Decryption error with active IFOOD_ENCRYPTION_KEY:', error)
+    throw new Error('Failed to decrypt data. Validate IFOOD_ENCRYPTION_KEY and re-encrypt secrets if needed.')
   }
 }
 
